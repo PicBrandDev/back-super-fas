@@ -45,3 +45,14 @@ DEFAULT_AD_SLOTS = [
 ]
 
 NEW_CLUB_COLORS = ["#2F5BD3", "#1F7A4D", "#7A3FB8", "#14171C"]
+
+# Vitrines de cada fã clube (a key final fica "{slug do clube}.{key}").
+CLUB_AD_SLOTS = [
+    ("home", "Card do fã clube", "Página do fã clube · topo", "Arte + título + texto + link", 20, 16),
+    ("mural", "Post patrocinado no mural do clube", "Mural do fã clube · entre os posts da galera", "Post com imagem + link", 28, 24),
+    ("pickap", "Fatia patrocinada no PicKap do clube", "Roleta do fã clube · uma fatia com a marca", "Logo + prêmio ou cupom", 18, 44),
+]
+
+MAX_CLUBS = 10  # por cantor: 1 master + 9
+MAX_CLUB_STAFF = 10  # por fã clube: 1 dono + ajudantes
+MASTER_CLUB_SLUG = "oficial"

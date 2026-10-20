@@ -1,4 +1,5 @@
-"""Preenche o fã clube Vintage Culture com dados de exemplo (shows, posts, loja, fãs, campanhas…).
+"""Preenche o ambiente Vintage Culture com dados de exemplo: conteúdo oficial, 3 fã clubes
+com donos e ajudantes, fãs, posts, roletas e campanhas.
 
 Usa a própria API, então funciona tanto no seu computador quanto no servidor:
 
@@ -6,8 +7,9 @@ Usa a própria API, então funciona tanto no seu computador quanto no servidor:
     python scripts/dados_exemplo.py --api http://localhost:8000 --senha superfas123
 
 Precisa das contas de teste criadas na primeira subida (admin@, vintage@ e marca@superfas.dev)
-com a senha de SEED_PASSWORD. Os fãs de exemplo são criados com essa mesma senha.
-Se o fã clube já tiver shows, não faz nada (use --forcar para inserir de novo).
+com a senha de SEED_PASSWORD. Fãs, donos e ajudantes de exemplo ficam com essa mesma senha.
+Completa só o que falta: se o ambiente já tem shows, pula o conteúdo oficial; se já tem
+outros fã clubes além do master, pula os fã clubes. Use --forcar para inserir tudo de novo.
 """
 
 import argparse
@@ -72,10 +74,23 @@ def main() -> None:
     admin = api.login("vintage@superfas.dev", a.senha)
     sponsor = api.login("marca@superfas.dev", a.senha)
 
-    if api.must("GET", f"{base}/events", admin) and not a.forcar:
-        print("O fã clube já tem shows; nada foi feito. Use --forcar para inserir de novo.")
+    has_content = bool(api.must("GET", f"{base}/events", admin)) and not a.forcar
+    has_clubs = len(api.must("GET", f"{base}/clubs", admin)) > 1 and not a.forcar
+    if has_content and has_clubs:
+        print("O ambiente já tem conteúdo e fã clubes; nada foi feito. Use --forcar para inserir de novo.")
         return
+    if has_content:
+        print("• conteúdo oficial já existe: só os fã clubes serão criados")
+    else:
+        official(api, admin, base)
+    if not has_clubs:
+        clubs(api, admin, base, a.senha)
+    fans(api, admin, base, slug, a.senha, only_clubs=has_content)
+    media(api, master, sponsor, base, slug, only_clubs=has_content)
+    print("Pronto!")
 
+
+def official(api: Api, admin: str, base: str) -> None:
     # Agenda
     for ev in DATA["events"]:
         payload = {k: v for k, v in ev.items() if k not in ("vendors", "gifts")}
@@ -89,36 +104,78 @@ def main() -> None:
     # Conteúdo
     for p in reversed(DATA["drops"]):  # o primeiro da lista fica como o mais recente
         api.must("POST", f"{base}/manage/posts", admin, json_body={"kind": "drop", **p})
-    for name in ("prizes", "products", "tracks", "perks"):
+    for name in ("products", "tracks", "perks"):
         for i, item in enumerate(DATA[name]):
             api.must("POST", f"{base}/manage/{name}", admin, json_body={**item, "position": i})
-    print("✓ Drop News, PicKap, loja, Drops Hits e benefícios")
+    for i, item in enumerate(DATA["prizes"]):  # roleta do fã clube master
+        api.must("POST", f"{base}/clubs/oficial/manage/prizes", admin, json_body={**item, "position": i})
+    print("✓ Drop News, loja, Drops Hits, benefícios e PicKap do fã clube master")
 
-    # Fãs
+
+def clubs(api: Api, admin: str, base: str, senha: str) -> None:
+    # Fã clubes: o admin master do cantor cria e escolhe o dono; o dono convida ajudantes.
+    def activate(email: str, temp: str | None) -> str:
+        """Entra com a senha provisória e troca para a senha padrão do exemplo."""
+        if not temp:
+            return api.login(email, senha)
+        t = api.login(email, temp)
+        return api.must("POST", "/auth/change-password", t, json_body={"currentPassword": temp, "newPassword": senha})["token"]
+
+    for c in DATA["clubs"]:
+        r = api.must(
+            "POST",
+            f"{base}/clubs",
+            admin,
+            json_body={"name": c["name"], "city": c["city"], "description": c["description"],
+                       "ownerEmail": c["owner"]["email"], "ownerName": c["owner"]["name"]},
+        )
+        club = r["club"]["slug"]
+        owner = activate(c["owner"]["email"], r["invite"]["tempPassword"])
+        for h in c["helpers"]:
+            inv = api.must("POST", f"{base}/clubs/{club}/staff", owner,
+                           json_body={"email": h["email"], "name": h["name"], "role": "helper", "roleLabel": h["label"]})
+            activate(h["email"], inv["tempPassword"])
+        for i, item in enumerate(c["prizes"]):
+            api.must("POST", f"{base}/clubs/{club}/manage/prizes", owner, json_body={**item, "position": i})
+    print(f"✓ {len(DATA['clubs'])} fã clubes com donos, ajudantes e roletas (senha: {senha})")
+
+
+def fans(api: Api, admin: str, base: str, slug: str, senha: str, only_clubs: bool) -> None:
     for f in DATA["fans"]:
         status, body = api.call(
             "POST",
             "/auth/register",
-            json_body={"name": f["name"], "email": f["email"], "password": a.senha, "handle": f["handle"], "city": f["city"], "artist": slug},
+            json_body={"name": f["name"], "email": f["email"], "password": senha, "handle": f["handle"], "city": f["city"], "artist": slug},
         )
-        token = body["token"] if status == 201 else api.login(f["email"], a.senha)
+        token = body["token"] if status == 201 else api.login(f["email"], senha)
+        for club in f.get("clubs", []):
+            api.must("POST", f"{base}/clubs/{club}/join", token)
+        if only_clubs:
+            continue  # posts e assinaturas já foram criados antes
+        target = (f.get("clubs") or ["oficial"])[0]
         if f.get("post"):
-            api.must("POST", f"{base}/posts", token, json_body={"kind": "galera", "text": f["post"]})
+            api.must("POST", f"{base}/clubs/{target}/posts", token, json_body={"kind": "galera", "text": f["post"]})
         if f.get("instagram"):
-            api.must("POST", f"{base}/posts", token, json_body={"kind": "instagram", "text": "Trouxe esse post do Instagram dele pra galera comentar aqui.", "url": f["instagram"]})
+            api.must("POST", f"{base}/clubs/{target}/posts", token, json_body={"kind": "instagram", "text": "Trouxe esse post do Instagram dele pra galera comentar aqui.", "url": f["instagram"]})
         if f.get("member"):
             api.must("POST", f"{base}/membership/subscribe", token, json_body={"method": f["member"]})
+    if only_clubs:
+        print(f"✓ {len(DATA['fans'])} fãs entraram nos fã clubes")
+        return
     canceled = {f["handle"] for f in DATA["fans"] if f.get("cancel")}
     for m in api.must("GET", f"{base}/members", admin):
         if m["handle"].lstrip("@") in canceled:
             api.must("POST", f"{base}/members/{m['id']}/cancel", admin)
-    print(f"✓ {len(DATA['fans'])} fãs (senha: {a.senha}) com posts e assinaturas")
+    print(f"✓ {len(DATA['fans'])} fãs (senha: {senha}) nos fã clubes, com posts e assinaturas")
 
-    # Mídia
-    for key, cents in DATA["slotPrices"].items():
-        api.must("PATCH", f"{base}/ad-slots/{key}", master, json_body={"priceCents": cents})
+
+def media(api: Api, master: str, sponsor: str, base: str, slug: str, only_clubs: bool) -> None:
+    if not only_clubs:
+        for key, cents in DATA["slotPrices"].items():
+            api.must("PATCH", f"{base}/ad-slots/{key}", master, json_body={"priceCents": cents})
     today = date.today()
-    for c in DATA["campaigns"]:
+    campaigns = [c for c in DATA["campaigns"] if not only_clubs or "." in c["slot"]]
+    for c in campaigns:
         form = {
             "club": slug,
             "slot": c["slot"],
@@ -132,9 +189,8 @@ def main() -> None:
         }
         camp = api.must("POST", "/sponsor/campaigns", sponsor, form=form)
         if c.get("approve"):
-            api.must("POST", f"/admin/campaigns/{camp['id']}/approve", master)
-    print(f"✓ preços das vitrines e {len(DATA['campaigns'])} campanhas do patrocinador")
-    print("Pronto!")
+            api.must("POST", f"/campaigns/{camp['id']}/approve", master)
+    print(f"✓ {len(campaigns)} campanhas do patrocinador")
 
 
 if __name__ == "__main__":

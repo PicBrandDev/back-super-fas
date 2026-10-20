@@ -13,7 +13,7 @@ from sqlalchemy.orm import Session
 
 from .config import get_settings
 from .db import get_db
-from .models import ROLE_ARTIST_ADMIN, ROLE_MASTER, ROLE_SPONSOR, Artist, ArtistAdmin, User
+from .models import ROLE_MASTER, ROLE_SPONSOR, STAFF_OWNER, Artist, ClubStaff, FanClub, User
 
 _hasher = PasswordHasher()
 ALGORITHM = "HS256"
@@ -35,8 +35,14 @@ def temp_password() -> str:
     return secrets.token_urlsafe(9)
 
 
-def admin_slugs(user: User) -> list[str]:
-    return sorted(a.artist.slug for a in user.admin_of)
+def env_admin_slugs(user: User) -> list[str]:
+    """Cantores cujo ambiente a pessoa administra (equipe do fã clube master)."""
+    return sorted({st.club.artist.slug for st in user.staff_of if st.club.is_master})
+
+
+def staff_clubs(user: User) -> list[str]:
+    """Fã clubes em que a pessoa é dona ou ajudante, como "cantor/clube"."""
+    return sorted(f"{st.club.artist.slug}/{st.club.slug}" for st in user.staff_of)
 
 
 def create_token(user: User) -> str:
@@ -45,8 +51,9 @@ def create_token(user: User) -> str:
         "sub": user.id,
         "role": user.role,
         "name": user.name,
-        # O front usa isto para decidir o destino depois do login e liberar /{slug}/admin.
-        "artists": admin_slugs(user),
+        # O front usa isto para decidir o destino depois do login e liberar as áreas de admin.
+        "artists": env_admin_slugs(user),
+        "clubs": staff_clubs(user),
         "exp": datetime.now(timezone.utc) + timedelta(days=s.jwt_days),
     }
     return jwt.encode(payload, s.jwt_secret, algorithm=ALGORITHM)
@@ -104,27 +111,68 @@ SponsorUser = Annotated[User, Depends(require_sponsor)]
 def get_artist_or_404(db: Session, slug: str) -> Artist:
     artist = db.scalar(select(Artist).where(Artist.slug == slug))
     if not artist:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Fã clube não encontrado.")
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Cantor não encontrado.")
     return artist
 
 
-def can_manage(db: Session, user: User, artist: Artist) -> bool:
+def staff_role(db: Session, user: User, club: FanClub) -> str | None:
+    """"owner", "helper" ou None."""
+    st = db.scalar(select(ClubStaff).where(ClubStaff.club_id == club.id, ClubStaff.user_id == user.id))
+    return st.role if st else None
+
+
+def master_club(db: Session, artist: Artist) -> FanClub | None:
+    return db.scalar(select(FanClub).where(FanClub.artist_id == artist.id, FanClub.is_master.is_(True)))
+
+
+def is_env_admin(db: Session, user: User, artist: Artist) -> bool:
+    """Admin do ambiente do cantor: admin da plataforma ou equipe do fã clube master."""
     if user.role == ROLE_MASTER:
         return True
-    if user.role != ROLE_ARTIST_ADMIN:
-        return False
-    return (
-        db.scalar(select(ArtistAdmin).where(ArtistAdmin.artist_id == artist.id, ArtistAdmin.user_id == user.id))
-        is not None
-    )
+    mc = master_club(db, artist)
+    return bool(mc and staff_role(db, user, mc))
+
+
+def is_env_owner(db: Session, user: User, artist: Artist) -> bool:
+    """Dono do fã clube master (o "admin master" do cantor) ou admin da plataforma."""
+    if user.role == ROLE_MASTER:
+        return True
+    mc = master_club(db, artist)
+    return bool(mc and staff_role(db, user, mc) == STAFF_OWNER)
+
+
+def can_manage_club(db: Session, user: User, club: FanClub) -> bool:
+    return is_env_admin(db, user, club.artist) or staff_role(db, user, club) is not None
+
+
+# Compatibilidade: "gerenciar o cantor" = administrar o ambiente.
+can_manage = is_env_admin
 
 
 def managed_artist(slug: str, user: CurrentUser, db: DB) -> Artist:
-    """Dependência para rotas /artists/{slug}/... que só o admin do fã clube (ou o master) usa."""
+    """Dependência para rotas /artists/{slug}/... do admin do ambiente (equipe do fã clube master)."""
     artist = get_artist_or_404(db, slug)
-    if not can_manage(db, user, artist):
-        raise forbidden("Só os administradores deste fã clube podem fazer isso.")
+    if not is_env_admin(db, user, artist):
+        raise forbidden("Só a administração do ambiente deste cantor pode fazer isso.")
     return artist
 
 
 ManagedArtist = Annotated[Artist, Depends(managed_artist)]
+
+
+def get_club_or_404(db: Session, artist: Artist, club_slug: str) -> FanClub:
+    club = db.scalar(select(FanClub).where(FanClub.artist_id == artist.id, FanClub.slug == club_slug))
+    if not club:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Fã clube não encontrado.")
+    return club
+
+
+def managed_club(slug: str, club: str, user: CurrentUser, db: DB) -> FanClub:
+    """Dependência para rotas /artists/{slug}/clubs/{club}/... da equipe do fã clube."""
+    fc = get_club_or_404(db, get_artist_or_404(db, slug), club)
+    if not can_manage_club(db, user, fc):
+        raise forbidden("Só a equipe deste fã clube pode fazer isso.")
+    return fc
+
+
+ManagedClub = Annotated[FanClub, Depends(managed_club)]

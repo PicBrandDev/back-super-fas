@@ -3,7 +3,7 @@ from sqlalchemy import select
 
 from .. import models as m
 from ..schemas import ChangePasswordIn, LoginIn, RegisterIn, SessionUser, TokenOut, session_user
-from ..security import DB, CurrentUser, create_token, hash_password, verify_password
+from ..security import DB, CurrentUser, create_token, hash_password, master_club, verify_password
 
 router = APIRouter(prefix="/auth", tags=["Login"])
 
@@ -45,6 +45,10 @@ def register(body: RegisterIn, db: DB):
         artist = db.scalar(select(m.Artist).where(m.Artist.slug == body.artist))
         if artist:
             db.add(m.Fandom(artist=artist, user=user))
+            # Já entra no fã clube master do cantor escolhido.
+            mc = master_club(db, artist)
+            if mc:
+                db.add(m.ClubMember(club_id=mc.id, user=user))
     db.commit()
     db.refresh(user)
     return _token_out(user)

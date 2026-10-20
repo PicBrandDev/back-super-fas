@@ -2,6 +2,10 @@
 
 API dos fã clubes. Atende o front [front-super-fas](../front-super-fas).
 
+Cada cantor tem um ambiente com até 10 fã clubes (1 master + 9). A equipe do fã clube master administra
+o ambiente (conteúdo oficial e os outros fã clubes); cada fã clube tem 1 dono + ajudantes, membros,
+mural da galera, PicKap e vitrines de anúncio próprios. A assinatura de membro é do ambiente.
+
 Stack: **FastAPI · SQLAlchemy 2 · PostgreSQL** (SQLite no desenvolvimento) · login com JWT.
 
 ## Rodando local
@@ -19,12 +23,12 @@ Testes: `.venv/bin/python -m pytest`
 
 ## Primeira subida
 
-Com o banco vazio, a API cria o fã clube **Vintage Culture** (com as 6 vitrines de anúncio) e uma conta de teste de cada tipo:
+Com o banco vazio, a API cria o ambiente **Vintage Culture** (com as 6 vitrines do ambiente e o fã clube master) e uma conta de teste de cada tipo:
 
 | Tipo | E-mail |
 | --- | --- |
 | Admin master | admin@superfas.dev |
-| Admin do fã clube (Vintage Culture) | vintage@superfas.dev |
+| Dono do fã clube master do Vintage Culture (admin master do cantor) | vintage@superfas.dev |
 | Patrocinador | marca@superfas.dev |
 | Fã | fa@superfas.dev |
 
@@ -44,16 +48,27 @@ Documentação interativa em `/docs`. Resumo:
 - `GET /artists/{slug}/products`, `/tracks`, `/ads/home`, `/ad-slots`, `/membership/perks`
 - `POST /artists/{slug}/membership/subscribe` (assinatura simulada, sem cobrança)
 
-**Admin do fã clube** (admin daquele fã clube ou master)
-- Conteúdo: `GET|POST /artists/{slug}/manage/{recurso}` e `PATCH|DELETE /artists/{slug}/manage/{recurso}/{id}`
-  com recurso = `events`, `vendors`, `gifts`, `posts`, `prizes`, `products`, `tracks`, `perks`
-- Membros: `GET /artists/{slug}/members`, `POST /members/{id}/charge`, `POST /members/{id}/cancel`
-- Equipe: `GET|POST /artists/{slug}/admins`, `DELETE /artists/{slug}/admins/{id}` (até 10)
+**Fã clubes** (qualquer conta logada vê; a equipe administra)
+- `GET /artists/{slug}/clubs`, `GET /artists/{slug}/clubs/{club}`, `POST .../join`, `POST .../leave`
+- Mural: `GET|POST /artists/{slug}/clubs/{club}/posts` (só membro posta)
+- PicKap: `GET .../pickap/prizes`, `POST .../pickap/spin`
+- Anúncios: `GET .../ad-slots`, `GET .../ads/home`, `GET .../campaigns` (equipe)
+- Equipe: `GET|POST .../staff`, `DELETE .../staff/{id}` (dono: o ambiente escolhe; ajudantes: o dono convida; até 10)
+- Membros: `GET .../members`, `DELETE .../members/{userId}`
+- Conteúdo do clube: `GET|POST|PATCH|DELETE .../manage/prizes`, `GET|DELETE .../manage/posts`
+- Criar/editar/apagar: `POST /artists/{slug}/clubs` (dono do master), `PATCH|DELETE /artists/{slug}/clubs/{club}`
+- `GET /me/staff` — onde a pessoa está na equipe
 
-**Admin master**
-- `POST /admin/fan-clubs`, `PATCH|DELETE /admin/fan-clubs/{slug}`
-- `PATCH /artists/{slug}/ad-slots/{key}` (ligar/pausar vitrine, preço)
-- `GET /admin/campaigns`, `POST /admin/campaigns/{id}/approve|reject`
+**Administração do ambiente** (equipe do fã clube master ou admin da plataforma)
+- Conteúdo oficial: `GET|POST /artists/{slug}/manage/{recurso}` e `PATCH|DELETE /artists/{slug}/manage/{recurso}/{id}`
+  com recurso = `events`, `vendors`, `gifts`, `posts`, `products`, `tracks`, `perks`
+- Assinantes: `GET /artists/{slug}/members`, `POST /members/{id}/charge`, `POST /members/{id}/cancel`
+- Anúncios do ambiente: `GET /artists/{slug}/campaigns`, `PATCH /artists/{slug}/ad-slots/{key}`
+- Aprovar campanha: `POST /campaigns/{id}/approve|reject` (quem administra a vitrine: ambiente ou fã clube)
+
+**Admin da plataforma**
+- `POST /admin/fan-clubs` (cria o ambiente de um cantor já com o fã clube master; o 1º convidado é o dono), `PATCH|DELETE /admin/fan-clubs/{slug}`
+- `GET /admin/campaigns` (todas)
 - `GET /admin/sponsors`, `POST /admin/sponsors/invite`
 
 **Patrocinador** — `GET /sponsor/me`, `GET /sponsor/campaigns`, `POST /sponsor/campaigns` (multipart, arte JPG/PNG opcional)
@@ -71,11 +86,17 @@ app/
   security.py    senha (argon2), JWT e permissões
   seed.py        dados iniciais
   defaults.py    temas e vitrines padrão
-  routers/       auth, fan, club_admin, master, sponsor
+  migrations.py  atualiza o banco na subida (sem apagar dados)
+  routers/       auth, fan (área do fã), clubs (fã clubes), club_admin (ambiente), master (plataforma), sponsor
 tests/           testes da API (pytest)
 ```
 
+## Atualizações do banco
+
+`app/migrations.py` roda na subida: cria tabelas novas, acrescenta colunas e converte dados antigos
+(ex.: cria o fã clube master de cada cantor e passa a equipe antiga para ele). Não apaga nada.
+
 ## Próximos passos
 
-- Migrações com Alembic (hoje as tabelas são criadas na subida; mudar uma coluna exige recriar o banco).
+- Trocar `migrations.py` por Alembic quando o esquema começar a mudar com frequência.
 - Envio de e-mail nos convites, pagamento real da assinatura, busca do Photo Finder.

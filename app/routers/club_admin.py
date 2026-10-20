@@ -1,6 +1,7 @@
-"""Admin do fã clube: conteúdo (CRUD), membros e equipe.
+"""Administração do ambiente do cantor: conteúdo oficial (CRUD) e assinantes.
 
-Todas as rotas exigem ser admin daquele fã clube (ou o admin master).
+Todas as rotas exigem ser da equipe do fã clube master daquele cantor (ou o admin da plataforma).
+O PicKap, o mural da galera e a equipe de cada fã clube ficam em clubs.py.
 O conteúdo segue o padrão:
     GET    /artists/{slug}/manage/{recurso}
     POST   /artists/{slug}/manage/{recurso}
@@ -17,12 +18,10 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from .. import models as m
-from ..schemas import AdminInviteIn, Camel, ClubAdminOut, InviteOut, MemberOut, br_date
-from ..security import DB, ManagedArtist, hash_password, temp_password
+from ..schemas import Camel, MemberOut, br_date
+from ..security import DB, ManagedArtist
 
-router = APIRouter(tags=["Admin do fã clube"])
-
-MAX_ADMINS = 10
+router = APIRouter(tags=["Administração do ambiente"])
 
 
 # ---------------------------------------------------------------- formatos de entrada do conteúdo
@@ -109,6 +108,7 @@ def _check_event(db: Session, artist: m.Artist, data: dict[str, Any]) -> None:
 
 
 def _post_defaults(db: Session, artist: m.Artist, data: dict[str, Any]) -> None:
+    # Posts criados pela administração do ambiente são oficiais (sem fã clube).
     if "kind" in data:
         data["official"] = data["kind"] == "drop"
 
@@ -118,7 +118,6 @@ RESOURCES: list[tuple[str, type, type[Camel], Any, Callable | None]] = [
     ("vendors", m.Vendor, VendorIn, m.Vendor.position, _check_event),
     ("gifts", m.Gift, GiftIn, m.Gift.position, _check_event),
     ("posts", m.Post, PostIn, m.Post.created_at.desc(), _post_defaults),
-    ("prizes", m.Prize, PrizeIn, m.Prize.position, None),
     ("products", m.Product, ProductIn, m.Product.position, None),
     ("tracks", m.Track, TrackIn, m.Track.position, None),
     ("perks", m.MemberPerk, PerkIn, m.MemberPerk.position, None),
@@ -235,65 +234,3 @@ def cancel_member(member_id: str, artist: ManagedArtist, db: DB):
     f.member_status = "canceled"
     db.commit()
     return {"ok": True}
-
-
-# ---------------------------------------------------------------- equipe
-
-
-def club_admin_out(a: m.ArtistAdmin) -> ClubAdminOut:
-    return ClubAdminOut(
-        id=a.id,
-        user_id=a.user_id,
-        name=a.user.name,
-        email=a.user.email,
-        role=a.role_label,
-        pending=a.user.must_change_password,
-    )
-
-
-def add_club_admin(db: Session, artist: m.Artist, email: str, name: str = "", role: str = "Administrador") -> InviteOut:
-    """Cria (ou vincula) a conta de um admin do fã clube. Devolve a senha provisória quando cria."""
-    email = email.lower()
-    if len(artist.admins) >= MAX_ADMINS:
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, f"O fã clube já tem {MAX_ADMINS} administradores.")
-    user = db.scalar(select(m.User).where(m.User.email == email))
-    password = None
-    if user:
-        if user.role != m.ROLE_ARTIST_ADMIN:
-            raise HTTPException(status.HTTP_409_CONFLICT, f"{email} já tem uma conta de outro tipo.")
-        if any(a.user_id == user.id for a in artist.admins):
-            raise HTTPException(status.HTTP_409_CONFLICT, f"{email} já administra este fã clube.")
-    else:
-        password = temp_password()
-        user = m.User(
-            email=email,
-            name=name.strip() or email.split("@")[0],
-            password_hash=hash_password(password),
-            role=m.ROLE_ARTIST_ADMIN,
-            must_change_password=True,
-        )
-        db.add(user)
-    db.add(m.ArtistAdmin(artist=artist, user=user, role_label=role or "Administrador"))
-    db.flush()
-    return InviteOut(email=email, temp_password=password)
-
-
-@router.get("/artists/{slug}/admins", response_model=list[ClubAdminOut])
-def list_admins(artist: ManagedArtist):
-    return [club_admin_out(a) for a in sorted(artist.admins, key=lambda a: a.created_at)]
-
-
-@router.post("/artists/{slug}/admins", response_model=InviteOut, status_code=201)
-def invite_admin(body: AdminInviteIn, artist: ManagedArtist, db: DB):
-    out = add_club_admin(db, artist, body.email, body.name, body.role)
-    db.commit()
-    return out
-
-
-@router.delete("/artists/{slug}/admins/{admin_id}", status_code=204)
-def remove_admin(admin_id: str, artist: ManagedArtist, db: DB):
-    a = db.get(m.ArtistAdmin, admin_id)
-    if not a or a.artist_id != artist.id:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Administrador não encontrado.")
-    db.delete(a)
-    db.commit()

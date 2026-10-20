@@ -85,7 +85,8 @@ class SessionUser(Camel):
     name: str
     email: str
     role: str
-    artists: list[str]  # slugs que administra
+    artists: list[str]  # cantores cujo ambiente administra (equipe do fã clube master)
+    clubs: list[str]  # fã clubes da equipe, como "cantor/clube"
     sponsor_id: str | None = None
     must_change_password: bool = False
 
@@ -101,7 +102,8 @@ def session_user(u: m.User) -> SessionUser:
         name=u.name,
         email=u.email,
         role=u.role,
-        artists=sorted(a.artist.slug for a in u.admin_of),
+        artists=sorted({st.club.artist.slug for st in u.staff_of if st.club.is_master}),
+        clubs=sorted(f"{st.club.artist.slug}/{st.club.slug}" for st in u.staff_of),
         sponsor_id=u.sponsor_id,
         must_change_password=u.must_change_password,
     )
@@ -124,6 +126,7 @@ class ArtistOut(Camel):
     ad_slots_summary: str
     brand_color: str
     modules: dict
+    clubs: int  # quantos fã clubes o ambiente tem
 
 
 def slot_occupied(db: Session, slot: m.AdSlot) -> bool:
@@ -136,7 +139,7 @@ def artist_out(db: Session, a: m.Artist) -> ArtistOut:
     members = db.scalar(
         select(func.count()).select_from(m.Fandom).where(m.Fandom.artist_id == a.id, m.Fandom.member_status == "active")
     )
-    slots = a.ad_slots
+    slots = [s for s in a.ad_slots if s.club_id is None]  # vitrines do ambiente
     occupied = sum(1 for s in slots if slot_occupied(db, s))
     summary = f"{occupied} de {len(slots)} ocupadas" if slots else "Não configuradas"
     return ArtistOut(
@@ -153,6 +156,7 @@ def artist_out(db: Session, a: m.Artist) -> ArtistOut:
         ad_slots_summary=summary,
         brand_color=a.brand_color,
         modules=a.modules or {},
+        clubs=len(a.clubs),
     )
 
 
@@ -172,6 +176,11 @@ class FanClubCreate(Camel):
     instagram: str = ""
     template: Literal["blank", "vc"] = "blank"
     invites: list[EmailStr] = Field(default_factory=list, max_length=10)
+
+
+class ClubRef(Camel):
+    slug: str
+    name: str
 
 
 class InviteOut(Camel):
@@ -210,6 +219,7 @@ class ViewerOut(Camel):
     spins: int
     pending_gifts: int
     is_member: bool
+    clubs: list[str] = []  # fã clubes (slugs) em que o fã entrou neste cantor
 
 
 class AuthorOut(Camel):
@@ -228,6 +238,7 @@ class PostOut(Camel):
     has_image: bool | None = None
     quote: str | None = None
     url: str | None = None
+    club: ClubRef | None = None  # fã clube do post (vazio = oficial)
     likes: int
     comments: int
     reposts: int
@@ -247,6 +258,7 @@ def post_out(p: m.Post, artist: m.Artist) -> PostOut:
         has_image=p.has_image or None,
         quote=p.quote or None,
         url=p.url or None,
+        club=ClubRef(slug=p.club.slug, name=p.club.name) if p.club else None,
         likes=p.likes,
         comments=p.comments,
         reposts=p.reposts,
@@ -255,6 +267,7 @@ def post_out(p: m.Post, artist: m.Artist) -> PostOut:
 
 class FanPostIn(Camel):
     kind: Literal["galera", "instagram"] = "galera"
+    club: str | None = None  # slug do fã clube (vazio = master)
     text: str = Field(min_length=1, max_length=2000)
     url: str = Field(default="", max_length=500)
 
@@ -414,8 +427,10 @@ class CampaignOut(Camel):
     id: str
     sponsor: str
     slot_name: str
-    club: str
-    club_slug: str
+    club: str  # nome do cantor
+    club_slug: str  # slug do cantor
+    fan_club: str | None = None  # fã clube da vitrine (vazio = ambiente do cantor)
+    fan_club_slug: str | None = None
     title: str
     text: str
     cta: str
@@ -444,6 +459,8 @@ def campaign_out(c: m.Campaign) -> CampaignOut:
         slot_name=c.slot.name,
         club=c.slot.artist.name,
         club_slug=c.slot.artist.slug,
+        fan_club=c.slot.club.name if c.slot.club else None,
+        fan_club_slug=c.slot.club.slug if c.slot.club else None,
         title=c.title,
         text=c.text,
         cta=c.cta,
@@ -476,3 +493,107 @@ class SponsorInviteIn(Camel):
 class SponsorInvited(Camel):
     sponsor: SponsorOut
     temp_password: str | None
+
+
+# ---------------------------------------------------------------- fã clubes
+
+
+class PersonOut(Camel):
+    name: str
+    handle: str = ""
+
+
+class FanClubOut(Camel):
+    id: str
+    slug: str
+    name: str
+    description: str
+    city: str
+    is_master: bool
+    status: str
+    members: int
+    owner: PersonOut | None = None
+    joined: bool = False  # quem está vendo entrou neste fã clube
+    my_role: str | None = None  # "owner" | "helper" se quem está vendo é da equipe
+
+
+def fan_club_out(c: m.FanClub, viewer: m.User | None = None) -> FanClubOut:
+    owner = next((st.user for st in c.staff if st.role == m.STAFF_OWNER), None)
+    my_role = next((st.role for st in c.staff if viewer and st.user_id == viewer.id), None)
+    return FanClubOut(
+        id=c.id,
+        slug=c.slug,
+        name=c.name,
+        description=c.description,
+        city=c.city,
+        is_master=c.is_master,
+        status=c.status,
+        members=len(c.members),
+        owner=PersonOut(name=owner.name, handle=owner.handle) if owner else None,
+        joined=bool(viewer and any(mb.user_id == viewer.id for mb in c.members)),
+        my_role=my_role,
+    )
+
+
+class ClubCreateIn(Camel):
+    name: str = Field(min_length=2, max_length=120)
+    description: str = Field(default="", max_length=300)
+    city: str = Field(default="", max_length=80)
+    owner_email: EmailStr | None = None  # dono do fã clube (convite)
+    owner_name: str = ""
+
+
+class ClubPatch(Camel):
+    name: str | None = Field(default=None, min_length=2, max_length=120)
+    description: str | None = Field(default=None, max_length=300)
+    city: str | None = Field(default=None, max_length=80)
+    status: Literal["active", "setup"] | None = None
+
+
+class ClubCreated(Camel):
+    club: FanClubOut
+    invite: InviteOut | None = None
+
+
+class StaffOut(Camel):
+    id: str
+    user_id: str
+    name: str
+    email: str
+    role: str  # owner | helper
+    role_label: str
+    pending: bool  # ainda não trocou a senha provisória
+
+
+def staff_out(st: m.ClubStaff) -> StaffOut:
+    return StaffOut(
+        id=st.id,
+        user_id=st.user_id,
+        name=st.user.name,
+        email=st.user.email,
+        role=st.role,
+        role_label=st.role_label or ("Dono do fã clube" if st.role == m.STAFF_OWNER else "Ajudante"),
+        pending=st.user.must_change_password,
+    )
+
+
+class StaffInviteIn(Camel):
+    email: EmailStr
+    name: str = ""
+    role: Literal["owner", "helper"] = "helper"
+    role_label: str = Field(default="", max_length=80)
+
+
+class ClubMemberOut(Camel):
+    id: str  # id do usuário
+    name: str
+    handle: str
+    city: str
+    since: str
+    is_subscriber: bool  # assinante do ambiente do cantor
+
+
+class ClubPostIn(Camel):
+    kind: Literal["galera", "instagram"] = "galera"
+    text: str = Field(min_length=1, max_length=2000)
+    url: str = Field(default="", max_length=500)

@@ -1,8 +1,8 @@
-"""Admin master: fã clubes, vitrines, campanhas e patrocinadores."""
+"""Admin da plataforma: cantores, vitrines, campanhas e patrocinadores.
+
+(A rota /admin/fan-clubs cria o AMBIENTE de um cantor, já com o fã clube master.)"""
 
 import copy
-import re
-import unicodedata
 
 from fastapi import APIRouter, HTTPException, status
 from sqlalchemy import select
@@ -26,16 +26,22 @@ from ..schemas import (
     campaign_out,
     sponsor_out,
 )
-from ..security import DB, MasterUser, get_artist_or_404, hash_password, temp_password
-from .club_admin import add_club_admin
+from ..security import (
+    DB,
+    CurrentUser,
+    ManagedArtist,
+    MasterUser,
+    can_manage_club,
+    forbidden,
+    get_artist_or_404,
+    hash_password,
+    is_env_admin,
+    temp_password,
+)
+from .clubs import create_club, invite_staff, slugify
 
 router = APIRouter(tags=["Admin master"])
 
-
-def slugify(s: str) -> str:
-    s = unicodedata.normalize("NFD", s.lower())
-    s = "".join(c for c in s if unicodedata.category(c) != "Mn")
-    return re.sub(r"[^a-z0-9]+", "-", s).strip("-")
 
 
 def add_default_slots(db: Session, artist: m.Artist) -> None:
@@ -69,6 +75,7 @@ def create_fan_club(body: FanClubCreate, _: MasterUser, db: DB):
     db.add(artist)
     db.flush()
     add_default_slots(db, artist)
+    master = create_club(db, artist, f"Fã clube oficial {artist.name}", is_master=True)
 
     if body.template == "vc":
         # Copia a estrutura (benefícios de membro e fatias da roleta) do Vintage Culture, sem o visual.
@@ -78,10 +85,18 @@ def create_fan_club(body: FanClubCreate, _: MasterUser, db: DB):
             artist.modules = dict(vc.modules or artist.modules)
             for p in db.scalars(select(m.MemberPerk).where(m.MemberPerk.artist_id == vc.id)):
                 db.add(m.MemberPerk(artist_id=artist.id, title=p.title, sub=p.sub, position=p.position))
-            for p in db.scalars(select(m.Prize).where(m.Prize.artist_id == vc.id)):
-                db.add(m.Prize(artist_id=artist.id, label=p.label, is_retry=p.is_retry, points=p.points, position=p.position))
+            vc_master = db.scalar(select(m.FanClub).where(m.FanClub.artist_id == vc.id, m.FanClub.is_master.is_(True)))
+            if vc_master:
+                for p in db.scalars(select(m.Prize).where(m.Prize.club_id == vc_master.id)):
+                    db.add(
+                        m.Prize(artist_id=artist.id, club_id=master.id, label=p.label, is_retry=p.is_retry, points=p.points, position=p.position)
+                    )
 
-    invites = [add_club_admin(db, artist, str(e), role="Administrador") for e in dict.fromkeys(body.invites)]
+    # O primeiro convidado é o dono do fã clube master (o admin master do cantor); os outros, ajudantes.
+    emails = list(dict.fromkeys(str(e) for e in body.invites))
+    invites = [
+        invite_staff(db, master, e, role=m.STAFF_OWNER if i == 0 else m.STAFF_HELPER) for i, e in enumerate(emails)
+    ]
     db.commit()
     db.refresh(artist)
     return FanClubCreated(artist=artist_out(db, artist), invites=invites)
@@ -115,12 +130,19 @@ def delete_fan_club(slug: str, _: MasterUser, db: DB):
 # ---------------------------------------------------------------- vitrines
 
 
+def can_manage_slot(db: Session, user: m.User, slot: m.AdSlot) -> bool:
+    """Vitrine do ambiente: administração do ambiente. Vitrine de fã clube: equipe do clube."""
+    return can_manage_club(db, user, slot.club) if slot.club else is_env_admin(db, user, slot.artist)
+
+
 @router.patch("/artists/{slug}/ad-slots/{key}", response_model=AdSlotOut)
-def update_ad_slot(slug: str, key: str, body: AdSlotPatch, _: MasterUser, db: DB):
+def update_ad_slot(slug: str, key: str, body: AdSlotPatch, user: CurrentUser, db: DB):
     artist = get_artist_or_404(db, slug)
     slot = db.scalar(select(m.AdSlot).where(m.AdSlot.artist_id == artist.id, m.AdSlot.key == key))
     if not slot:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Vitrine não encontrada.")
+    if not can_manage_slot(db, user, slot):
+        raise forbidden("Só quem administra esta vitrine pode mudá-la.")
     for k, v in body.model_dump(exclude_unset=True).items():
         setattr(slot, k, v)
     db.commit()
@@ -135,23 +157,36 @@ def list_campaigns(_: MasterUser, db: DB):
     return [campaign_out(c) for c in db.scalars(select(m.Campaign).order_by(m.Campaign.created_at.desc()))]
 
 
-def _decide(db: Session, campaign_id: str, decision: str) -> CampaignOut:
+def _decide(db: Session, user: m.User, campaign_id: str, decision: str) -> CampaignOut:
     c = db.get(m.Campaign, campaign_id)
     if not c:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Campanha não encontrada.")
+    # Quem aprova é quem administra a vitrine (ambiente ou fã clube); a plataforma pode tudo.
+    if not can_manage_slot(db, user, c.slot):
+        raise forbidden("Só quem administra esta vitrine aprova a campanha.")
     c.status = decision
     db.commit()
     return campaign_out(c)
 
 
-@router.post("/admin/campaigns/{campaign_id}/approve", response_model=CampaignOut)
-def approve_campaign(campaign_id: str, _: MasterUser, db: DB):
-    return _decide(db, campaign_id, "approved")
+@router.post("/admin/campaigns/{campaign_id}/approve", response_model=CampaignOut, include_in_schema=False)
+@router.post("/campaigns/{campaign_id}/approve", response_model=CampaignOut)
+def approve_campaign(campaign_id: str, user: CurrentUser, db: DB):
+    return _decide(db, user, campaign_id, "approved")
 
 
-@router.post("/admin/campaigns/{campaign_id}/reject", response_model=CampaignOut)
-def reject_campaign(campaign_id: str, _: MasterUser, db: DB):
-    return _decide(db, campaign_id, "rejected")
+@router.post("/admin/campaigns/{campaign_id}/reject", response_model=CampaignOut, include_in_schema=False)
+@router.post("/campaigns/{campaign_id}/reject", response_model=CampaignOut)
+def reject_campaign(campaign_id: str, user: CurrentUser, db: DB):
+    return _decide(db, user, campaign_id, "rejected")
+
+
+@router.get("/artists/{slug}/campaigns", response_model=list[CampaignOut])
+def env_campaigns(artist: ManagedArtist, db: DB):
+    """Campanhas das vitrines do ambiente do cantor (para a administração do ambiente aprovar)."""
+    slot_ids = [s.id for s in artist.ad_slots if s.club_id is None]
+    q = select(m.Campaign).where(m.Campaign.slot_id.in_(slot_ids)).order_by(m.Campaign.created_at.desc())
+    return [campaign_out(c) for c in db.scalars(q)]
 
 
 # ---------------------------------------------------------------- patrocinadores

@@ -44,6 +44,8 @@ class User(Base):
     sponsor: Mapped["Sponsor | None"] = relationship(back_populates="users")
     admin_of: Mapped[list["ArtistAdmin"]] = relationship(back_populates="user", cascade="all, delete-orphan")
     fandoms: Mapped[list["Fandom"]] = relationship(back_populates="user", cascade="all, delete-orphan")
+    staff_of: Mapped[list["ClubStaff"]] = relationship(back_populates="user", cascade="all, delete-orphan")
+    clubs: Mapped[list["ClubMember"]] = relationship(back_populates="user", cascade="all, delete-orphan")
 
 
 class Artist(Base):
@@ -62,12 +64,15 @@ class Artist(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
 
     admins: Mapped[list["ArtistAdmin"]] = relationship(back_populates="artist", cascade="all, delete-orphan")
+    clubs: Mapped[list["FanClub"]] = relationship(
+        back_populates="artist", cascade="all, delete-orphan", order_by="FanClub.position"
+    )
     fandoms: Mapped[list["Fandom"]] = relationship(back_populates="artist", cascade="all, delete-orphan")
     ad_slots: Mapped[list["AdSlot"]] = relationship(back_populates="artist", cascade="all, delete-orphan")
 
 
 class ArtistAdmin(Base):
-    """Administrador de um fã clube (até 10 por artista)."""
+    """LEGADO: equipe por artista (antes dos fã clubes). Só é lida pela migração em migrations.py."""
 
     __tablename__ = "artist_admins"
     __table_args__ = (UniqueConstraint("artist_id", "user_id"),)
@@ -80,6 +85,68 @@ class ArtistAdmin(Base):
 
     artist: Mapped[Artist] = relationship(back_populates="admins")
     user: Mapped[User] = relationship(back_populates="admin_of")
+
+
+# Equipe de um fã clube
+STAFF_OWNER = "owner"
+STAFF_HELPER = "helper"
+
+
+class FanClub(Base):
+    """Fã clube dentro do ambiente de um cantor (até 10: 1 master + 9).
+
+    A equipe do fã clube master é a administração do ambiente do cantor.
+    """
+
+    __tablename__ = "fan_clubs"
+    __table_args__ = (UniqueConstraint("artist_id", "slug"),)
+
+    id: Mapped[str] = mapped_column(String(20), primary_key=True, default=new_id)
+    artist_id: Mapped[str] = mapped_column(ForeignKey("artists.id", ondelete="CASCADE"), index=True)
+    slug: Mapped[str] = mapped_column(String(60))
+    name: Mapped[str] = mapped_column(String(120))
+    description: Mapped[str] = mapped_column(String(300), default="")
+    city: Mapped[str] = mapped_column(String(80), default="")
+    is_master: Mapped[bool] = mapped_column(Boolean, default=False)
+    status: Mapped[str] = mapped_column(String(20), default="active")  # active | setup
+    position: Mapped[int] = mapped_column(Integer, default=0)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+
+    artist: Mapped["Artist"] = relationship(back_populates="clubs")
+    staff: Mapped[list["ClubStaff"]] = relationship(back_populates="club", cascade="all, delete-orphan")
+    members: Mapped[list["ClubMember"]] = relationship(back_populates="club", cascade="all, delete-orphan")
+
+
+class ClubStaff(Base):
+    """Dono ou ajudante de um fã clube."""
+
+    __tablename__ = "club_staff"
+    __table_args__ = (UniqueConstraint("club_id", "user_id"),)
+
+    id: Mapped[str] = mapped_column(String(20), primary_key=True, default=new_id)
+    club_id: Mapped[str] = mapped_column(ForeignKey("fan_clubs.id", ondelete="CASCADE"), index=True)
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    role: Mapped[str] = mapped_column(String(10), default=STAFF_HELPER)  # owner | helper
+    role_label: Mapped[str] = mapped_column(String(80), default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+
+    club: Mapped[FanClub] = relationship(back_populates="staff")
+    user: Mapped["User"] = relationship(back_populates="staff_of")
+
+
+class ClubMember(Base):
+    """Fã que entrou num fã clube (grátis; o fã pode estar em vários)."""
+
+    __tablename__ = "club_members"
+    __table_args__ = (UniqueConstraint("club_id", "user_id"),)
+
+    id: Mapped[str] = mapped_column(String(20), primary_key=True, default=new_id)
+    club_id: Mapped[str] = mapped_column(ForeignKey("fan_clubs.id", ondelete="CASCADE"), index=True)
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+
+    club: Mapped[FanClub] = relationship(back_populates="members")
+    user: Mapped["User"] = relationship(back_populates="clubs")
 
 
 class Fandom(Base):
@@ -108,6 +175,8 @@ class Post(Base):
     id: Mapped[str] = mapped_column(String(20), primary_key=True, default=new_id)
     artist_id: Mapped[str] = mapped_column(ForeignKey("artists.id", ondelete="CASCADE"), index=True)
     kind: Mapped[str] = mapped_column(String(20))  # drop | galera | instagram
+    # Fã clube do post (galera/instagram). Vazio = oficial do ambiente (Drop News).
+    club_id: Mapped[str | None] = mapped_column(ForeignKey("fan_clubs.id", ondelete="CASCADE"), nullable=True, index=True)
     author_id: Mapped[str | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
     official: Mapped[bool] = mapped_column(Boolean, default=False)
     text: Mapped[str] = mapped_column(Text)
@@ -120,6 +189,7 @@ class Post(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now, index=True)
 
     author: Mapped[User | None] = relationship()
+    club: Mapped["FanClub | None"] = relationship()
 
 
 class Event(Base):
@@ -184,12 +254,13 @@ class EventEntry(Base):
 
 
 class Prize(Base):
-    """Fatia da roleta do PicKap."""
+    """Fatia da roleta do PicKap (cada fã clube tem a sua roleta)."""
 
     __tablename__ = "prizes"
 
     id: Mapped[str] = mapped_column(String(20), primary_key=True, default=new_id)
     artist_id: Mapped[str] = mapped_column(ForeignKey("artists.id", ondelete="CASCADE"), index=True)
+    club_id: Mapped[str | None] = mapped_column(ForeignKey("fan_clubs.id", ondelete="CASCADE"), nullable=True, index=True)
     label: Mapped[str] = mapped_column(String(60))
     is_retry: Mapped[bool] = mapped_column(Boolean, default=False)
     points: Mapped[int] = mapped_column(Integer, default=0)  # pontos da sorte que a fatia dá
@@ -234,14 +305,16 @@ class MemberPerk(Base):
 
 
 class AdSlot(Base):
-    """Vitrine de anúncio dentro de um fã clube."""
+    """Vitrine de anúncio: do ambiente do cantor (club_id vazio) ou de um fã clube."""
 
     __tablename__ = "ad_slots"
     __table_args__ = (UniqueConstraint("artist_id", "key"),)
 
     id: Mapped[str] = mapped_column(String(20), primary_key=True, default=new_id)
     artist_id: Mapped[str] = mapped_column(ForeignKey("artists.id", ondelete="CASCADE"), index=True)
-    key: Mapped[str] = mapped_column(String(30))  # home | mural | evento | pickap | loja | drops
+    club_id: Mapped[str | None] = mapped_column(ForeignKey("fan_clubs.id", ondelete="CASCADE"), nullable=True, index=True)
+    # Ambiente: home | mural | evento | pickap | loja | drops. Fã clube: "{slug do clube}.home" etc.
+    key: Mapped[str] = mapped_column(String(80))
     name: Mapped[str] = mapped_column(String(120))
     where: Mapped[str] = mapped_column(String(200), default="")
     format: Mapped[str] = mapped_column(String(160), default="")
@@ -252,6 +325,7 @@ class AdSlot(Base):
     position: Mapped[int] = mapped_column(Integer, default=0)
 
     artist: Mapped[Artist] = relationship(back_populates="ad_slots")
+    club: Mapped["FanClub | None"] = relationship()
 
 
 class Sponsor(Base):

@@ -56,13 +56,18 @@ async def create_campaign(
     end: Annotated[str, Form()] = "",
     art: Annotated[UploadFile | None, File()] = None,
 ):
-    """Envia uma campanha para aprovação (multipart/form-data, a arte é opcional)."""
+    """Envia uma campanha para aprovação (multipart/form-data, a arte é opcional).
+
+    `club` é o cantor; `slot` é a vitrine (do ambiente, ex. "home", ou de um fã clube, ex. "fa-sp.home").
+    """
     artist = get_artist_or_404(db, club)
     if artist.status != "active":
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Este fã clube ainda não recebe anúncios.")
     ad_slot = db.scalar(select(m.AdSlot).where(m.AdSlot.artist_id == artist.id, m.AdSlot.key == slot))
     if not ad_slot or not ad_slot.active:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Vitrine indisponível.")
+    if ad_slot.club and ad_slot.club.status != "active":
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Este fã clube ainda não recebe anúncios.")
     d_start, d_end = _parse_date(start), _parse_date(end)
     if d_start and d_end and d_end < d_start:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "O fim precisa ser depois do início.")

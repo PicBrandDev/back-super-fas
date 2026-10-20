@@ -1,6 +1,5 @@
 """Área do fã: leitura do conteúdo do fã clube e as ações do fã (postar, girar, assinar…)."""
 
-import random
 from datetime import date
 from typing import Annotated
 
@@ -33,7 +32,7 @@ from ..schemas import (
     initial_of,
     post_out,
 )
-from ..security import DB, CurrentUser, can_manage, current_user_optional, get_artist_or_404
+from ..security import DB, CurrentUser, can_manage, current_user_optional, forbidden, get_artist_or_404, master_club
 
 router = APIRouter(tags=["Fã clube"])
 
@@ -63,8 +62,10 @@ def get_fandom(db: Session, artist: m.Artist, user: m.User, create: bool = True)
     return f
 
 
-def viewer_out(user: m.User, f: m.Fandom | None) -> ViewerOut:
+def viewer_out(user: m.User, f: m.Fandom | None, artist: m.Artist | None = None) -> ViewerOut:
+    clubs = sorted(mb.club.slug for mb in user.clubs if artist and mb.club.artist_id == artist.id)
     return ViewerOut(
+        clubs=clubs,
         name=user.name,
         handle=user.handle or user.email.split("@")[0],
         initial=initial_of(user.name),
@@ -95,10 +96,11 @@ def get_artist(slug: str, db: DB, user: Annotated[m.User | None, Depends(current
 @router.get("/me", response_model=ViewerOut)
 def me(user: CurrentUser, db: DB, artist: str | None = None):
     f = None
+    a = None
     if artist:
         a = visible_artist(db, artist, user)
         f = get_fandom(db, a, user, create=user.role == m.ROLE_FAN)
-    return viewer_out(user, f)
+    return viewer_out(user, f, a)
 
 
 @router.get("/me/fandoms", response_model=list[str])
@@ -121,7 +123,17 @@ def list_posts(artist: FanArtist, db: DB, kind: str | None = None):
 
 @router.post("/artists/{slug}/posts", response_model=PostOut, status_code=201)
 def create_fan_post(body: FanPostIn, artist: FanArtist, user: CurrentUser, db: DB):
-    post = m.Post(artist_id=artist.id, kind=body.kind, author_id=user.id, text=body.text.strip(), url=body.url.strip())
+    """Post do fã no mural de um fã clube (sem `club`, vai para o fã clube master)."""
+    from .clubs import can_manage_club, get_club_or_404, is_member
+
+    club = get_club_or_404(db, artist, body.club) if body.club else master_club(db, artist)
+    if not club:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Este cantor ainda não tem fã clube.")
+    if not is_member(db, club, user) and not can_manage_club(db, user, club):
+        raise forbidden("Entre no fã clube para postar no mural dele.")
+    post = m.Post(
+        artist_id=artist.id, club_id=club.id, kind=body.kind, author_id=user.id, text=body.text.strip(), url=body.url.strip()
+    )
     db.add(post)
     db.commit()
     db.refresh(post)
@@ -182,31 +194,21 @@ def join_luck(event_id: str, artist: FanArtist, user: CurrentUser, db: DB):
 
 @router.get("/artists/{slug}/pickap/prizes", response_model=list[PrizeOut])
 def list_prizes(artist: FanArtist, db: DB):
-    prizes = db.scalars(select(m.Prize).where(m.Prize.artist_id == artist.id).order_by(m.Prize.position)).all()
+    """Roleta do fã clube master (cada fã clube tem a sua em /clubs/{club}/pickap)."""
+    mc = master_club(db, artist)
+    prizes = db.scalars(select(m.Prize).where(m.Prize.club_id == mc.id).order_by(m.Prize.position)).all() if mc else []
     return [PrizeOut(id=p.id, label=p.label, is_retry=p.is_retry or None) for p in prizes]
 
 
 @router.post("/artists/{slug}/pickap/spin", response_model=SpinOut)
 def spin(artist: FanArtist, user: CurrentUser, db: DB):
-    """O servidor sorteia o prêmio e desconta o giro."""
-    prizes = db.scalars(select(m.Prize).where(m.Prize.artist_id == artist.id)).all()
-    if not prizes:
+    """Gira a roleta do fã clube master."""
+    from .clubs import spin_wheel
+
+    mc = master_club(db, artist)
+    if not mc:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "A roleta ainda não tem prêmios.")
-    f = get_fandom(db, artist, user)
-    assert f is not None
-    if f.spins <= 0:
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Você não tem giros disponíveis.")
-    prize = random.choice(prizes)
-    f.spins -= 1
-    if prize.is_retry:
-        f.spins += 1
-    f.luck_points += prize.points
-    db.commit()
-    return SpinOut(
-        prize=PrizeOut(id=prize.id, label=prize.label, is_retry=prize.is_retry or None),
-        spins_left=f.spins,
-        luck_points=f.luck_points,
-    )
+    return spin_wheel(db, mc, user)
 
 
 @router.get("/artists/{slug}/products", response_model=list[ProductOut])
@@ -249,7 +251,8 @@ def home_ad(artist: FanArtist, db: DB):
 
 @router.get("/artists/{slug}/ad-slots", response_model=list[AdSlotOut])
 def list_ad_slots(artist: FanArtist, db: DB):
-    return [ad_slot_out(db, s) for s in sorted(artist.ad_slots, key=lambda s: s.position)]
+    env_slots = [s for s in artist.ad_slots if s.club_id is None]
+    return [ad_slot_out(db, s) for s in sorted(env_slots, key=lambda s: s.position)]
 
 
 @router.get("/artists/{slug}/membership/perks", response_model=list[PerkOut])
@@ -267,4 +270,4 @@ def subscribe(body: SubscribeIn, artist: FanArtist, user: CurrentUser, db: DB):
     f.member_since = f.member_since or date.today()
     f.payment = "Pix" if body.method == "pix" else "Cartão"
     db.commit()
-    return viewer_out(user, f)
+    return viewer_out(user, f, artist)

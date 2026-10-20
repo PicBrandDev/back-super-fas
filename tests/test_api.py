@@ -20,6 +20,7 @@ def test_login_por_papel(client):
         assert r.json()["user"]["role"] == role
     admin = client.post("/auth/login", json={"email": "vintage@superfas.dev", "password": "senha-de-teste"}).json()
     assert admin["user"]["artists"] == ["vintage-culture"]
+    assert admin["user"]["clubs"] == ["vintage-culture/oficial"]
 
 
 def test_login_errado(client):
@@ -74,7 +75,8 @@ def test_admin_cria_conteudo_e_fa_ve(client, club_admin, fan):
     assert client.post(f"{VC}/manage/tracks", headers=club_admin, json={"title": "Faixa 01", "meta": "Prévia nova"}).status_code == 201
     assert client.post(f"{VC}/manage/perks", headers=club_admin, json={"title": "Drop News exclusivos", "sub": "Só membros"}).status_code == 201
     for label, retry, pts in [("Camiseta", False, 0), ("+50 pts", False, 50), ("Tente de novo", True, 0)]:
-        assert client.post(f"{VC}/manage/prizes", headers=club_admin, json={"label": label, "isRetry": retry, "points": pts}).status_code == 201
+        r = client.post(f"{VC}/clubs/oficial/manage/prizes", headers=club_admin, json={"label": label, "isRetry": retry, "points": pts})
+        assert r.status_code == 201, r.text
 
     events = client.get(f"{VC}/events", headers=fan).json()
     sp = next(e for e in events if e["id"] == eid)
@@ -150,7 +152,8 @@ def test_master_cria_fa_clube_com_convites(client, master, fan):
     assert client.get("/auth/me", headers=h).json()["mustChangePassword"] is True
     assert client.get("/artists/alok", headers=h).status_code == 200
     # a estrutura do VC (roleta e benefícios) foi copiada
-    assert len(client.get("/artists/alok/manage/prizes", headers=h).json()) == 3
+    assert len(client.get("/artists/alok/clubs/oficial/manage/prizes", headers=h).json()) == 3
+    assert client.get("/auth/me", headers=h).json()["artists"] == ["alok"]
 
     # troca de senha
     r = client.post("/auth/change-password", headers=h, json={"currentPassword": invite["tempPassword"], "newPassword": "novasenha123"})
@@ -158,9 +161,9 @@ def test_master_cria_fa_clube_com_convites(client, master, fan):
     login(client, "equipe@alok.com", "novasenha123")
 
     # equipe
-    admins = client.get("/artists/alok/admins", headers=master).json()
-    assert admins[0]["email"] == "equipe@alok.com"
-    assert client.post("/artists/alok/admins", headers=master, json={"email": "fa@superfas.dev"}).status_code == 409
+    staff = client.get("/artists/alok/clubs/oficial/staff", headers=master).json()
+    assert staff[0]["email"] == "equipe@alok.com" and staff[0]["role"] == "owner"
+    assert client.post("/artists/alok/clubs/oficial/staff", headers=master, json={"email": "fa@superfas.dev"}).status_code == 409
 
     # ativar
     r = client.patch("/admin/fan-clubs/alok", headers=master, json={"status": "active", "modules": {"loja": False}})
@@ -213,3 +216,80 @@ def test_convite_de_patrocinador(client, master):
     login(client, "contato@marca-b.com", pw)
     sp = next(s for s in client.get("/admin/sponsors", headers=master).json() if s["email"] == "contato@marca-b.com")
     assert sp["status"] == "active"
+
+
+# ---------------------------------------------------------------- fã clubes do cantor
+
+
+def test_fa_clubes_do_ambiente(client, club_admin, fan, sponsor, master):
+    # O admin master do cantor (dono do clube master) cria um fã clube e escolhe o dono.
+    r = client.post(
+        f"{VC}/clubs",
+        headers=club_admin,
+        json={"name": "Fã Clube SP", "city": "São Paulo", "ownerEmail": "dono-sp@exemplo.com", "ownerName": "Dono SP"},
+    )
+    assert r.status_code == 201, r.text
+    assert r.json()["club"]["slug"] == "fa-clube-sp"
+    owner = login(client, "dono-sp@exemplo.com", r.json()["invite"]["tempPassword"])
+    me = client.get("/auth/me", headers=owner).json()
+    assert me["artists"] == [] and me["clubs"] == ["vintage-culture/fa-clube-sp"]
+    SP = f"{VC}/clubs/fa-clube-sp"
+
+    # O dono do clube não mexe no conteúdo oficial nem em outro clube, e não escolhe dono.
+    assert client.post(f"{VC}/manage/events", headers=owner, json={"date": "2026-12-01", "city": "X"}).status_code == 403
+    assert client.get(f"{VC}/clubs/oficial/staff", headers=owner).status_code == 403
+    assert client.post(f"{SP}/staff", headers=owner, json={"email": "x@exemplo.com", "role": "owner"}).status_code == 403
+    assert client.post(f"{VC}/clubs", headers=owner, json={"name": "Outro"}).status_code == 403
+
+    # Mas convida ajudantes; o ajudante não convida ninguém.
+    inv = client.post(f"{SP}/staff", headers=owner, json={"email": "ajuda-sp@exemplo.com", "role": "helper"})
+    assert inv.status_code == 201, inv.text
+    helper = login(client, "ajuda-sp@exemplo.com", inv.json()["tempPassword"])
+    assert client.post(f"{SP}/staff", headers=helper, json={"email": "y@exemplo.com"}).status_code == 403
+    assert {s["role"] for s in client.get(f"{SP}/staff", headers=owner).json()} == {"owner", "helper"}
+
+    # PicKap do clube
+    assert client.post(f"{SP}/manage/prizes", headers=helper, json={"label": "Boné SP"}).status_code == 201
+
+    # Fã: lista, entra, posta e gira
+    clubs = client.get(f"{VC}/clubs", headers=fan).json()
+    assert [c["slug"] for c in clubs][:2] == ["oficial", "fa-clube-sp"]
+    assert clubs[0]["isMaster"] is True and clubs[1]["owner"]["name"] == "Dono SP"
+    assert client.post(f"{SP}/posts", headers=fan, json={"text": "Oi SP"}).status_code == 403  # ainda não entrou
+    assert client.post(f"{SP}/join", headers=fan).json()["joined"] is True
+    assert "fa-clube-sp" in client.get("/me?artist=vintage-culture", headers=fan).json()["clubs"]
+    p = client.post(f"{SP}/posts", headers=fan, json={"text": "Oi SP"})
+    assert p.status_code == 201 and p.json()["club"]["slug"] == "fa-clube-sp"
+    assert any(x["club"] and x["club"]["slug"] == "fa-clube-sp" for x in client.get(f"{VC}/posts?kind=galera", headers=fan).json())
+    spin = client.post(f"{SP}/pickap/spin", headers=fan)
+    assert spin.status_code == 200 and spin.json()["prize"]["label"] == "Boné SP"
+    assert client.get(f"{SP}/members", headers=owner).json()[0]["handle"] == "@fa.teste"
+    assert client.get(f"{SP}/members", headers=fan).status_code == 403
+
+    # Anúncio na vitrine do clube: quem aprova é o dono do clube (outro dono não pode)
+    other = client.post(f"{VC}/clubs", headers=club_admin, json={"name": "Fã Clube Rio", "ownerEmail": "dono-rio@exemplo.com"}).json()
+    rio = login(client, "dono-rio@exemplo.com", other["invite"]["tempPassword"])
+    slots = client.get(f"{SP}/ad-slots", headers=sponsor).json()
+    assert [s["id"] for s in slots] == ["fa-clube-sp.home", "fa-clube-sp.mural", "fa-clube-sp.pickap"]
+    today = date.today()
+    camp = client.post(
+        "/sponsor/campaigns",
+        headers=sponsor,
+        data={"club": "vintage-culture", "slot": "fa-clube-sp.home", "title": "Promo SP", "link": "https://x.com",
+              "start": (today - timedelta(days=1)).isoformat(), "end": (today + timedelta(days=5)).isoformat()},
+    ).json()
+    assert camp["fanClubSlug"] == "fa-clube-sp"
+    assert client.get(f"{SP}/campaigns", headers=owner).json()[0]["id"] == camp["id"]
+    assert client.post(f"/campaigns/{camp['id']}/approve", headers=rio).status_code == 403
+    assert client.post(f"/campaigns/{camp['id']}/approve", headers=owner).json()["status"] == "live"
+    assert client.get(f"{SP}/ads/home", headers=fan).json()["title"] == "Promo SP"
+    # e a vitrine do clube não aparece na lista do ambiente
+    assert all("." not in s["id"] for s in client.get(f"{VC}/ad-slots", headers=sponsor).json())
+
+    # Sair do clube e limite de 10 clubes por cantor
+    assert client.post(f"{SP}/leave", headers=fan).json()["joined"] is False
+    for i in range(7):
+        assert client.post(f"{VC}/clubs", headers=club_admin, json={"name": f"Clube {i}"}).status_code == 201
+    assert client.post(f"{VC}/clubs", headers=club_admin, json={"name": "Clube 11"}).status_code == 400
+    assert client.delete(f"{VC}/clubs/oficial", headers=master).status_code == 400
+    assert client.delete(f"{VC}/clubs/clube-0", headers=club_admin).status_code == 204

@@ -1,4 +1,4 @@
-"""Primeira carga do banco: o fã clube Vintage Culture e uma conta de teste de cada tipo.
+"""Primeira carga do banco: o ambiente Vintage Culture (com o fã clube master) e uma conta de teste de cada tipo.
 
 Só roda quando o banco está vazio (sem nenhum admin master). O conteúdo
 (shows, posts, produtos…) é criado depois pelas telas de admin.
@@ -14,6 +14,7 @@ from sqlalchemy.orm import Session
 from . import models as m
 from .config import get_settings
 from .defaults import MODULES, VINTAGE_THEME
+from .routers.clubs import create_club
 from .routers.master import add_default_slots
 from .security import hash_password
 
@@ -22,7 +23,7 @@ log = logging.getLogger("superfas.seed")
 SEED_ACCOUNTS = [
     # e-mail, nome, papel, @
     ("admin@superfas.dev", "Admin Master", m.ROLE_MASTER, ""),
-    ("vintage@superfas.dev", "Admin Vintage Culture", m.ROLE_ARTIST_ADMIN, ""),
+    ("vintage@superfas.dev", "Admin master Vintage Culture", m.ROLE_ARTIST_ADMIN, ""),
     ("marca@superfas.dev", "Marca Teste", m.ROLE_SPONSOR, ""),
     ("fa@superfas.dev", "Fã Teste", m.ROLE_FAN, "@fa.teste"),
 ]
@@ -50,6 +51,8 @@ def seed(db: Session) -> None:
         db.add(vc)
         db.flush()
         add_default_slots(db, vc)
+        create_club(db, vc, "Fã clube oficial Vintage Culture", "O fã clube master do Vintage Culture.", is_master=True)
+    master = db.scalar(select(m.FanClub).where(m.FanClub.artist_id == vc.id, m.FanClub.is_master.is_(True)))
 
     sponsor = m.Sponsor(email="marca@superfas.dev", brand="Marca Teste", status="active")
     db.add(sponsor)
@@ -59,10 +62,14 @@ def seed(db: Session) -> None:
         if role == m.ROLE_SPONSOR:
             user.sponsor = sponsor
         db.add(user)
-        if role == m.ROLE_ARTIST_ADMIN:
-            db.add(m.ArtistAdmin(artist=vc, user=user, role_label="Dono do fã clube"))
+        db.flush()
+        if role == m.ROLE_ARTIST_ADMIN and master:
+            # Dono do fã clube master = admin master do Vintage Culture.
+            db.add(m.ClubStaff(club_id=master.id, user_id=user.id, role=m.STAFF_OWNER, role_label="Dono do fã clube"))
         if role == m.ROLE_FAN:
             db.add(m.Fandom(artist=vc, user=user))
+            if master:
+                db.add(m.ClubMember(club_id=master.id, user_id=user.id))
 
     db.commit()
     lines = "\n".join(f"    {role:<13} {email}" for email, _, role, _ in SEED_ACCOUNTS)
