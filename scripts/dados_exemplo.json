@@ -1,0 +1,142 @@
+{
+  "artist": "vintage-culture",
+  "password": "superfas123",
+  "events": [
+    {
+      "date": "2026-11-07", "city": "São Paulo", "venue": "Arena Norte", "time": "23h",
+      "address": "Av. das Nações, 1000 · Zona Norte", "doorsOpen": "21h", "ageRating": "18+",
+      "lineup": "Vintage Culture · convidados a definir", "status": "on_sale",
+      "vendors": [
+        { "name": "Ticketeira Oficial", "tag": "Oficial", "type": "Ingresso pista e camarote", "priceLabel": "a partir de R$ 180", "url": "https://exemplo.com/ingressos/sp" },
+        { "name": "Viaje Junto", "tag": "Pacote", "type": "Ingresso + transfer ida e volta", "priceLabel": "a partir de R$ 290", "url": "https://exemplo.com/pacote/sp" },
+        { "name": "Caravana ABC", "tag": "Excursão", "type": "Ônibus saindo de Santo André", "priceLabel": "a partir de R$ 95", "url": "https://exemplo.com/excursao/abc" }
+      ],
+      "gifts": [
+        { "name": "Pôster autografado", "phase": "before", "qtyLabel": "20 un." },
+        { "name": "+1 giro no PicKap", "phase": "before", "qtyLabel": "todos" },
+        { "name": "Kit de adesivos", "phase": "before", "qtyLabel": "100 un." },
+        { "name": "Camiseta do show", "phase": "after", "qtyLabel": "30 un." },
+        { "name": "Encontro com o artista", "phase": "after", "qtyLabel": "2 fãs" }
+      ]
+    },
+    {
+      "date": "2026-11-13", "city": "Rio de Janeiro", "venue": "Clube da Orla", "time": "22h",
+      "address": "Av. Beira-Mar, 500 · Centro", "doorsOpen": "20h", "ageRating": "18+",
+      "lineup": "Vintage Culture", "status": "last_batches",
+      "vendors": [
+        { "name": "Ticketeira Oficial", "tag": "Oficial", "type": "Ingresso pista", "priceLabel": "a partir de R$ 160", "url": "https://exemplo.com/ingressos/rj" },
+        { "name": "Rio Party Tour", "tag": "Pacote", "type": "Hotel + ingresso", "priceLabel": "a partir de R$ 640", "url": "https://exemplo.com/pacote/rj" }
+      ],
+      "gifts": [
+        { "name": "Pôster autografado", "phase": "before", "qtyLabel": "15 un." },
+        { "name": "+1 giro no PicKap", "phase": "before", "qtyLabel": "todos" },
+        { "name": "Upgrade de setor", "phase": "after", "qtyLabel": "5 fãs" }
+      ]
+    },
+    {
+      "date": "2026-11-21", "city": "Florianópolis", "venue": "Galpão 22", "time": "23h",
+      "address": "Rod. SC-401, km 5", "doorsOpen": "21h30", "ageRating": "18+",
+      "lineup": "Vintage Culture · DJ local convidado", "status": "on_sale",
+      "vendors": [
+        { "name": "Ticketeira Oficial", "tag": "Oficial", "type": "Ingresso pista e área VIP", "priceLabel": "a partir de R$ 150", "url": "https://exemplo.com/ingressos/floripa" },
+        { "name": "Excursão Sul", "tag": "Excursão", "type": "Van saindo de Joinville", "priceLabel": "a partir de R$ 120", "url": "https://exemplo.com/excursao/joinville" }
+      ],
+      "gifts": [
+        { "name": "Kit de adesivos", "phase": "before", "qtyLabel": "80 un." },
+        { "name": "Boné bordado", "phase": "after", "qtyLabel": "10 un." }
+      ]
+    },
+    {
+      "date": "2026-12-05", "city": "Belo Horizonte", "venue": "Espaço Serra", "time": "22h",
+      "address": "Rua das Montanhas, 200", "doorsOpen": "20h", "ageRating": "18+",
+      "lineup": "A definir", "status": "soon",
+      "vendors": [
+        { "name": "Ticketeira Oficial", "tag": "Oficial", "type": "Pré-venda para membros", "priceLabel": "em breve", "url": "https://exemplo.com/ingressos/bh" }
+      ],
+      "gifts": [
+        { "name": "Pôster autografado", "phase": "before", "qtyLabel": "10 un." },
+        { "name": "+1 giro no PicKap", "phase": "before", "qtyLabel": "todos" }
+      ]
+    },
+    {
+      "date": "2026-12-12", "city": "Curitiba", "venue": "Pavilhão Central", "time": "23h",
+      "address": "Av. Sete de Setembro, 3000", "doorsOpen": "21h", "ageRating": "18+",
+      "lineup": "A definir", "status": "soon",
+      "vendors": [],
+      "gifts": [
+        { "name": "Camiseta do show", "phase": "after", "qtyLabel": "20 un." }
+      ]
+    },
+    {
+      "date": "2026-12-31", "city": "Réveillon · Trancoso", "venue": "Praia dos Nativos", "time": "23h59",
+      "address": "Trancoso, BA", "doorsOpen": "21h", "ageRating": "18+",
+      "lineup": "Vintage Culture · line-up de Ano Novo", "status": "soon",
+      "vendors": [
+        { "name": "Réveillon Oficial", "tag": "Oficial", "type": "Passaporte 3 noites", "priceLabel": "a partir de R$ 1.200", "url": "https://exemplo.com/reveillon" },
+        { "name": "Bahia Viagens", "tag": "Pacote", "type": "Aéreo + pousada + passaporte", "priceLabel": "a partir de R$ 3.900", "url": "https://exemplo.com/pacote/reveillon" }
+      ],
+      "gifts": [
+        { "name": "Passaporte para 2 pessoas", "phase": "before", "qtyLabel": "1 sorteio" },
+        { "name": "Encontro com o artista", "phase": "after", "qtyLabel": "3 fãs" },
+        { "name": "Vinil autografado", "phase": "after", "qtyLabel": "5 un." }
+      ]
+    }
+  ],
+  "drops": [
+    { "text": "Bastidores da turnê: fotos que só o fã clube vê. Comenta qual foi o seu show favorito.", "hasImage": true, "likes": 1832, "comments": 214, "reposts": 96 },
+    { "text": "Prévia nova liberada no Drops Hits. Ouve de fone e me conta o que achou.", "likes": 2410, "comments": 388, "reposts": 152 },
+    { "text": "Datas novas na agenda: Curitiba e Réveillon em Trancoso. Membros têm pré-venda.", "likes": 3105, "comments": 502, "reposts": 230 },
+    { "text": "Obrigado, Floripa! Que noite. Já com saudade.", "hasImage": true, "likes": 2788, "comments": 341, "reposts": 120 }
+  ],
+  "prizes": [
+    { "label": "Camiseta" },
+    { "label": "Tente de novo", "isRetry": true },
+    { "label": "+50 pts", "points": 50 },
+    { "label": "Boné" },
+    { "label": "Ingresso" },
+    { "label": "+100 pts", "points": 100 },
+    { "label": "Vinil" },
+    { "label": "Pôster" }
+  ],
+  "products": [
+    { "name": "Camiseta Tour 2026", "category": "roupas", "priceCents": 8990, "color": "#E0A526" },
+    { "name": "Moletom Vintage", "category": "roupas", "priceCents": 22990, "color": "#B8461A" },
+    { "name": "Regata Festival", "category": "roupas", "priceCents": 6990, "color": "#D9782A" },
+    { "name": "Boné bordado", "category": "acessorios", "priceCents": 7990, "color": "#6B3A1F" },
+    { "name": "Bucket hat", "category": "acessorios", "priceCents": 6990, "color": "#E9DCC3" },
+    { "name": "Pôster retrô", "category": "acessorios", "priceCents": 3990, "color": "#E0A526" },
+    { "name": "Vinil edição limitada", "category": "musica", "priceCents": 18990, "color": "#211B16" },
+    { "name": "Fone de ouvido do fã clube", "category": "musica", "priceCents": 14990, "color": "#B8461A" }
+  ],
+  "tracks": [
+    { "title": "Faixa inédita 01", "meta": "Prévia nova · esta semana", "releaseLabel": "12/12", "votes": 3120 },
+    { "title": "Faixa inédita 02", "meta": "Prévia · semana passada", "releaseLabel": "19/12", "votes": 2284 },
+    { "title": "Remix do verão", "meta": "Prévia · outubro", "releaseLabel": "janeiro", "votes": 1907 },
+    { "title": "Colab surpresa", "meta": "Prévia · outubro", "releaseLabel": "a definir", "votes": 1350 },
+    { "title": "Versão ao vivo", "meta": "Gravada em Floripa", "releaseLabel": "a definir", "votes": 980 }
+  ],
+  "perks": [
+    { "title": "Drop News exclusivos", "sub": "Bastidores e notícias só para membros" },
+    { "title": "Giros extras no PicKap", "sub": "+5 giros todo mês" },
+    { "title": "Prioridade na sorte dos eventos", "sub": "Mais chances nos brindes de cada show" },
+    { "title": "Desconto na Loja Vintage", "sub": "10% em todos os produtos" },
+    { "title": "Drops Hits antes de todo mundo", "sub": "Prévias liberadas primeiro para você" },
+    { "title": "Selo de membro no mural", "sub": "Seu perfil com a marca do fã clube" }
+  ],
+  "fans": [
+    { "name": "Marina Costa", "email": "marina@exemplo.com", "handle": "marina.c", "city": "São Paulo", "member": "pix", "post": "Quem vai no show de São Paulo? Bora montar caravana!" },
+    { "name": "Ana Ribeiro", "email": "ana@exemplo.com", "handle": "ana.vc", "city": "Santo André", "member": "card", "post": "Caravana saindo do ABC tá confirmada, chama no direct." },
+    { "name": "Lucas Moreira", "email": "lucas@exemplo.com", "handle": "lucas_house", "city": "Campinas", "member": "card", "post": "Essa prévia nova tá absurda, já tô contando os dias." },
+    { "name": "Júlia Prado", "email": "julia@exemplo.com", "handle": "juprado", "city": "Rio de Janeiro", "member": "pix", "instagram": "https://instagram.com/p/exemplo1" },
+    { "name": "Pedro Antunes", "email": "pedro@exemplo.com", "handle": "pedroant", "city": "Florianópolis", "member": "pix", "post": "Floripa foi o melhor show do ano, sem discussão." },
+    { "name": "Carla Nunes", "email": "carla@exemplo.com", "handle": "carlanunes", "city": "Belo Horizonte", "member": "card", "cancel": true },
+    { "name": "Gabriel Sato", "email": "gabriel@exemplo.com", "handle": "gsato", "city": "São Paulo", "member": "card", "post": "Alguém tem dica de onde estacionar perto da arena?" },
+    { "name": "Beatriz Lemos", "email": "beatriz@exemplo.com", "handle": "bialemos", "city": "Porto Alegre", "instagram": "https://instagram.com/p/exemplo2" }
+  ],
+  "slotPrices": { "home": 50000, "mural": 35000, "evento": 40000, "pickap": 60000, "loja": 30000, "drops": 25000 },
+  "campaigns": [
+    { "slot": "home", "brand": "Marca Teste", "title": "Frete grátis para o fã clube", "text": "Use o cupom VINTAGE na loja da marca.", "cta": "Ver oferta", "link": "https://exemplo.com/oferta", "startOffset": -2, "endOffset": 28, "approve": true },
+    { "slot": "loja", "brand": "Marca Teste", "title": "Coleção cápsula de verão", "text": "Peças inspiradas na turnê.", "cta": "Conhecer", "link": "https://exemplo.com/colecao", "startOffset": 5, "endOffset": 35 },
+    { "slot": "pickap", "brand": "Marca Teste", "title": "Fatia patrocinada: kit da marca", "text": "Um kit por semana na roleta.", "cta": "Girar", "link": "https://exemplo.com/kit", "startOffset": 1, "endOffset": 30 }
+  ]
+}
