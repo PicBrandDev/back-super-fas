@@ -137,7 +137,7 @@ def clubs(api: Api, admin: str, base: str, senha: str) -> None:
             activate(h["email"], inv["tempPassword"])
         for i, item in enumerate(c["prizes"]):
             api.must("POST", f"{base}/clubs/{club}/manage/prizes", owner, json_body={**item, "position": i})
-    print(f"✓ {len(DATA['clubs'])} fã clubes com donos, ajudantes e roletas (senha: {senha})")
+    print(f"✓ {len(DATA['clubs'])} fã clubes com donos, ajudantes e roletas (senha: a mesma das contas de teste)")
 
 
 def fans(api: Api, admin: str, base: str, slug: str, senha: str, only_clubs: bool) -> None:
@@ -166,7 +166,7 @@ def fans(api: Api, admin: str, base: str, slug: str, senha: str, only_clubs: boo
     for m in api.must("GET", f"{base}/members", admin):
         if m["handle"].lstrip("@") in canceled:
             api.must("POST", f"{base}/members/{m['id']}/cancel", admin)
-    print(f"✓ {len(DATA['fans'])} fãs (senha: {senha}) nos fã clubes, com posts e assinaturas")
+    print(f"✓ {len(DATA['fans'])} fãs (senha: a mesma das contas de teste) nos fã clubes, com posts e assinaturas")
 
 
 def media(api: Api, master: str, sponsor: str, base: str, slug: str, only_clubs: bool) -> None:
