@@ -23,6 +23,16 @@ class Settings(BaseSettings):
     # Prefixo quando a API fica atrás do Caddy em /api (para o /docs funcionar).
     root_path: str = ""
 
+    # E-mail dos convites (dono de fã clube). Sem SMTP_HOST a API não envia e a tela mostra a senha provisória.
+    smtp_host: str = ""
+    smtp_port: int = 587
+    smtp_user: str = ""
+    smtp_password: str = ""
+    smtp_from: str = ""  # ex.: Super Fãs <nao-responda@seudominio.com>
+
+    # Endereço público do front, usado nos links dos e-mails.
+    app_url: str = "http://localhost:3000"
+
     # Onde ficam as artes enviadas pelos patrocinadores.
     upload_dir: str = "./uploads"
 

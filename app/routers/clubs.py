@@ -1,6 +1,6 @@
 """Fã clubes dentro do ambiente de um cantor.
 
-Cada cantor tem até 10 fã clubes: o master (cuja equipe administra o ambiente) e outros 9,
+Cada cantor tem quantos fã clubes quiser: o master (cuja equipe administra o ambiente) e os outros,
 cada um com um dono e ajudantes. O fã entra em quantos quiser (grátis).
 Por fã clube: membros, mural da galera, PicKap e vitrines de anúncio.
 """
@@ -10,13 +10,15 @@ import re
 import unicodedata
 from typing import Annotated, Any, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
 from pydantic import create_model
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from .. import models as m
-from ..defaults import CLUB_AD_SLOTS, MASTER_CLUB_SLUG, MAX_CLUB_STAFF, MAX_CLUBS
+from ..defaults import CLUB_AD_SLOTS, MASTER_CLUB_SLUG, MAX_CLUB_STAFF
+from ..mailer import send_owner_invite
+from ..uploads import save_image
 from ..schemas import (
     AdSlotOut,
     CampaignOut,
@@ -96,8 +98,6 @@ def create_club(
     status_: str = "active",
 ) -> m.FanClub:
     clubs = db.scalars(select(m.FanClub).where(m.FanClub.artist_id == artist.id)).all()
-    if len(clubs) >= MAX_CLUBS:
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, f"Este cantor já tem {MAX_CLUBS} fã clubes.")
     if is_master and any(c.is_master for c in clubs):
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Este cantor já tem um fã clube master.")
     taken = {c.slug for c in clubs}
@@ -169,6 +169,13 @@ def invite_staff(db: Session, club: m.FanClub, email: str, name: str = "", role:
     return InviteOut(email=email, temp_password=password)
 
 
+def email_owner(club: m.FanClub, invite: InviteOut, name: str = "") -> None:
+    """Avisa por e-mail a pessoa que virou dona do fã clube (depois do commit)."""
+    invite.email_sent = send_owner_invite(
+        invite.email, name, club.name, club.artist.name, club.artist.slug, invite.temp_password
+    )
+
+
 def join(db: Session, club: m.FanClub, user: m.User) -> None:
     if not db.scalar(select(m.ClubMember).where(m.ClubMember.club_id == club.id, m.ClubMember.user_id == user.id)):
         db.add(m.ClubMember(club_id=club.id, user_id=user.id))
@@ -228,6 +235,8 @@ def create_club_route(body: ClubCreateIn, artist: ManagedArtist, user: CurrentUs
         invite = invite_staff(db, club, str(body.owner_email), body.owner_name, m.STAFF_OWNER)
     db.commit()
     db.refresh(club)
+    if invite:
+        email_owner(club, invite, body.owner_name)
     return ClubCreated(club=fan_club_out(club, user), invite=invite)
 
 
@@ -241,6 +250,15 @@ def update_club(body: ClubPatch, club: ManagedClub, user: CurrentUser, db: DB):
     for k, v in data.items():
         if v is not None:
             setattr(club, k, v.strip() if isinstance(v, str) else v)
+    db.commit()
+    db.refresh(club)
+    return fan_club_out(club, user)
+
+
+@router.post("/artists/{slug}/clubs/{club}/avatar", response_model=FanClubOut)
+async def set_club_avatar(club: ManagedClub, user: CurrentUser, db: DB, image: Annotated[UploadFile, File()]):
+    """Troca a foto de perfil do fã clube (JPG, PNG ou WebP, até 5 MB)."""
+    club.avatar_path = await save_image(image)
     db.commit()
     db.refresh(club)
     return fan_club_out(club, user)
@@ -402,6 +420,8 @@ def add_staff(body: StaffInviteIn, club: ManagedClub, user: CurrentUser, db: DB)
         raise forbidden("Só o dono do fã clube convida ajudantes.")
     out = invite_staff(db, club, str(body.email), body.name, body.role, body.role_label)
     db.commit()
+    if body.role == m.STAFF_OWNER:
+        email_owner(club, out, body.name)
     return out
 
 

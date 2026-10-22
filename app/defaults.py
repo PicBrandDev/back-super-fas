@@ -53,6 +53,5 @@ CLUB_AD_SLOTS = [
     ("pickap", "Fatia patrocinada no PicKap do clube", "Roleta do fã clube · uma fatia com a marca", "Logo + prêmio ou cupom", 18, 44),
 ]
 
-MAX_CLUBS = 10  # por cantor: 1 master + 9
 MAX_CLUB_STAFF = 10  # por fã clube: 1 dono + ajudantes
 MASTER_CLUB_SLUG = "oficial"

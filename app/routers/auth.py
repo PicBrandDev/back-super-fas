@@ -38,6 +38,12 @@ def register(body: RegisterIn, db: DB):
         name=body.name.strip(),
         handle=handle,
         city=body.city.strip(),
+        zip_code=body.zip_code.strip(),
+        street=body.street.strip(),
+        number=body.number.strip(),
+        complement=body.complement.strip(),
+        neighborhood=body.neighborhood.strip(),
+        state=body.state.strip().upper(),
         role=m.ROLE_FAN,
     )
     db.add(user)

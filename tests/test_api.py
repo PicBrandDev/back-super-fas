@@ -36,7 +36,11 @@ def test_conteudo_exige_login(client):
 def test_cadastro_de_fa(client):
     r = client.post(
         "/auth/register",
-        json={"name": "Nova Fã", "email": "nova@exemplo.com", "password": "12345678", "handle": "nova", "artist": "vintage-culture"},
+        json={
+            "name": "Nova Fã", "email": "nova@exemplo.com", "password": "12345678", "handle": "nova", "artist": "vintage-culture",
+            "zipCode": "01310-100", "street": "Av. Paulista", "number": "1000", "neighborhood": "Bela Vista",
+            "city": "São Paulo", "state": "sp",
+        },
     )
     assert r.status_code == 201, r.text
     assert r.json()["user"]["role"] == "fan"
@@ -268,6 +272,7 @@ def test_fa_clubes_do_ambiente(client, club_admin, fan, sponsor, master):
 
     # Anúncio na vitrine do clube: quem aprova é o dono do clube (outro dono não pode)
     other = client.post(f"{VC}/clubs", headers=club_admin, json={"name": "Fã Clube Rio", "ownerEmail": "dono-rio@exemplo.com"}).json()
+    assert other["invite"]["emailSent"] is False  # sem SMTP nos testes: a senha provisória é mostrada na tela
     rio = login(client, "dono-rio@exemplo.com", other["invite"]["tempPassword"])
     slots = client.get(f"{SP}/ad-slots", headers=sponsor).json()
     assert [s["id"] for s in slots] == ["fa-clube-sp.home", "fa-clube-sp.mural", "fa-clube-sp.pickap"]
@@ -286,10 +291,97 @@ def test_fa_clubes_do_ambiente(client, club_admin, fan, sponsor, master):
     # e a vitrine do clube não aparece na lista do ambiente
     assert all("." not in s["id"] for s in client.get(f"{VC}/ad-slots", headers=sponsor).json())
 
-    # Sair do clube e limite de 10 clubes por cantor
+    # Sair do clube; não há limite de fã clubes por cantor
     assert client.post(f"{SP}/leave", headers=fan).json()["joined"] is False
-    for i in range(7):
+    for i in range(12):
         assert client.post(f"{VC}/clubs", headers=club_admin, json={"name": f"Clube {i}"}).status_code == 201
-    assert client.post(f"{VC}/clubs", headers=club_admin, json={"name": "Clube 11"}).status_code == 400
     assert client.delete(f"{VC}/clubs/oficial", headers=master).status_code == 400
     assert client.delete(f"{VC}/clubs/clube-0", headers=club_admin).status_code == 204
+
+
+# ---------------------------------------------------------------- painel e analytics dos fã clubes
+
+
+def test_painel_dos_fa_clubes(client, club_admin, fan):
+    r = client.get("/artists/vintage-culture/clubs-overview", headers=club_admin)
+    assert r.status_code == 200
+    master = r.json()[0]
+    assert master["isMaster"] and master["ownerName"] and master["members"] >= 1
+    assert client.get("/artists/vintage-culture/clubs-overview", headers=fan).status_code == 403
+
+    a = client.get("/artists/vintage-culture/clubs/oficial/analytics", headers=club_admin)
+    assert a.status_code == 200
+    body = a.json()
+    assert len(body["series"]) == 30
+    assert body["club"]["slug"] == "oficial"
+    assert client.get("/artists/vintage-culture/clubs/oficial/analytics", headers=fan).status_code == 403
+
+
+def test_analytics_de_assinantes(client, club_admin, fan):
+    r = client.get("/artists/vintage-culture/subscribers-analytics", headers=club_admin)
+    assert r.status_code == 200
+    body = r.json()
+    assert body["fans"] >= 2 and len(body["series"]) == 30
+    assert body["active"] + body["pending"] + body["canceled"] <= body["fans"]
+    assert client.get("/artists/vintage-culture/subscribers-analytics", headers=fan).status_code == 403
+
+
+def test_drop_news_feed_e_visualizacoes(client, club_admin, fan):
+    png = b"\x89PNG\r\n\x1a\n" + b"0" * 32
+    r = client.post(
+        "/artists/vintage-culture/manage/drops",
+        headers=club_admin,
+        data={"text": "Novo drop saindo!"},
+        files={"image": ("capa.png", png, "image/png")},
+    )
+    assert r.status_code == 201, r.text
+    item = r.json()
+    assert item["kind"] == "drop" and item["image"].startswith("/uploads/") and item["views"] == 0
+    bad = client.post(
+        "/artists/vintage-culture/manage/drops", headers=club_admin, data={"text": "x"}, files={"image": ("a.gif", b"G", "image/gif")}
+    )
+    assert bad.status_code == 400
+    assert client.post("/artists/vintage-culture/manage/drops", headers=fan, data={"text": "x"}).status_code == 403
+
+    assert client.post(f"/artists/vintage-culture/posts/{item['id']}/view", headers=fan).json()["views"] == 1
+    feed = client.get("/artists/vintage-culture/manage/feed?kind=drop", headers=club_admin).json()
+    assert feed[0]["id"] == item["id"] and feed[0]["views"] == 1
+    fan_feed = client.get("/artists/vintage-culture/posts?kind=drop", headers=fan).json()
+    assert fan_feed[0]["image"]["src"] == item["image"]
+
+
+def test_foto_de_perfil_do_fa_clube(client, club_admin, fan):
+    png = b"\x89PNG\r\n\x1a\n" + b"0" * 32
+    url = "/artists/vintage-culture/clubs/oficial/avatar"
+    r = client.post(url, headers=club_admin, files={"image": ("perfil.png", png, "image/png")})
+    assert r.status_code == 200 and r.json()["avatar"].startswith("/uploads/")
+    assert client.post(url, headers=fan, files={"image": ("perfil.png", png, "image/png")}).status_code == 403
+    assert client.post(url, headers=club_admin, files={"image": ("x.gif", b"G", "image/gif")}).status_code == 400
+    overview = client.get("/artists/vintage-culture/clubs-overview", headers=club_admin).json()
+    assert overview[0]["avatar"] == r.json()["avatar"]
+
+
+def test_feed_do_fa_clube(client, club_admin, fan):
+    url = "/artists/vintage-culture/clubs/oficial/feed"
+    r = client.get(url, headers=club_admin)
+    assert r.status_code == 200
+    items = r.json()
+    assert items and {"likes", "comments", "views", "image"} <= set(items[0])
+    assert client.get(url, headers=fan).status_code == 403
+
+
+def test_feed_traz_comentarios(client, club_admin, db_session=None):
+    from sqlalchemy import select
+
+    from app import models as m
+    from app.db import SessionLocal
+
+    with SessionLocal() as db:
+        post = db.scalar(select(m.Post).where(m.Post.kind == "drop"))
+        fan_user = db.scalar(select(m.User).where(m.User.email == "fa@superfas.dev"))
+        db.add(m.PostComment(post_id=post.id, author_id=fan_user.id, text="Que drop!"))
+        db.commit()
+        post_id = post.id
+    feed = client.get("/artists/vintage-culture/manage/feed?kind=drop", headers=club_admin).json()
+    item = next(i for i in feed if i["id"] == post_id)
+    assert item["comments"] >= 1 and item["recentComments"][-1]["text"] == "Que drop!"

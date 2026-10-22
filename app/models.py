@@ -35,6 +35,13 @@ class User(Base):
     name: Mapped[str] = mapped_column(String(120))
     handle: Mapped[str] = mapped_column(String(60), default="")
     city: Mapped[str] = mapped_column(String(80), default="")
+    # Endereço do fã (cadastro): de onde são os assinantes.
+    zip_code: Mapped[str] = mapped_column(String(9), default="")
+    street: Mapped[str] = mapped_column(String(160), default="")
+    number: Mapped[str] = mapped_column(String(20), default="")
+    complement: Mapped[str] = mapped_column(String(80), default="")
+    neighborhood: Mapped[str] = mapped_column(String(80), default="")
+    state: Mapped[str] = mapped_column(String(2), default="", index=True)  # UF
     role: Mapped[str] = mapped_column(String(20), index=True)
     # Conta criada por convite com senha provisória (ainda não trocou).
     must_change_password: Mapped[bool] = mapped_column(Boolean, default=False)
@@ -93,7 +100,7 @@ STAFF_HELPER = "helper"
 
 
 class FanClub(Base):
-    """Fã clube dentro do ambiente de um cantor (até 10: 1 master + 9).
+    """Fã clube dentro do ambiente de um cantor (1 master + quantos quiser).
 
     A equipe do fã clube master é a administração do ambiente do cantor.
     """
@@ -110,6 +117,7 @@ class FanClub(Base):
     is_master: Mapped[bool] = mapped_column(Boolean, default=False)
     status: Mapped[str] = mapped_column(String(20), default="active")  # active | setup
     position: Mapped[int] = mapped_column(Integer, default=0)
+    avatar_path: Mapped[str] = mapped_column(String(255), default="")  # foto de perfil (ex.: /uploads/abc.jpg)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
 
     artist: Mapped["Artist"] = relationship(back_populates="clubs")
@@ -186,10 +194,30 @@ class Post(Base):
     likes: Mapped[int] = mapped_column(Integer, default=0)
     comments: Mapped[int] = mapped_column(Integer, default=0)
     reposts: Mapped[int] = mapped_column(Integer, default=0)
+    views: Mapped[int] = mapped_column(Integer, default=0)
+    image_path: Mapped[str] = mapped_column(String(255), default="")  # foto enviada (ex.: /uploads/abc.jpg)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now, index=True)
 
     author: Mapped[User | None] = relationship()
     club: Mapped["FanClub | None"] = relationship()
+    replies: Mapped[list["PostComment"]] = relationship(
+        back_populates="post", cascade="all, delete-orphan", order_by="PostComment.created_at"
+    )
+
+
+class PostComment(Base):
+    """Comentário de um fã num post."""
+
+    __tablename__ = "post_comments"
+
+    id: Mapped[str] = mapped_column(String(20), primary_key=True, default=new_id)
+    post_id: Mapped[str] = mapped_column(ForeignKey("posts.id", ondelete="CASCADE"), index=True)
+    author_id: Mapped[str | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    text: Mapped[str] = mapped_column(String(1000))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+
+    post: Mapped[Post] = relationship(back_populates="replies")
+    author: Mapped[User | None] = relationship()
 
 
 class Event(Base):

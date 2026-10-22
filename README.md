@@ -2,7 +2,7 @@
 
 API dos fã clubes. Atende o front [front-super-fas](../front-super-fas).
 
-Cada cantor tem um ambiente com até 10 fã clubes (1 master + 9). A equipe do fã clube master administra
+Cada cantor tem um ambiente com quantos fã clubes quiser (1 master + os outros). A equipe do fã clube master administra
 o ambiente (conteúdo oficial e os outros fã clubes); cada fã clube tem 1 dono + ajudantes, membros,
 mural da galera, PicKap e vitrines de anúncio próprios. A assinatura de membro é do ambiente.
 

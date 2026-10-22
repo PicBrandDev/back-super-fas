@@ -24,7 +24,16 @@ log = logging.getLogger("superfas.migrations")
 
 # tabela -> [(coluna, tipo SQL)]
 NEW_COLUMNS = {
-    "posts": [("club_id", "VARCHAR(20)")],
+    "users": [
+        ("zip_code", "VARCHAR(9) DEFAULT ''"),
+        ("street", "VARCHAR(160) DEFAULT ''"),
+        ("number", "VARCHAR(20) DEFAULT ''"),
+        ("complement", "VARCHAR(80) DEFAULT ''"),
+        ("neighborhood", "VARCHAR(80) DEFAULT ''"),
+        ("state", "VARCHAR(2) DEFAULT ''"),
+    ],
+    "fan_clubs": [("avatar_path", "VARCHAR(255) DEFAULT ''")],
+    "posts": [("club_id", "VARCHAR(20)"), ("views", "INTEGER DEFAULT 0"), ("image_path", "VARCHAR(255) DEFAULT ''")],
     "prizes": [("club_id", "VARCHAR(20)")],
     "ad_slots": [("club_id", "VARCHAR(20)")],
 }

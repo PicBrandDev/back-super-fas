@@ -8,7 +8,7 @@ from fastapi.staticfiles import StaticFiles
 from .config import DEV_SECRET, get_settings
 from .db import SessionLocal, engine
 from .migrations import upgrade
-from .routers import auth, club_admin, clubs, fan, master, sponsor
+from .routers import analytics, auth, club_admin, clubs, drops, fan, master, sponsor
 from .seed import seed
 
 logging.basicConfig(level=logging.INFO)
@@ -35,7 +35,7 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-for r in (auth.router, fan.router, clubs.router, club_admin.router, master.router, sponsor.router):
+for r in (auth.router, fan.router, clubs.router, club_admin.router, analytics.router, drops.router, master.router, sponsor.router):
     app.include_router(r)
 
 Path(settings.upload_dir).mkdir(parents=True, exist_ok=True)

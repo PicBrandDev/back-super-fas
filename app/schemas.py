@@ -72,6 +72,13 @@ class RegisterIn(Camel):
     password: str = Field(min_length=8, max_length=128)
     handle: str = Field(default="", max_length=60)
     city: str = Field(default="", max_length=80)
+    # Endereço (o front exige no cadastro; a API aceita vazio para contas antigas e scripts).
+    zip_code: str = Field(default="", max_length=9)
+    street: str = Field(default="", max_length=160)
+    number: str = Field(default="", max_length=20)
+    complement: str = Field(default="", max_length=80)
+    neighborhood: str = Field(default="", max_length=80)
+    state: str = Field(default="", max_length=2)  # UF
     artist: str | None = None  # slug do fã clube escolhido no cadastro
 
 
@@ -186,6 +193,7 @@ class ClubRef(Camel):
 class InviteOut(Camel):
     email: str
     temp_password: str | None  # None = a pessoa já tinha conta e só foi vinculada
+    email_sent: bool = False  # convite de dono enviado por e-mail
 
 
 class FanClubCreated(Camel):
@@ -239,9 +247,11 @@ class PostOut(Camel):
     quote: str | None = None
     url: str | None = None
     club: ClubRef | None = None  # fã clube do post (vazio = oficial)
+    image: dict | None = None  # {"src": "/uploads/abc.jpg", "alt": "..."} quando o post tem foto enviada
     likes: int
     comments: int
     reposts: int
+    views: int = 0
 
 
 def post_out(p: m.Post, artist: m.Artist) -> PostOut:
@@ -255,13 +265,15 @@ def post_out(p: m.Post, artist: m.Artist) -> PostOut:
         author=author,
         time_label=time_label(p.created_at),
         text=p.text,
-        has_image=p.has_image or None,
+        has_image=(p.has_image or bool(p.image_path)) or None,
+        image={"src": p.image_path, "alt": f"Foto do post de {artist.name}"} if p.image_path else None,
         quote=p.quote or None,
         url=p.url or None,
         club=ClubRef(slug=p.club.slug, name=p.club.name) if p.club else None,
         likes=p.likes,
         comments=p.comments,
         reposts=p.reposts,
+        views=p.views,
     )
 
 
@@ -512,6 +524,7 @@ class FanClubOut(Camel):
     is_master: bool
     status: str
     members: int
+    avatar: str | None = None  # foto de perfil do fã clube
     owner: PersonOut | None = None
     joined: bool = False  # quem está vendo entrou neste fã clube
     my_role: str | None = None  # "owner" | "helper" se quem está vendo é da equipe
@@ -529,6 +542,7 @@ def fan_club_out(c: m.FanClub, viewer: m.User | None = None) -> FanClubOut:
         is_master=c.is_master,
         status=c.status,
         members=len(c.members),
+        avatar=c.avatar_path or None,
         owner=PersonOut(name=owner.name, handle=owner.handle) if owner else None,
         joined=bool(viewer and any(mb.user_id == viewer.id for mb in c.members)),
         my_role=my_role,
