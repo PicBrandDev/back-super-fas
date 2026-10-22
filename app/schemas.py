@@ -96,11 +96,48 @@ class SessionUser(Camel):
     clubs: list[str]  # fã clubes da equipe, como "cantor/clube"
     sponsor_id: str | None = None
     must_change_password: bool = False
+    avatar: str | None = None  # foto de perfil
 
 
 class TokenOut(Camel):
     token: str
     user: SessionUser
+
+
+class ProfileOut(Camel):
+    id: str
+    name: str
+    email: str
+    handle: str
+    role: str
+    avatar: str | None = None
+    city: str
+    zip_code: str
+    street: str
+    number: str
+    complement: str
+    neighborhood: str
+    state: str
+    since: str  # conta criada em
+
+
+def profile_out(u: m.User) -> ProfileOut:
+    return ProfileOut(
+        id=u.id,
+        name=u.name,
+        email=u.email,
+        handle=u.handle,
+        role=u.role,
+        avatar=u.avatar_path or None,
+        city=u.city,
+        zip_code=u.zip_code,
+        street=u.street,
+        number=u.number,
+        complement=u.complement,
+        neighborhood=u.neighborhood,
+        state=u.state,
+        since=br_date(u.created_at.date()),
+    )
 
 
 def session_user(u: m.User) -> SessionUser:
@@ -113,6 +150,7 @@ def session_user(u: m.User) -> SessionUser:
         clubs=sorted(f"{st.club.artist.slug}/{st.club.slug}" for st in u.staff_of),
         sponsor_id=u.sponsor_id,
         must_change_password=u.must_change_password,
+        avatar=u.avatar_path or None,
     )
 
 
@@ -188,6 +226,7 @@ class FanClubCreate(Camel):
 class ClubRef(Camel):
     slug: str
     name: str
+    avatar: str | None = None  # foto de perfil do fã clube
 
 
 class InviteOut(Camel):
@@ -269,7 +308,7 @@ def post_out(p: m.Post, artist: m.Artist) -> PostOut:
         image={"src": p.image_path, "alt": f"Foto do post de {artist.name}"} if p.image_path else None,
         quote=p.quote or None,
         url=p.url or None,
-        club=ClubRef(slug=p.club.slug, name=p.club.name) if p.club else None,
+        club=ClubRef(slug=p.club.slug, name=p.club.name, avatar=p.club.avatar_path or None) if p.club else None,
         likes=p.likes,
         comments=p.comments,
         reposts=p.reposts,

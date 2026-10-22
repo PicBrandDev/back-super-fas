@@ -517,3 +517,68 @@ def test_photo_finder_com_rekognition_simulado(client, club_admin, fan, monkeypa
     first = up.json()[0]["id"]
     assert client.delete(f"{base}/manage/events/{ev['id']}/photos/{first}", headers=club_admin).status_code == 204
     assert len(client.get(f"{base}/manage/events/{ev['id']}/photos", headers=club_admin).json()) == 1
+
+
+def test_post_do_fa_com_texto_e_foto(client, fan):
+    base = "/artists/vintage-culture"
+    png = b"\x89PNG\r\n\x1a\n" + b"0" * 32
+    url = f"{base}/clubs/oficial/posts/media"
+    so_texto = client.post(url, headers=fan, data={"text": "Só texto"})
+    assert so_texto.status_code == 201 and so_texto.json()["image"] is None and so_texto.json()["club"]["slug"] == "oficial"
+    com_foto = client.post(url, headers=fan, data={"text": "Com foto"}, files={"image": ("a.png", png, "image/png")})
+    assert com_foto.status_code == 201 and com_foto.json()["image"]["src"].startswith("/uploads/")
+    assert client.post(url, headers=fan, data={"text": "x"}, files={"image": ("a.gif", b"G", "image/gif")}).status_code == 400
+    assert client.post(url, headers=fan, data={"text": ""}).status_code == 422
+    assert client.post(f"{base}/clubs/nao-existe/posts/media", headers=fan, data={"text": "x"}).status_code == 404
+
+
+def test_ranking_fa_super_com_instagram_simulado(client, club_admin, fan, monkeypatch):
+    from sqlalchemy import select
+
+    from app import instagram, models as m
+    from app.db import SessionLocal
+
+    base = "/artists/vintage-culture"
+    post = client.get(f"{base}/posts?kind=drop", headers=fan).json()[0]
+    # só post oficial pode ser compartilhado; post de fã não
+    galera = client.get(f"{base}/posts?kind=galera", headers=fan).json()[0]
+    assert client.post(f"{base}/posts/{galera['id']}/share", headers=fan).status_code == 400
+
+    sh = client.post(f"{base}/posts/{post['id']}/share", headers=fan)
+    assert sh.status_code == 201, sh.text
+    out = sh.json()
+    assert out["hashtag"] == "EuSouUmSuperFaDoVintage" and out["code"].startswith("FS-") and f"#{out['hashtag']} {out['code']}" in out["caption"]
+    track = client.get(f"{base}/tracks", headers=fan).json()[0]
+    ts = client.post(f"{base}/tracks/{track['id']}/share", headers=fan)
+    assert ts.status_code == 201 and ts.json()["caption"].startswith(track["title"]) and ts.json()["hashtag"] == out["hashtag"]
+    assert client.post(f"{base}/tracks/nao-existe/share", headers=fan).status_code == 404
+    me = client.get(f"{base}/ranking", headers=fan).json()
+    assert me["me"]["pending"] >= 1 and me["me"]["position"] is None and me["myCode"] == out["code"]
+
+    media = [
+        {"id": "ig-1", "caption": f"Amei! #eusouumsuperfadovintage {out['code']}", "permalink": "https://instagram.com/p/abc"},
+        {"id": "ig-2", "caption": f"sem a hashtag {out['code']}"},  # sem hashtag: não conta
+        {"id": "ig-3", "caption": "#EuSouUmSuperFaDoVintage FS-ZZZZZ"},  # código desconhecido
+    ]
+    with SessionLocal() as db:
+        artist = db.scalar(select(m.Artist).where(m.Artist.slug == "vintage-culture"))
+        r = instagram.sync(db, artist, media)
+        assert r.found == 3 and r.verified == 1
+        assert instagram.sync(db, artist, media).verified == 0  # o mesmo post não pontua duas vezes
+
+    rank = client.get(f"{base}/ranking", headers=fan).json()
+    assert rank["me"]["position"] == 1 and rank["me"]["shares"] == 1 and rank["top"][0]["me"] is True
+    oficial = next(c for c in rank["clubs"] if c["slug"] == "oficial")
+    assert oficial["me"]["position"] == 1 and oficial["top"][0]["me"] is True  # ranking do fã clube
+
+    off = client.post(f"{base}/manage/instagram/sync", headers=club_admin).json()
+    assert off["enabled"] is False  # sem credenciais da Meta
+    assert client.post(f"{base}/manage/instagram/sync", headers=fan).status_code == 403
+
+
+def test_perfil_do_fa(client, fan):
+    p = client.get("/auth/profile", headers=fan)
+    assert p.status_code == 200
+    body = p.json()
+    assert body["email"] == "fa@superfas.dev" and "zipCode" in body and "since" in body
+    assert client.get("/auth/profile").status_code == 401

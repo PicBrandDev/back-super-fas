@@ -36,6 +36,17 @@ class Settings(BaseSettings):
     aws_region: str = "us-east-1"
     rekognition_threshold: float = 90.0  # semelhança mínima (0-100) para contar como a mesma pessoa
 
+    # Ranking "Fã Super": confere no Instagram os posts com a hashtag (API Graph da Meta). Desligado por padrão.
+    # Exige uma conta profissional do Instagram ligada a uma Página, um app da Meta com o recurso
+    # "Instagram Public Content Access" aprovado e um token de acesso de longa duração.
+    instagram_enabled: bool = False
+    instagram_user_id: str = ""  # id da conta profissional do Instagram
+    instagram_access_token: str = ""
+    instagram_hashtag: str = "EuSouUmSuperFaDoVintage"
+    instagram_artist: str = "vintage-culture"  # ambiente que o ranking pontua
+    instagram_sync_minutes: int = 30  # de quanto em quanto tempo a API confere (o Instagram só devolve as últimas 24h)
+    graph_api_version: str = "v21.0"
+
     # Endereço público do front, usado nos links dos e-mails.
     app_url: str = "http://localhost:3000"
 

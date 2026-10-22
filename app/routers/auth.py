@@ -1,9 +1,12 @@
-from fastapi import APIRouter, HTTPException, status
+from typing import Annotated
+
+from fastapi import APIRouter, File, HTTPException, UploadFile, status
 from sqlalchemy import select
 
 from .. import models as m
-from ..schemas import ChangePasswordIn, LoginIn, RegisterIn, SessionUser, TokenOut, session_user
+from ..schemas import ChangePasswordIn, LoginIn, ProfileOut, RegisterIn, SessionUser, TokenOut, profile_out, session_user
 from ..security import DB, CurrentUser, create_token, hash_password, master_club, verify_password
+from ..uploads import save_image
 
 router = APIRouter(prefix="/auth", tags=["Login"])
 
@@ -62,6 +65,21 @@ def register(body: RegisterIn, db: DB):
 
 @router.get("/me", response_model=SessionUser)
 def me(user: CurrentUser):
+    return session_user(user)
+
+
+@router.get("/profile", response_model=ProfileOut)
+def profile(user: CurrentUser):
+    """Tudo do perfil de quem está logado: dados, endereço e foto."""
+    return profile_out(user)
+
+
+@router.post("/avatar", response_model=SessionUser)
+async def set_avatar(user: CurrentUser, db: DB, image: Annotated[UploadFile, File()]):
+    """Troca a foto de perfil de quem está logado (JPG, PNG ou WebP, até 5 MB)."""
+    user.avatar_path = await save_image(image)
+    db.commit()
+    db.refresh(user)
     return session_user(user)
 
 

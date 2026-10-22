@@ -1,3 +1,4 @@
+import asyncio
 import logging
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -5,13 +6,36 @@ from pathlib import Path
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 
+from . import instagram
 from .config import DEV_SECRET, get_settings
 from .db import SessionLocal, engine
 from .migrations import upgrade
-from .routers import analytics, auth, club_admin, clubs, drops, fan, master, photos, sponsor
+from .routers import analytics, auth, club_admin, clubs, drops, fan, master, photos, ranking, sponsor
 from .seed import seed
 
 logging.basicConfig(level=logging.INFO)
+
+
+def _sync_instagram() -> None:
+    from sqlalchemy import select
+
+    from . import models as m
+
+    with SessionLocal() as db:
+        artist = db.scalar(select(m.Artist).where(m.Artist.slug == get_settings().instagram_artist))
+        if artist:
+            r = instagram.sync(db, artist)
+            logging.getLogger("superfas.instagram").info("Instagram: %d posts lidos, %d novos compartilhamentos", r.found, r.verified)
+
+
+async def _instagram_loop() -> None:
+    """Confere a hashtag de tempos em tempos (a API só devolve as últimas 24 horas, então não pode ficar muito espaçado)."""
+    while True:
+        try:
+            await asyncio.to_thread(_sync_instagram)
+        except Exception:  # noqa: BLE001
+            logging.getLogger("superfas.instagram").exception("Falha na conferência do Instagram")
+        await asyncio.sleep(max(5, get_settings().instagram_sync_minutes) * 60)
 
 
 @asynccontextmanager
@@ -23,7 +47,10 @@ async def lifespan(_: FastAPI):
     upgrade(engine)
     with SessionLocal() as db:
         seed(db)
+    task = asyncio.create_task(_instagram_loop()) if instagram.enabled() else None
     yield
+    if task:
+        task.cancel()
 
 
 settings = get_settings()
@@ -35,7 +62,7 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-for r in (auth.router, fan.router, clubs.router, club_admin.router, analytics.router, drops.router, photos.router, master.router, sponsor.router):
+for r in (auth.router, fan.router, clubs.router, club_admin.router, analytics.router, drops.router, photos.router, ranking.router, master.router, sponsor.router):
     app.include_router(r)
 
 Path(settings.upload_dir).mkdir(parents=True, exist_ok=True)

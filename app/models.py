@@ -34,6 +34,7 @@ class User(Base):
     password_hash: Mapped[str] = mapped_column(String(255))
     name: Mapped[str] = mapped_column(String(120))
     handle: Mapped[str] = mapped_column(String(60), default="")
+    avatar_path: Mapped[str] = mapped_column(String(255), default="")  # foto de perfil (ex.: /uploads/abc.jpg)
     city: Mapped[str] = mapped_column(String(80), default="")
     # Endereço do fã (cadastro): de onde são os assinantes.
     zip_code: Mapped[str] = mapped_column(String(9), default="")
@@ -168,6 +169,7 @@ class Fandom(Base):
     user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
     luck_points: Mapped[int] = mapped_column(Integer, default=0)
     spins: Mapped[int] = mapped_column(Integer, default=3)
+    share_code: Mapped[str] = mapped_column(String(12), default="", index=True)  # código do fã nas legendas (ex.: FS-7K2QM)
     member_status: Mapped[str | None] = mapped_column(String(20), nullable=True)  # active | pending | canceled
     member_since: Mapped[date | None] = mapped_column(Date, nullable=True)
     payment: Mapped[str] = mapped_column(String(20), default="Pix")
@@ -175,6 +177,23 @@ class Fandom(Base):
 
     artist: Mapped[Artist] = relationship(back_populates="fandoms")
     user: Mapped[User] = relationship(back_populates="fandoms")
+
+
+class InstagramShare(Base):
+    """Compartilhamento de um post no Instagram do fã (Fã Super). Só `verified` pontua no ranking."""
+
+    __tablename__ = "instagram_shares"
+
+    id: Mapped[str] = mapped_column(String(20), primary_key=True, default=new_id)
+    artist_id: Mapped[str] = mapped_column(ForeignKey("artists.id", ondelete="CASCADE"), index=True)
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    post_id: Mapped[str | None] = mapped_column(ForeignKey("posts.id", ondelete="SET NULL"), nullable=True)
+    track_id: Mapped[str | None] = mapped_column(ForeignKey("tracks.id", ondelete="SET NULL"), nullable=True)  # compartilhou um Drop (faixa)
+    status: Mapped[str] = mapped_column(String(10), default="started")  # started | verified
+    media_id: Mapped[str | None] = mapped_column(String(40), unique=True, nullable=True)  # id do post no Instagram
+    permalink: Mapped[str] = mapped_column(String(300), default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+    verified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
 class EventPhoto(Base):

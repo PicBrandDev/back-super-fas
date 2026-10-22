@@ -10,7 +10,7 @@ import re
 import unicodedata
 from typing import Annotated, Any, Optional
 
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
 from pydantic import create_model
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -314,6 +314,33 @@ def create_club_post(body: ClubPostIn, club: FanClubDep, user: CurrentUser, db: 
         raise forbidden("Entre no fã clube para postar no mural dele.")
     post = m.Post(
         artist_id=club.artist_id, club_id=club.id, kind=body.kind, author_id=user.id, text=body.text.strip(), url=body.url.strip()
+    )
+    db.add(post)
+    db.commit()
+    db.refresh(post)
+    return post_out(post, club.artist)
+
+
+@router.post("/artists/{slug}/clubs/{club}/posts/media", response_model=PostOut, status_code=201)
+async def create_club_post_media(
+    club: FanClubDep,
+    user: CurrentUser,
+    db: DB,
+    text: Annotated[str, Form(min_length=1, max_length=2000)],
+    image: Annotated[UploadFile | None, File()] = None,
+):
+    """Post do fã só com texto ou texto com foto (multipart/form-data; JPG, PNG ou WebP, até 5 MB)."""
+    if not is_member(db, club, user) and not can_manage_club(db, user, club):
+        raise forbidden("Entre no fã clube para postar no mural dele.")
+    image_path = await save_image(image)
+    post = m.Post(
+        artist_id=club.artist_id,
+        club_id=club.id,
+        kind="galera",
+        author_id=user.id,
+        text=text.strip(),
+        has_image=bool(image_path),
+        image_path=image_path,
     )
     db.add(post)
     db.commit()
