@@ -308,6 +308,15 @@ def club_posts(club: FanClubDep, db: DB, kind: str | None = None):
     return [post_out(p, club.artist) for p in db.scalars(q.order_by(m.Post.created_at.desc()).limit(100))]
 
 
+def _reward_post(db: Session, club: m.FanClub, user: m.User) -> bool:
+    """Postar rende 1 giro da roleta (até 3 por dia)."""
+    from .fan import get_fandom  # evita import circular
+
+    f = get_fandom(db, club.artist, user)
+    assert f is not None
+    return spins.grant_for_post(db, f, club.name)
+
+
 @router.post("/artists/{slug}/clubs/{club}/posts", response_model=PostOut, status_code=201)
 def create_club_post(body: ClubPostIn, club: FanClubDep, user: CurrentUser, db: DB):
     if not is_member(db, club, user) and not can_manage_club(db, user, club):
@@ -316,9 +325,12 @@ def create_club_post(body: ClubPostIn, club: FanClubDep, user: CurrentUser, db: 
         artist_id=club.artist_id, club_id=club.id, kind=body.kind, author_id=user.id, text=body.text.strip(), url=body.url.strip()
     )
     db.add(post)
+    rewarded = _reward_post(db, club, user)
     db.commit()
     db.refresh(post)
-    return post_out(post, club.artist)
+    out = post_out(post, club.artist)
+    out.reward_spin = rewarded
+    return out
 
 
 @router.post("/artists/{slug}/clubs/{club}/posts/media", response_model=PostOut, status_code=201)
@@ -343,9 +355,12 @@ async def create_club_post_media(
         image_path=image_path,
     )
     db.add(post)
+    rewarded = _reward_post(db, club, user)
     db.commit()
     db.refresh(post)
-    return post_out(post, club.artist)
+    out = post_out(post, club.artist)
+    out.reward_spin = rewarded
+    return out
 
 
 # ---------------------------------------------------------------- PicKap do fã clube

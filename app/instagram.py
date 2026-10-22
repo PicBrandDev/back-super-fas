@@ -104,11 +104,11 @@ def sync(db: Session, artist: m.Artist, media: list[dict] | None = None) -> Sync
         media_id = item.get("id")
         if not fandom or not media_id or db.scalar(select(m.InstagramShare).where(m.InstagramShare.media_id == media_id)):
             continue
-        # Usa o compartilhamento "iniciado" mais antigo do fã, se houver; senão cria um verificado.
+        # Usa o compartilhamento "já postei" (ou iniciado) mais antigo do fã, se houver; senão cria um verificado.
         share = db.scalar(
             select(m.InstagramShare)
-            .where(m.InstagramShare.artist_id == artist.id, m.InstagramShare.user_id == fandom.user_id, m.InstagramShare.status == "started")
-            .order_by(m.InstagramShare.created_at)
+            .where(m.InstagramShare.artist_id == artist.id, m.InstagramShare.user_id == fandom.user_id, m.InstagramShare.status.in_(("claimed", "started")))
+            .order_by(m.InstagramShare.status, m.InstagramShare.created_at)
         ) or m.InstagramShare(artist_id=artist.id, user_id=fandom.user_id)
         share.status = "verified"
         share.media_id = media_id

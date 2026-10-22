@@ -11,10 +11,13 @@ from .. import models as m
 from ..schemas import (
     AdSlotOut,
     ArtistOut,
+    CheckoutIn,
+    CheckoutOut,
     EventOut,
     FanPostIn,
     GiftOut,
     HomeAdOut,
+    MyTicketOut,
     PackageItemOut,
     PackageOut,
     PerkOut,
@@ -25,7 +28,6 @@ from ..schemas import (
     SpinCreditOut,
     SpinOut,
     SubscribeIn,
-    MyTicketOut,
     TicketOut,
     TrackOut,
     VendorOut,
@@ -148,6 +150,7 @@ def list_posts(artist: FanArtist, db: DB, kind: str | None = None):
 @router.post("/artists/{slug}/posts", response_model=PostOut, status_code=201)
 def create_fan_post(body: FanPostIn, artist: FanArtist, user: CurrentUser, db: DB):
     """Post do fã no mural de um fã clube (sem `club`, vai para o fã clube master)."""
+    from .. import spins as spin_lib
     from .clubs import can_manage_club, get_club_or_404, is_member
 
     club = get_club_or_404(db, artist, body.club) if body.club else master_club(db, artist)
@@ -159,9 +162,14 @@ def create_fan_post(body: FanPostIn, artist: FanArtist, user: CurrentUser, db: D
         artist_id=artist.id, club_id=club.id, kind=body.kind, author_id=user.id, text=body.text.strip(), url=body.url.strip()
     )
     db.add(post)
+    f = get_fandom(db, artist, user)
+    assert f is not None
+    rewarded = spin_lib.grant_for_post(db, f, club.name)
     db.commit()
     db.refresh(post)
-    return post_out(post, artist)
+    out = post_out(post, artist)
+    out.reward_spin = rewarded
+    return out
 
 
 # ---------------------------------------------------------------- agenda
@@ -272,6 +280,27 @@ def list_spins(artist: FanArtist, user: CurrentUser, db: DB):
     out = spin_lib.out(db, f)
     db.commit()
     return out
+
+
+@router.post("/artists/{slug}/store/checkout", response_model=CheckoutOut, status_code=201)
+def store_checkout(body: CheckoutIn, artist: FanArtist, user: CurrentUser, db: DB):
+    """Compra da sacola da loja (simulada): registra os produtos e dá 1 giro da roleta por camiseta."""
+    from .. import spins as spin_lib
+
+    products = [db.get(m.Product, pid) for pid in dict.fromkeys(body.product_ids)]
+    if any(p is None or p.artist_id != artist.id for p in products):
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Produto não encontrado.")
+    f = get_fandom(db, artist, user)
+    assert f is not None
+    granted = 0
+    for p in products:
+        assert p is not None
+        db.add(m.ProductPurchase(artist_id=artist.id, user_id=user.id, product_id=p.id, name=p.name, category=p.category, price_cents=p.price_cents or 0))
+        if p.category == "roupas":
+            spin_lib.grant(db, f, f"Compra de camiseta · {p.name}")
+            granted += 1
+    db.commit()
+    return CheckoutOut(items=len(products), spins_granted=granted)
 
 
 @router.post("/artists/{slug}/events/{event_id}/purchases", response_model=MyTicketOut, status_code=201)

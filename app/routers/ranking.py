@@ -30,6 +30,11 @@ class RankRow(Camel):
     me: bool = False
 
 
+class ClaimOut(Camel):
+    spin_granted: bool  # False quando o teto de giros do dia já foi atingido (ou o compartilhamento já tinha sido contado)
+    already: bool = False
+
+
 class MyRank(Camel):
     position: int | None  # None = ainda sem compartilhamento confirmado
     shares: int  # confirmados
@@ -108,6 +113,31 @@ def start_track_share(track_id: str, artist: FanArtist, user: CurrentUser, db: D
     return ShareOut(share_id=share.id, hashtag=get_settings().instagram_hashtag, code=code, caption=instagram.caption_for(text, code))
 
 
+@router.post("/artists/{slug}/shares/{share_id}/claim", response_model=ClaimOut)
+def claim_share(share_id: str, artist: FanArtist, user: CurrentUser, db: DB):
+    """O fã diz "já postei": rende 1 giro da roleta na hora (o app ainda é de exemplo) e o compartilhamento fica
+    aguardando a conferência no Instagram, que é o que pontua no ranking."""
+    from .. import spins as spin_lib
+
+    share = db.get(m.InstagramShare, share_id)
+    if not share or share.user_id != user.id or share.artist_id != artist.id:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Compartilhamento não encontrado.")
+    if share.status != "started":
+        return ClaimOut(spin_granted=False, already=True)
+    share.status = "claimed"
+    f = get_fandom(db, artist, user)
+    assert f is not None
+    if share.post_id:
+        post = db.get(m.Post, share.post_id)
+        what = (post.text if post else "post")[:60]
+    else:
+        track = db.get(m.Track, share.track_id) if share.track_id else None
+        what = track.title if track else "drop"
+    granted = spin_lib.grant_for_share(db, f, what)
+    db.commit()
+    return ClaimOut(spin_granted=granted)
+
+
 @router.get("/artists/{slug}/ranking", response_model=RankingOut)
 def ranking(artist: FanArtist, user: CurrentUser, db: DB):
     f = get_fandom(db, artist, user)
@@ -129,7 +159,7 @@ def ranking(artist: FanArtist, user: CurrentUser, db: DB):
     mine = next(((i + 1, n) for i, (uid, n, _) in enumerate(board) if uid == user.id), None)
     pending = db.scalar(
         select(func.count(m.InstagramShare.id)).where(
-            m.InstagramShare.artist_id == artist.id, m.InstagramShare.user_id == user.id, m.InstagramShare.status == "started"
+            m.InstagramShare.artist_id == artist.id, m.InstagramShare.user_id == user.id, m.InstagramShare.status.in_(("started", "claimed"))
         )
     )
     my_me = MyRank(position=mine[0] if mine else None, shares=mine[1] if mine else 0, pending=pending or 0)

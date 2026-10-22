@@ -548,6 +548,14 @@ def test_ranking_fa_super_com_instagram_simulado(client, club_admin, fan, monkey
     assert sh.status_code == 201, sh.text
     out = sh.json()
     assert out["hashtag"] == "EuSouUmSuperFaDoVintage" and out["code"].startswith("FS-") and f"#{out['hashtag']} {out['code']}" in out["caption"]
+    # "já postei": rende 1 giro na hora e o compartilhamento fica aguardando a conferência
+    antes = sum(1 for g in client.get(f"{base}/pickap/spins", headers=fan).json() if not g["used"])
+    cl = client.post(f"{base}/shares/{out['shareId']}/claim", headers=fan)
+    assert cl.status_code == 200 and cl.json()["spinGranted"] is True
+    depois = client.get(f"{base}/pickap/spins", headers=fan).json()
+    assert sum(1 for g in depois if not g["used"]) == antes + 1 and any(g["reason"].startswith("Compartilhou no Instagram") for g in depois)
+    assert client.post(f"{base}/shares/{out['shareId']}/claim", headers=fan).json()["already"] is True  # só conta uma vez
+    assert client.post(f"{base}/shares/nao-existe/claim", headers=fan).status_code == 404
     track = client.get(f"{base}/tracks", headers=fan).json()[0]
     ts = client.post(f"{base}/tracks/{track['id']}/share", headers=fan)
     assert ts.status_code == 201 and ts.json()["caption"].startswith(track["title"]) and ts.json()["hashtag"] == out["hashtag"]
@@ -582,3 +590,32 @@ def test_perfil_do_fa(client, fan):
     body = p.json()
     assert body["email"] == "fa@superfas.dev" and "zipCode" in body and "since" in body
     assert client.get("/auth/profile").status_code == 401
+
+
+def test_giros_por_post_e_por_camiseta(client, club_admin, fan):
+    base = "/artists/vintage-culture"
+
+    def livres():
+        return sum(1 for g in client.get(f"{base}/pickap/spins", headers=fan).json() if not g["used"])
+
+    antes = livres()
+    # posts rendem 1 giro cada, até 3 por dia
+    rendeu = []
+    for i in range(5):
+        r = client.post(f"{base}/clubs/oficial/posts/media", headers=fan, data={"text": f"Post {i}"})
+        assert r.status_code == 201
+        rendeu.append(r.json()["rewardSpin"])
+    # o fã já pode ter postado antes (em outros testes): o teto é 3 giros por dia, então sobram pelo menos 2 sem giro
+    assert sum(rendeu) <= 3 and rendeu.count(False) >= 2
+    assert livres() == antes + sum(rendeu)
+    motivos = [g["reason"] for g in client.get(f"{base}/pickap/spins", headers=fan).json()]
+    assert any(x.startswith("Post publicado em") for x in motivos) or sum(rendeu) == 0
+
+    # camiseta (roupas) rende giro; acessório não
+    camiseta = client.post(f"{base}/manage/products", headers=club_admin, json={"name": "Camiseta Teste", "category": "roupas", "priceCents": 12000}).json()
+    outro = client.post(f"{base}/manage/products", headers=club_admin, json={"name": "Boné Teste", "category": "acessorios", "priceCents": 8000}).json()
+    base_livres = livres()
+    ck = client.post(f"{base}/store/checkout", headers=fan, json={"productIds": [camiseta["id"], outro["id"]]})
+    assert ck.status_code == 201, ck.text
+    assert ck.json()["spinsGranted"] == 1 and livres() == base_livres + 1
+    assert client.post(f"{base}/store/checkout", headers=fan, json={"productIds": ["nao-existe"]}).status_code == 404

@@ -291,6 +291,7 @@ class PostOut(Camel):
     comments: int
     reposts: int
     views: int = 0
+    reward_spin: bool = False  # esta publicação rendeu 1 giro da roleta (só na resposta da criação)
 
 
 def post_out(p: m.Post, artist: m.Artist) -> PostOut:
@@ -473,6 +474,15 @@ class SpinCreditOut(Camel):
 
 class SpinIn(Camel):
     credit_id: str | None = None  # qual giro gastar (vazio = o mais antigo disponível)
+
+
+class CheckoutIn(Camel):
+    product_ids: list[str] = Field(min_length=1, max_length=20)
+
+
+class CheckoutOut(Camel):
+    items: int  # produtos comprados
+    spins_granted: int  # giros ganhos (1 por camiseta)
 
 
 class PurchaseIn(Camel):

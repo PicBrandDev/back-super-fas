@@ -30,11 +30,11 @@ ARTIST_SLUG = "vintage-culture"
 
 # nome, cidade, UF, dono, cor do avatar (RGB), descrição
 CLUBS = [
-    ("Vintage Curitiba", "Curitiba", "PR", ("Marcos Vieira", "dono.curitiba@exemplo.com"), (231, 120, 23), "A galera de Curitiba: pré-baladas e caravana para os shows do sul."),
-    ("Vintage BH", "Belo Horizonte", "MG", ("Luana Prado", "dono.bh@exemplo.com"), (186, 70, 26), "Mineiros do house: encontros, trocas de camiseta e muito pão de queijo."),
-    ("Vintage Brasília", "Brasília", "DF", ("Thiago Nunes", "dono.brasilia@exemplo.com"), (67, 145, 184), "Fã clube do Planalto Central, com sorteios a cada show."),
-    ("Vintage Salvador", "Salvador", "BA", ("Aline Souza", "dono.salvador@exemplo.com"), (252, 202, 11), "Baianos no mesmo ritmo: festas, fotos dos shows e caravanas."),
-    ("Vintage Porto Alegre", "Porto Alegre", "RS", ("Gustavo Pereira", "dono.poa@exemplo.com"), (41, 73, 93), "Gaúchos fãs do Vintage Culture: churrasco, house e muita resenha."),
+    ("Vintage Curitiba", "Curitiba", "PR", ("Marcos Vieira", "dono.curitiba@vintage.com.br"), (231, 120, 23), "A galera de Curitiba: pré-baladas e caravana para os shows do sul."),
+    ("Vintage BH", "Belo Horizonte", "MG", ("Luana Prado", "dono.bh@vintage.com.br"), (186, 70, 26), "Mineiros do house: encontros, trocas de camiseta e muito pão de queijo."),
+    ("Vintage Brasília", "Brasília", "DF", ("Thiago Nunes", "dono.brasilia@vintage.com.br"), (67, 145, 184), "Fã clube do Planalto Central, com sorteios a cada show."),
+    ("Vintage Salvador", "Salvador", "BA", ("Aline Souza", "dono.salvador@vintage.com.br"), (252, 202, 11), "Baianos no mesmo ritmo: festas, fotos dos shows e caravanas."),
+    ("Vintage Porto Alegre", "Porto Alegre", "RS", ("Gustavo Pereira", "dono.poa@vintage.com.br"), (41, 73, 93), "Gaúchos fãs do Vintage Culture: churrasco, house e muita resenha."),
 ]
 
 FIRST = ["Ana", "Bruno", "Carla", "Diego", "Elisa", "Felipe", "Gabi", "Henrique", "Isabela", "João", "Kátia", "Lucas", "Marina", "Nicolas", "Olívia", "Paulo", "Queila", "Rafael", "Sofia", "Tiago", "Ursula", "Vitor", "Wesley", "Yasmin", "Zeca"]

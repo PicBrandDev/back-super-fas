@@ -189,7 +189,7 @@ class InstagramShare(Base):
     user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
     post_id: Mapped[str | None] = mapped_column(ForeignKey("posts.id", ondelete="SET NULL"), nullable=True)
     track_id: Mapped[str | None] = mapped_column(ForeignKey("tracks.id", ondelete="SET NULL"), nullable=True)  # compartilhou um Drop (faixa)
-    status: Mapped[str] = mapped_column(String(10), default="started")  # started | verified
+    status: Mapped[str] = mapped_column(String(10), default="started")  # started | claimed (o fã disse que postou) | verified
     media_id: Mapped[str | None] = mapped_column(String(40), unique=True, nullable=True)  # id do post no Instagram
     permalink: Mapped[str] = mapped_column(String(300), default="")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
@@ -426,6 +426,21 @@ class Product(Base):
     price_cents: Mapped[int | None] = mapped_column(Integer, nullable=True)
     color: Mapped[str] = mapped_column(String(20), default="#E0A526")
     position: Mapped[int] = mapped_column(Integer, default=0)
+
+
+class ProductPurchase(Base):
+    """Produto da loja que o fã comprou (hoje simulado: o pagamento acontece fora do app)."""
+
+    __tablename__ = "product_purchases"
+
+    id: Mapped[str] = mapped_column(String(20), primary_key=True, default=new_id)
+    artist_id: Mapped[str] = mapped_column(ForeignKey("artists.id", ondelete="CASCADE"), index=True)
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    product_id: Mapped[str | None] = mapped_column(ForeignKey("products.id", ondelete="SET NULL"), nullable=True)
+    name: Mapped[str] = mapped_column(String(120))
+    category: Mapped[str] = mapped_column(String(20), default="roupas")
+    price_cents: Mapped[int] = mapped_column(Integer, default=0)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
 
 
 class Track(Base):
