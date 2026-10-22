@@ -1,5 +1,5 @@
-"""Cria (ou atualiza) as contas de acesso do ambiente Vintage Culture: o admin do ambiente, os donos dos
-fã clubes e uma conta de fã. Pode rodar quantas vezes quiser: só ajusta o que falta.
+"""Cria (ou atualiza) as contas de acesso: o admin master da plataforma, o patrocinador, e, no ambiente Vintage
+Culture, o admin do ambiente, os donos dos fã clubes e uma conta de fã. Pode rodar quantas vezes quiser: só ajusta o que falta.
 
 No servidor (a pasta `scripts` não vai dentro do container, então o arquivo entra pela entrada padrão):
 
@@ -29,6 +29,8 @@ ARTIST = "vintage-culture"
 
 ADMIN = ("admin@vintage.com.br", "Admin Vintage Culture")  # dono do fã clube master = admin do ambiente
 FAN = ("juliacristinalopes2607@gmail.com", "Julia Cristina Lopes")
+MASTER = ("admin@fapage.com.br", "Admin Master")  # admin da plataforma (entra pela raiz do site)
+SPONSOR = ("patrocinador@fapage.com.br", "Patrocinador")  # compra anúncios (entra em /patrocinador/login)
 
 # fã clube, cidade, descrição, e-mail do dono, nome do dono
 OWNERS = [
@@ -103,6 +105,21 @@ def main() -> None:
         if not db.scalar(select(m.ClubMember).where(m.ClubMember.club_id == master.id, m.ClubMember.user_id == fan.id)):
             db.add(m.ClubMember(club_id=master.id, user_id=fan.id))
         print(f"fã: {fan.email}")
+
+        # Admin master da plataforma.
+        master_user = user(db, MASTER[0], MASTER[1], m.ROLE_MASTER)
+        print(f"admin master: {master_user.email}")
+
+        # Patrocinador: conta + a marca (Sponsor) a que ela pertence.
+        sponsor = db.scalar(select(m.Sponsor).where(m.Sponsor.email == SPONSOR[0]))
+        if not sponsor:
+            sponsor = m.Sponsor(email=SPONSOR[0], brand=SPONSOR[1], status="active")
+            db.add(sponsor)
+            db.flush()
+        sponsor.status = "active"
+        sp = user(db, SPONSOR[0], SPONSOR[1], m.ROLE_SPONSOR)
+        sp.sponsor = sponsor
+        print(f"patrocinador: {sp.email}")
 
         db.commit()
     print("Pronto. Senha das contas:", "a definida em CONTAS_SENHA" if os.environ.get("CONTAS_SENHA") else "senha123")
