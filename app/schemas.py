@@ -274,6 +274,7 @@ class AuthorOut(Camel):
     handle: str
     initial: str
     official: bool | None = None
+    badge: str | None = None  # selo do autor neste fã clube (ex.: "Dono do fã clube")
 
 
 class PostOut(Camel):
@@ -298,7 +299,14 @@ def post_out(p: m.Post, artist: m.Artist) -> PostOut:
     if p.official or not p.author:
         author = AuthorOut(name=artist.name, handle="Artista", initial=initial_of(artist.name), official=True)
     else:
-        author = AuthorOut(name=p.author.name, handle=p.author.handle or "", initial=initial_of(p.author.name))
+        # Quem é dono do fã clube do post leva o selo de dono em tudo que posta nele.
+        owner = bool(p.club and any(st.user_id == p.author_id and st.role == m.STAFF_OWNER for st in p.club.staff))
+        author = AuthorOut(
+            name=p.author.name,
+            handle=p.author.handle or "",
+            initial=initial_of(p.author.name),
+            badge="Dono do fã clube" if owner else None,
+        )
     return PostOut(
         id=p.id,
         kind=p.kind,

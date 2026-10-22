@@ -155,6 +155,33 @@ def add_text_posts(db, artist, rnd: random.Random, now: datetime) -> None:
     print(f"+ {added} posts só de texto")
 
 
+OWNER_POSTS = [
+    "Bem-vindos ao fã clube! Aqui a gente combina caravana, encontro e compartilha os melhores momentos.",
+    "Dono do fã clube falando: semana que vem abrimos a lista da caravana. Fiquem de olho por aqui.",
+    "Obrigado a todo mundo que postou essa semana. Vocês fazem esse fã clube ser o melhor.",
+]
+
+
+def add_owner_posts(db, artist, now: datetime) -> None:
+    """Posts dos donos de cada fã clube (levam o selo de dono). Pula quem já postou."""
+    added = 0
+    for club in db.scalars(select(m.FanClub).where(m.FanClub.artist_id == artist.id, m.FanClub.is_master.is_(False))):
+        owner = next((st.user for st in club.staff if st.role == m.STAFF_OWNER), None)
+        if not owner or db.scalar(select(m.Post).where(m.Post.club_id == club.id, m.Post.author_id == owner.id)):
+            continue
+        for i, text in enumerate(OWNER_POSTS[:2]):
+            likes = 30 + i * 12
+            db.add(
+                m.Post(
+                    artist_id=artist.id, club_id=club.id, kind="galera", author_id=owner.id, text=text, likes=likes,
+                    comments=3 + i, reposts=4, views=likes * 12, created_at=now - timedelta(days=1 + i * 4, hours=3),
+                )
+            )
+            added += 1
+    db.flush()
+    print(f"+ {added} posts dos donos dos fã clubes")
+
+
 def enrich_posts(db, artist, upload_dir: Path, rnd: random.Random, now: datetime) -> None:
     """Dá comentários e fotos aos posts de exemplo que ainda não têm (pode rodar várias vezes)."""
     commenters = [u for u in db.scalars(select(m.User).where(m.User.role == m.ROLE_FAN))]
@@ -251,6 +278,7 @@ def main() -> None:
             db.flush()
             print(f"+ {name}: dono {owner_email}, {len(members)} membros")
         add_text_posts(db, artist, rnd, now)
+        add_owner_posts(db, artist, now)
         enrich_posts(db, artist, upload_dir, rnd, now)
         db.commit()
 

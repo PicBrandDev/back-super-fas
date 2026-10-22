@@ -169,7 +169,8 @@ def ranking(artist: FanArtist, user: CurrentUser, db: DB):
     for c in sorted(artist.clubs, key=lambda c: (not c.is_master, c.position, c.created_at)):
         if c.status != "active":
             continue
-        member_ids = {mb.user_id for mb in c.members}
+        # Dono e equipe do fã clube também contam como parte dele (aparecem e pontuam no ranking do fã clube).
+        member_ids = {mb.user_id for mb in c.members} | {st.user_id for st in c.staff}
         rows = [r for r in board if r[0] in member_ids]
         names = {u.id: u for u in db.scalars(select(m.User).where(m.User.id.in_([r[0] for r in rows[:10]])))} if rows else {}
         mine_c = next(((i + 1, n) for i, (uid, n, _) in enumerate(rows) if uid == user.id), None)

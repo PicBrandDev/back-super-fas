@@ -619,3 +619,20 @@ def test_giros_por_post_e_por_camiseta(client, club_admin, fan):
     assert ck.status_code == 201, ck.text
     assert ck.json()["spinsGranted"] == 1 and livres() == base_livres + 1
     assert client.post(f"{base}/store/checkout", headers=fan, json={"productIds": ["nao-existe"]}).status_code == 404
+
+
+def test_selo_de_dono_do_fa_clube_nos_posts(client, club_admin, fan):
+    base = "/artists/vintage-culture"
+    club_posts = f"{base}/clubs/oficial/posts"
+    dono = client.post(club_posts, headers=club_admin, json={"text": "Aviso do dono"}).json()
+    assert dono["author"]["badge"] == "Dono do fã clube"
+    comum = client.post(f"{club_posts}/media", headers=fan, data={"text": "Post de fã"}).json()
+    assert comum["author"]["badge"] is None
+    feed = client.get(f"{base}/posts", headers=fan).json()
+    assert next(p for p in feed if p["id"] == dono["id"])["author"]["badge"] == "Dono do fã clube"
+
+
+def test_dono_do_fa_clube_aparece_no_proprio_ranking(client, club_admin):
+    rk = client.get("/artists/vintage-culture/ranking", headers=club_admin).json()
+    oficial = next(c for c in rk["clubs"] if c["slug"] == "oficial")
+    assert oficial["me"] is not None  # o dono é parte do fã clube, mesmo sem entrar como membro
