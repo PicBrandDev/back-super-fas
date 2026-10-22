@@ -118,18 +118,62 @@ def photo_png(seed: int, w: int = 288, h: int = 360) -> bytes:
     return b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", struct.pack(">IIBBBBB", w, h, 8, 2, 0, 0, 0)) + chunk(b"IDAT", zlib.compress(raw, 6)) + chunk(b"IEND", b"")
 
 
+TWEETS = [
+    "Terça-feira e eu ainda ouvindo o set de sábado em loop.",
+    "Opinião impopular: o melhor momento de todo show é a primeira música.",
+    "Alguém sabe se a caravana de {city} já abriu as inscrições?",
+    "Hoje não tem trabalho que me tire do clima do último show. Saudade.",
+    "Lembrete: hidratar, protetor de ouvido e chegar cedo. Quem já foi sabe.",
+    "Fã clube de {city} crescendo todo dia. Bora fazer um encontro antes do próximo show?",
+    "Quem aí vai de camiseta do clube no próximo show? Vamos combinar o dia.",
+    "Playlist do fã clube atualizada com os hits dessa semana. Me falem o que ficou de fora.",
+    "Primeira vez que vejo a pista inteira cantando junto. Arrepio até agora.",
+    "Aviso: o grupo da caravana lota rápido. Quem quer vaga, comenta aqui.",
+]
+
+
+def add_text_posts(db, artist, rnd: random.Random, now: datetime) -> None:
+    """Posts só de texto (estilo tweet) em cada fã clube que tem poucos."""
+    added = 0
+    for club in db.scalars(select(m.FanClub).where(m.FanClub.artist_id == artist.id)):
+        plain = db.scalars(select(m.Post).where(m.Post.club_id == club.id, m.Post.image_path == "")).all()
+        if len(plain) >= 5 or not club.members:
+            continue
+        for text in rnd.sample(TWEETS, 5 - len(plain)):
+            member = rnd.choice(club.members)
+            likes = rnd.randint(1, 90)
+            db.add(
+                m.Post(
+                    artist_id=artist.id, club_id=club.id, kind="galera", author_id=member.user_id,
+                    text=text.format(city=club.city or "nossa cidade"), likes=likes, comments=rnd.randint(0, 6),
+                    reposts=rnd.randint(0, likes // 5), views=likes * rnd.randint(8, 20),
+                    created_at=now - timedelta(days=rnd.randint(0, 27), hours=rnd.randint(0, 23)),
+                )
+            )
+            added += 1
+    db.flush()
+    print(f"+ {added} posts só de texto")
+
+
 def enrich_posts(db, artist, upload_dir: Path, rnd: random.Random, now: datetime) -> None:
     """Dá comentários e fotos aos posts de exemplo que ainda não têm (pode rodar várias vezes)."""
     commenters = [u for u in db.scalars(select(m.User).where(m.User.role == m.ROLE_FAN))]
     added_c = added_p = 0
-    for post in db.scalars(select(m.Post).where(m.Post.artist_id == artist.id)):
+    posts = db.scalars(select(m.Post).where(m.Post.artist_id == artist.id)).all()
+    plain: dict = {}  # posts só de texto por fã clube: sempre sobram pelo menos 5 (estilo tweet)
+    for post in posts:
+        if not post.image_path:
+            plain[post.club_id] = plain.get(post.club_id, 0) + 1
+    for post in posts:
         if not post.replies and commenters:
             for _ in range(rnd.randint(1, 5)):
                 when = min(now, post.created_at.replace(tzinfo=timezone.utc) + timedelta(hours=rnd.randint(1, 72)))
                 db.add(m.PostComment(post=post, author_id=rnd.choice(commenters).id, text=rnd.choice(COMMENTS), created_at=when))
                 added_c += 1
             post.comments = max(post.comments, len(post.replies))
-        if not post.image_path and post.kind in ("galera", "drop") and rnd.random() < 0.55:
+        plain_left = plain.get(post.club_id, 0)
+        if not post.image_path and post.kind in ("galera", "drop") and plain_left > 5 and rnd.random() < 0.55:
+            plain[post.club_id] = plain_left - 1
             fname = f"mock-post-{post.id}.png"
             (upload_dir / fname).write_bytes(photo_png(rnd.randint(0, 10_000)))
             post.image_path, post.has_image = f"/uploads/{fname}", True
@@ -206,6 +250,7 @@ def main() -> None:
                 )
             db.flush()
             print(f"+ {name}: dono {owner_email}, {len(members)} membros")
+        add_text_posts(db, artist, rnd, now)
         enrich_posts(db, artist, upload_dir, rnd, now)
         db.commit()
 

@@ -37,6 +37,8 @@ class EventIn(Camel):
     age_rating: str = ""
     lineup: str = ""
     status: Literal["on_sale", "last_batches", "soon"] = "soon"
+    ticketing_name: str = Field(default="", max_length=60)
+    ticketing_url: str = Field(default="", max_length=500)
 
 
 class VendorIn(Camel):
@@ -46,6 +48,41 @@ class VendorIn(Camel):
     tag: Literal["Oficial", "Pacote", "Excursão"] = "Oficial"
     price_label: str = ""
     url: str = "#"
+    position: int = 0
+
+
+class TicketIn(Camel):
+    event_id: str
+    label: str = Field(min_length=1, max_length=120)
+    description: str = Field(default="", max_length=200)
+    price_cents: int = Field(default=0, ge=0)
+    sold_out: bool = False
+    position: int = 0
+
+
+class AgencyIn(Camel):
+    name: str = Field(min_length=1, max_length=120)
+    contact: str = Field(default="", max_length=160)
+    url: str = Field(default="", max_length=500)
+    active: bool = True
+
+
+class PackageItemIn(Camel):
+    kind: Literal["ticket", "transfer", "seal", "photo"] = "ticket"  # só ingresso | + transfer | + selo no app | + Photo Finder
+    label: str = Field(min_length=1, max_length=120)  # ex.: "Pista", "Camarote", "Ônibus ida e volta"
+    price_cents: int = Field(default=0, ge=0)
+    sold_out: bool = False
+
+
+class PackageIn(Camel):
+    event_id: str
+    agency_id: str
+    name: str = Field(min_length=1, max_length=120)
+    description: str = Field(default="", max_length=300)
+    transfer_details: str = Field(default="", max_length=300)
+    url: str = Field(default="", max_length=500)
+    items: list[PackageItemIn] = Field(default_factory=list, max_length=30)
+    active: bool = True
     position: int = 0
 
 
@@ -107,6 +144,21 @@ def _check_event(db: Session, artist: m.Artist, data: dict[str, Any]) -> None:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Evento inválido para este fã clube.")
 
 
+def _check_package(db: Session, artist: m.Artist, data: dict[str, Any]) -> None:
+    _check_event(db, artist, data)
+    agency_id = data.get("agency_id")
+    if agency_id is not None:
+        a = db.get(m.Agency, agency_id)
+        if not a or a.artist_id != artist.id:
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, "Agência inválida para este ambiente.")
+        # Cada show tem uma única agência: todos os pacotes dele são dela.
+        event_id = data.get("event_id")
+        if event_id:
+            other = db.scalar(select(m.EventPackage).where(m.EventPackage.event_id == event_id, m.EventPackage.agency_id != agency_id))
+            if other:
+                raise HTTPException(status.HTTP_400_BAD_REQUEST, f"Este show já é da agência {other.agency.name}. Todos os pacotes dele precisam ser dessa agência.")
+
+
 def _post_defaults(db: Session, artist: m.Artist, data: dict[str, Any]) -> None:
     # Posts criados pela administração do ambiente são oficiais (sem fã clube).
     if "kind" in data:
@@ -117,6 +169,9 @@ RESOURCES: list[tuple[str, type, type[Camel], Any, Callable | None]] = [
     ("events", m.Event, EventIn, m.Event.date, None),
     ("vendors", m.Vendor, VendorIn, m.Vendor.position, _check_event),
     ("gifts", m.Gift, GiftIn, m.Gift.position, _check_event),
+    ("tickets", m.EventTicket, TicketIn, m.EventTicket.position, _check_event),
+    ("agencies", m.Agency, AgencyIn, m.Agency.name, None),
+    ("packages", m.EventPackage, PackageIn, m.EventPackage.position, _check_package),
     ("posts", m.Post, PostIn, m.Post.created_at.desc(), _post_defaults),
     ("products", m.Product, ProductIn, m.Product.position, None),
     ("tracks", m.Track, TrackIn, m.Track.position, None),

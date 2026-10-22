@@ -30,6 +30,12 @@ class Settings(BaseSettings):
     smtp_password: str = ""
     smtp_from: str = ""  # ex.: Super Fãs <nao-responda@seudominio.com>
 
+    # Photo Finder: reconhecimento facial com AWS Rekognition. Desligado por padrão.
+    # As credenciais são as variáveis padrão da AWS (AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY).
+    rekognition_enabled: bool = False
+    aws_region: str = "us-east-1"
+    rekognition_threshold: float = 90.0  # semelhança mínima (0-100) para contar como a mesma pessoa
+
     # Endereço público do front, usado nos links dos e-mails.
     app_url: str = "http://localhost:3000"
 

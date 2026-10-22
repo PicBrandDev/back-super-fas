@@ -300,6 +300,8 @@ class EventOut(Camel):
     lineup: str
     gifts_count: int
     status: str
+    ticketing_name: str = ""
+    ticketing_url: str = ""
 
 
 def event_out(e: m.Event) -> EventOut:
@@ -320,7 +322,38 @@ def event_out(e: m.Event) -> EventOut:
         lineup=e.lineup,
         gifts_count=len(e.gifts),
         status=e.status,
+        ticketing_name=e.ticketing_name,
+        ticketing_url=e.ticketing_url,
     )
+
+
+class TicketOut(Camel):
+    id: str
+    label: str
+    description: str
+    price_cents: int
+    sold_out: bool
+
+
+class PackageItemOut(Camel):
+    kind: str  # ticket | transfer
+    label: str
+    price_cents: int
+    sold_out: bool = False
+
+
+class PackageOut(Camel):
+    id: str
+    name: str
+    description: str
+    agency_name: str
+    agency_contact: str
+    agency_url: str
+    url: str  # link de venda do pacote (cai no site da agência se vazio)
+    transfer_details: str
+    has_transfer: bool
+    from_price_cents: int | None  # menor preço entre os itens
+    items: list[PackageItemOut]
 
 
 class VendorOut(Camel):
@@ -391,9 +424,42 @@ class SubscribeIn(Camel):
     method: Literal["pix", "card"] = "pix"
 
 
+class SpinCreditOut(Camel):
+    id: str
+    reason: str  # por que o giro existe (compra de ingresso, boas-vindas...)
+    used: bool
+    prize_label: str | None = None  # o que saiu, quando já foi usado
+    date: str
+
+
+class SpinIn(Camel):
+    credit_id: str | None = None  # qual giro gastar (vazio = o mais antigo disponível)
+
+
+class PurchaseIn(Camel):
+    package_id: str
+    item: int = Field(ge=0)  # posição da opção dentro do pacote
+
+
+class MyTicketOut(Camel):
+    id: str
+    event_id: str
+    event: "EventOut"
+    package_name: str
+    agency_name: str
+    label: str
+    kind: str
+    price_cents: int
+    includes_transfer: bool
+    includes_seal: bool
+    includes_photo_finder: bool
+    bought: str  # data da compra
+
+
 class SpinOut(Camel):
     prize: PrizeOut
     spins_left: int
+    credits: list[SpinCreditOut] = []
     luck_points: int
 
 

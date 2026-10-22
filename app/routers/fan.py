@@ -15,17 +15,24 @@ from ..schemas import (
     FanPostIn,
     GiftOut,
     HomeAdOut,
+    PackageItemOut,
+    PackageOut,
     PerkOut,
     PostOut,
     PrizeOut,
     ProductOut,
+    PurchaseIn,
+    SpinCreditOut,
     SpinOut,
     SubscribeIn,
+    MyTicketOut,
+    TicketOut,
     TrackOut,
     VendorOut,
     ViewerOut,
     ad_slot_out,
     artist_out,
+    br_date,
     brl,
     campaign_status,
     event_out,
@@ -60,6 +67,23 @@ def get_fandom(db: Session, artist: m.Artist, user: m.User, create: bool = True)
         db.commit()
         db.refresh(f)
     return f
+
+
+def ticket_out(t: m.TicketPurchase) -> MyTicketOut:
+    return MyTicketOut(
+        id=t.id,
+        event_id=t.event_id,
+        event=event_out(t.event),
+        package_name=t.package_name,
+        agency_name=t.agency_name,
+        label=t.label,
+        kind=t.kind,
+        price_cents=t.price_cents,
+        includes_transfer=t.kind in ("transfer", "seal", "photo"),
+        includes_seal=t.kind in ("seal", "photo"),
+        includes_photo_finder=t.kind == "photo",
+        bought=br_date(t.created_at.date()),
+    )
 
 
 def viewer_out(user: m.User, f: m.Fandom | None, artist: m.Artist | None = None) -> ViewerOut:
@@ -170,6 +194,44 @@ def list_vendors(event_id: str, artist: FanArtist, db: DB):
     ]
 
 
+@router.get("/artists/{slug}/events/{event_id}/tickets", response_model=list[TicketOut])
+def list_tickets(event_id: str, artist: FanArtist, db: DB):
+    """Tipos de ingresso avulsos do show, cada um com o seu preço."""
+    e = _event(db, artist, event_id)
+    return [
+        TicketOut(id=t.id, label=t.label, description=t.description, price_cents=t.price_cents, sold_out=t.sold_out)
+        for t in e.tickets
+    ]
+
+
+@router.get("/artists/{slug}/events/{event_id}/packages", response_model=list[PackageOut])
+def list_packages(event_id: str, artist: FanArtist, db: DB):
+    """Pacotes das agências parceiras do show (ingressos de vários tipos e transfer)."""
+    e = _event(db, artist, event_id)
+    out = []
+    for p in e.packages:
+        if not p.active or not p.agency.active:
+            continue
+        items = [PackageItemOut(kind=i["kind"], label=i["label"], price_cents=i["price_cents"], sold_out=i.get("sold_out", False)) for i in (p.items or [])]
+        prices = [i.price_cents for i in items if not i.sold_out]
+        out.append(
+            PackageOut(
+                id=p.id,
+                name=p.name,
+                description=p.description,
+                agency_name=p.agency.name,
+                agency_contact=p.agency.contact,
+                agency_url=p.agency.url,
+                url=p.url or p.agency.url,
+                transfer_details=p.transfer_details,
+                has_transfer=any(i.kind in ("transfer", "seal", "photo") for i in items),
+                from_price_cents=min(prices) if prices else None,
+                items=items,
+            )
+        )
+    return out
+
+
 @router.get("/artists/{slug}/events/{event_id}/gifts", response_model=list[GiftOut])
 def list_gifts(event_id: str, artist: FanArtist, db: DB):
     e = _event(db, artist, event_id)
@@ -198,6 +260,61 @@ def list_prizes(artist: FanArtist, db: DB):
     mc = master_club(db, artist)
     prizes = db.scalars(select(m.Prize).where(m.Prize.club_id == mc.id).order_by(m.Prize.position)).all() if mc else []
     return [PrizeOut(id=p.id, label=p.label, is_retry=p.is_retry or None) for p in prizes]
+
+
+@router.get("/artists/{slug}/pickap/spins", response_model=list[SpinCreditOut])
+def list_spins(artist: FanArtist, user: CurrentUser, db: DB):
+    """Os giros do fã, cada um com o motivo (compra de ingresso, boas-vindas...)."""
+    from .. import spins as spin_lib
+
+    f = get_fandom(db, artist, user)
+    assert f is not None
+    out = spin_lib.out(db, f)
+    db.commit()
+    return out
+
+
+@router.post("/artists/{slug}/events/{event_id}/purchases", response_model=MyTicketOut, status_code=201)
+def buy_ticket(event_id: str, body: PurchaseIn, artist: FanArtist, user: CurrentUser, db: DB):
+    """Compra de ingresso (simulada): registra o ingresso do fã e dá 1 giro da roleta, com o motivo."""
+    from .. import spins as spin_lib
+
+    e = _event(db, artist, event_id)
+    pkg = db.get(m.EventPackage, body.package_id)
+    if not pkg or pkg.event_id != e.id or not pkg.active:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Pacote não encontrado.")
+    items = pkg.items or []
+    if body.item >= len(items):
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Opção inválida.")
+    item = items[body.item]
+    if item.get("sold_out"):
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Essa opção está esgotada.")
+    purchase = m.TicketPurchase(
+        artist_id=artist.id,
+        user_id=user.id,
+        event_id=e.id,
+        package_name=pkg.name,
+        agency_name=pkg.agency.name,
+        label=item["label"],
+        kind=item["kind"],
+        price_cents=item["price_cents"],
+    )
+    db.add(purchase)
+    f = get_fandom(db, artist, user)
+    assert f is not None
+    spin_lib.grant(db, f, f"Compra de ingresso · {e.city} ({e.date.day:02d}/{e.date.month:02d}) · {item['label']}")
+    db.commit()
+    db.refresh(purchase)
+    return ticket_out(purchase)
+
+
+@router.get("/artists/{slug}/me/tickets", response_model=list[MyTicketOut])
+def my_tickets(artist: FanArtist, user: CurrentUser, db: DB):
+    """Os ingressos que o fã comprou neste ambiente, dos shows mais próximos para os mais antigos."""
+    q = select(m.TicketPurchase).where(m.TicketPurchase.artist_id == artist.id, m.TicketPurchase.user_id == user.id)
+    rows = list(db.scalars(q))
+    rows.sort(key=lambda t: (t.event.date, t.created_at))
+    return [ticket_out(t) for t in rows]
 
 
 @router.post("/artists/{slug}/pickap/spin", response_model=SpinOut)

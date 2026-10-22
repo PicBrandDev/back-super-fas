@@ -177,6 +177,53 @@ class Fandom(Base):
     user: Mapped[User] = relationship(back_populates="fandoms")
 
 
+class EventPhoto(Base):
+    """Foto oficial de um show. Os rostos dela ficam indexados no AWS Rekognition para o Photo Finder."""
+
+    __tablename__ = "event_photos"
+
+    id: Mapped[str] = mapped_column(String(20), primary_key=True, default=new_id)
+    artist_id: Mapped[str] = mapped_column(ForeignKey("artists.id", ondelete="CASCADE"), index=True)
+    event_id: Mapped[str] = mapped_column(ForeignKey("events.id", ondelete="CASCADE"), index=True)
+    path: Mapped[str] = mapped_column(String(255))  # ex.: /uploads/abc.jpg
+    indexed: Mapped[bool] = mapped_column(Boolean, default=False)
+    face_ids: Mapped[list] = mapped_column(JSON, default=list)  # rostos desta foto no Rekognition
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+
+
+class TicketPurchase(Base):
+    """Ingresso que o fã comprou (hoje simulado: o pagamento acontece fora do app)."""
+
+    __tablename__ = "ticket_purchases"
+
+    id: Mapped[str] = mapped_column(String(20), primary_key=True, default=new_id)
+    artist_id: Mapped[str] = mapped_column(ForeignKey("artists.id", ondelete="CASCADE"), index=True)
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    event_id: Mapped[str] = mapped_column(ForeignKey("events.id", ondelete="CASCADE"), index=True)
+    package_name: Mapped[str] = mapped_column(String(120), default="")
+    agency_name: Mapped[str] = mapped_column(String(120), default="")
+    label: Mapped[str] = mapped_column(String(160))  # ex.: "Pista + transfer + selo"
+    kind: Mapped[str] = mapped_column(String(10), default="ticket")  # ticket | transfer | seal | photo
+    price_cents: Mapped[int] = mapped_column(Integer, default=0)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+
+    event: Mapped["Event"] = relationship()
+
+
+class SpinCredit(Base):
+    """Um giro da roleta (PicKap) do fã, com o motivo de ele existir (compra de ingresso, boas-vindas...)."""
+
+    __tablename__ = "spin_credits"
+
+    id: Mapped[str] = mapped_column(String(20), primary_key=True, default=new_id)
+    artist_id: Mapped[str] = mapped_column(ForeignKey("artists.id", ondelete="CASCADE"), index=True)
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    reason: Mapped[str] = mapped_column(String(200))
+    used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    prize_label: Mapped[str] = mapped_column(String(80), default="")  # o que saiu quando foi usado
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+
+
 class Post(Base):
     __tablename__ = "posts"
 
@@ -234,9 +281,64 @@ class Event(Base):
     age_rating: Mapped[str] = mapped_column(String(20), default="")
     lineup: Mapped[str] = mapped_column(String(255), default="")
     status: Mapped[str] = mapped_column(String(20), default="soon")  # on_sale | last_batches | soon
+    ticketing_name: Mapped[str] = mapped_column(String(60), default="")  # ticketeira oficial (ex.: Sympla)
+    ticketing_url: Mapped[str] = mapped_column(String(500), default="")  # link de compra na ticketeira
 
     vendors: Mapped[list["Vendor"]] = relationship(cascade="all, delete-orphan")
     gifts: Mapped[list["Gift"]] = relationship(cascade="all, delete-orphan")
+    packages: Mapped[list["EventPackage"]] = relationship(cascade="all, delete-orphan", order_by="EventPackage.position")
+    tickets: Mapped[list["EventTicket"]] = relationship(cascade="all, delete-orphan", order_by="EventTicket.position")
+
+
+class EventTicket(Base):
+    """Tipo de ingresso avulso do show (vendido na ticketeira): Pista, Camarote... com o preço de cada um."""
+
+    __tablename__ = "event_tickets"
+
+    id: Mapped[str] = mapped_column(String(20), primary_key=True, default=new_id)
+    artist_id: Mapped[str] = mapped_column(ForeignKey("artists.id", ondelete="CASCADE"), index=True)
+    event_id: Mapped[str] = mapped_column(ForeignKey("events.id", ondelete="CASCADE"), index=True)
+    label: Mapped[str] = mapped_column(String(120))
+    description: Mapped[str] = mapped_column(String(200), default="")
+    price_cents: Mapped[int] = mapped_column(Integer, default=0)
+    sold_out: Mapped[bool] = mapped_column(Boolean, default=False)
+    position: Mapped[int] = mapped_column(Integer, default=0)
+
+
+class Agency(Base):
+    """Agência parceira do artista: distribui pacotes (ingressos e transfer) dos shows."""
+
+    __tablename__ = "agencies"
+
+    id: Mapped[str] = mapped_column(String(20), primary_key=True, default=new_id)
+    artist_id: Mapped[str] = mapped_column(ForeignKey("artists.id", ondelete="CASCADE"), index=True)
+    name: Mapped[str] = mapped_column(String(120))
+    contact: Mapped[str] = mapped_column(String(160), default="")  # WhatsApp ou e-mail
+    url: Mapped[str] = mapped_column(String(500), default="")  # site da agência
+    active: Mapped[bool] = mapped_column(Boolean, default=True)
+
+    packages: Mapped[list["EventPackage"]] = relationship(back_populates="agency", cascade="all, delete-orphan")
+
+
+class EventPackage(Base):
+    """Pacote de uma agência para um show: vários tipos de ingresso (com preço) e opções de transfer."""
+
+    __tablename__ = "event_packages"
+
+    id: Mapped[str] = mapped_column(String(20), primary_key=True, default=new_id)
+    artist_id: Mapped[str] = mapped_column(ForeignKey("artists.id", ondelete="CASCADE"), index=True)
+    event_id: Mapped[str] = mapped_column(ForeignKey("events.id", ondelete="CASCADE"), index=True)
+    agency_id: Mapped[str] = mapped_column(ForeignKey("agencies.id", ondelete="CASCADE"), index=True)
+    name: Mapped[str] = mapped_column(String(120))
+    description: Mapped[str] = mapped_column(String(300), default="")
+    transfer_details: Mapped[str] = mapped_column(String(300), default="")  # saída, horário, volta
+    url: Mapped[str] = mapped_column(String(500), default="")  # link de venda do pacote
+    # [{"kind": "ticket" (só ingresso) | "transfer" (ingresso + transfer) | "seal" (+ selo no app) | "photo" (+ selo + Photo Finder), "label": "Pista", "price_cents": 18000, "sold_out": false}]
+    items: Mapped[list] = mapped_column(JSON, default=list)
+    active: Mapped[bool] = mapped_column(Boolean, default=True)
+    position: Mapped[int] = mapped_column(Integer, default=0)
+
+    agency: Mapped[Agency] = relationship(back_populates="packages")
 
 
 class Vendor(Base):

@@ -18,21 +18,21 @@
           "tag": "Oficial",
           "type": "Ingresso pista e camarote",
           "priceLabel": "a partir de R$ 180",
-          "url": "https://exemplo.com/ingressos/sp"
+          "url": "https://vendas.example/ingressos/sp"
         },
         {
           "name": "Viaje Junto",
           "tag": "Pacote",
           "type": "Ingresso + transfer ida e volta",
           "priceLabel": "a partir de R$ 290",
-          "url": "https://exemplo.com/pacote/sp"
+          "url": "https://vendas.example/pacote/sp"
         },
         {
           "name": "Caravana ABC",
           "tag": "Excursão",
           "type": "Ônibus saindo de Santo André",
           "priceLabel": "a partir de R$ 95",
-          "url": "https://exemplo.com/excursao/abc"
+          "url": "https://vendas.example/excursao/abc"
         }
       ],
       "gifts": [
@@ -79,14 +79,14 @@
           "tag": "Oficial",
           "type": "Ingresso pista",
           "priceLabel": "a partir de R$ 160",
-          "url": "https://exemplo.com/ingressos/rj"
+          "url": "https://vendas.example/ingressos/rj"
         },
         {
           "name": "Rio Party Tour",
           "tag": "Pacote",
           "type": "Hotel + ingresso",
           "priceLabel": "a partir de R$ 640",
-          "url": "https://exemplo.com/pacote/rj"
+          "url": "https://vendas.example/pacote/rj"
         }
       ],
       "gifts": [
@@ -123,14 +123,14 @@
           "tag": "Oficial",
           "type": "Ingresso pista e área VIP",
           "priceLabel": "a partir de R$ 150",
-          "url": "https://exemplo.com/ingressos/floripa"
+          "url": "https://vendas.example/ingressos/floripa"
         },
         {
           "name": "Excursão Sul",
           "tag": "Excursão",
           "type": "Van saindo de Joinville",
           "priceLabel": "a partir de R$ 120",
-          "url": "https://exemplo.com/excursao/joinville"
+          "url": "https://vendas.example/excursao/joinville"
         }
       ],
       "gifts": [
@@ -162,7 +162,7 @@
           "tag": "Oficial",
           "type": "Pré-venda para membros",
           "priceLabel": "em breve",
-          "url": "https://exemplo.com/ingressos/bh"
+          "url": "https://vendas.example/ingressos/bh"
         }
       ],
       "gifts": [
@@ -213,14 +213,14 @@
           "tag": "Oficial",
           "type": "Passaporte 3 noites",
           "priceLabel": "a partir de R$ 1.200",
-          "url": "https://exemplo.com/reveillon"
+          "url": "https://vendas.example/reveillon"
         },
         {
           "name": "Bahia Viagens",
           "tag": "Pacote",
           "type": "Aéreo + pousada + passaporte",
           "priceLabel": "a partir de R$ 3.900",
-          "url": "https://exemplo.com/pacote/reveillon"
+          "url": "https://vendas.example/pacote/reveillon"
         }
       ],
       "gifts": [
@@ -512,7 +512,7 @@
       "title": "Frete grátis para o fã clube",
       "text": "Use o cupom VINTAGE na loja da marca.",
       "cta": "Ver oferta",
-      "link": "https://exemplo.com/oferta",
+      "link": "https://vendas.example/oferta",
       "startOffset": -2,
       "endOffset": 28,
       "approve": true
@@ -523,7 +523,7 @@
       "title": "Coleção cápsula de verão",
       "text": "Peças inspiradas na turnê.",
       "cta": "Conhecer",
-      "link": "https://exemplo.com/colecao",
+      "link": "https://vendas.example/colecao",
       "startOffset": 5,
       "endOffset": 35
     },
@@ -533,7 +533,7 @@
       "title": "Fatia patrocinada: kit da marca",
       "text": "Um kit por semana na roleta.",
       "cta": "Girar",
-      "link": "https://exemplo.com/kit",
+      "link": "https://vendas.example/kit",
       "startOffset": 1,
       "endOffset": 30
     },
@@ -543,7 +543,7 @@
       "title": "Caravana com desconto",
       "text": "10% off no transfer para o show de SP.",
       "cta": "Garantir",
-      "link": "https://exemplo.com/caravana",
+      "link": "https://vendas.example/caravana",
       "startOffset": -1,
       "endOffset": 20,
       "approve": true

@@ -17,6 +17,7 @@ from sqlalchemy.orm import Session
 
 from .. import models as m
 from ..defaults import CLUB_AD_SLOTS, MASTER_CLUB_SLUG, MAX_CLUB_STAFF
+from .. import spins
 from ..mailer import send_owner_invite
 from ..uploads import save_image
 from ..schemas import (
@@ -32,6 +33,7 @@ from ..schemas import (
     InviteOut,
     PostOut,
     PrizeOut,
+    SpinIn,
     SpinOut,
     StaffInviteIn,
     StaffOut,
@@ -331,7 +333,7 @@ def list_club_prizes(club: FanClubDep, db: DB):
     return [PrizeOut(id=p.id, label=p.label, is_retry=p.is_retry or None) for p in club_prizes(db, club)]
 
 
-def spin_wheel(db: Session, club: m.FanClub, user: m.User) -> SpinOut:
+def spin_wheel(db: Session, club: m.FanClub, user: m.User, credit_id: str | None = None) -> SpinOut:
     """O servidor sorteia o prêmio. Os giros e pontos são do fã no ambiente do cantor."""
     from .fan import get_fandom  # evita import circular
 
@@ -340,26 +342,27 @@ def spin_wheel(db: Session, club: m.FanClub, user: m.User) -> SpinOut:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "A roleta deste fã clube ainda não tem prêmios.")
     f = get_fandom(db, club.artist, user)
     assert f is not None
-    if f.spins <= 0:
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Você não tem giros disponíveis.")
+    credit = spins.take(db, f, credit_id)
     prize = random.choice(prizes)
-    f.spins -= 1
+    spins.use(credit, prize.label)
     if prize.is_retry:
-        f.spins += 1
+        spins.grant(db, f, spins.RETRY)
     f.luck_points += prize.points
+    spins.sync(db, f)
     db.commit()
     return SpinOut(
         prize=PrizeOut(id=prize.id, label=prize.label, is_retry=prize.is_retry or None),
         spins_left=f.spins,
         luck_points=f.luck_points,
+        credits=spins.out(db, f),
     )
 
 
 @router.post("/artists/{slug}/clubs/{club}/pickap/spin", response_model=SpinOut)
-def spin_club(club: FanClubDep, user: CurrentUser, db: DB):
+def spin_club(club: FanClubDep, user: CurrentUser, db: DB, body: SpinIn | None = None):
     if not is_member(db, club, user) and not can_manage_club(db, user, club):
         raise forbidden("Entre no fã clube para girar a roleta dele.")
-    return spin_wheel(db, club, user)
+    return spin_wheel(db, club, user, body.credit_id if body else None)
 
 
 # ---------------------------------------------------------------- vitrines e campanhas do fã clube

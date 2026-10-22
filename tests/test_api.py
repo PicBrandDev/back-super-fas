@@ -385,3 +385,135 @@ def test_feed_traz_comentarios(client, club_admin, db_session=None):
     feed = client.get("/artists/vintage-culture/manage/feed?kind=drop", headers=club_admin).json()
     item = next(i for i in feed if i["id"] == post_id)
     assert item["comments"] >= 1 and item["recentComments"][-1]["text"] == "Que drop!"
+
+
+def test_agencias_pacotes_e_ticketeira(client, club_admin, fan):
+    base = "/artists/vintage-culture"
+    ev = client.post(
+        f"{base}/manage/events",
+        headers=club_admin,
+        json={"date": "2030-05-10", "city": "Curitiba", "ticketingName": "Ticketeira Teste", "ticketingUrl": "https://ticketeira.exemplo.com/show"},
+    )
+    assert ev.status_code == 201, ev.text
+    event = ev.json()
+    assert event["ticketingUrl"] == "https://ticketeira.exemplo.com/show"
+
+    ag = client.post(f"{base}/manage/agencies", headers=club_admin, json={"name": "Caravana Sul", "contact": "(41) 99999-0000"}).json()
+    pkg = client.post(
+        f"{base}/manage/packages",
+        headers=club_admin,
+        json={
+            "eventId": event["id"], "agencyId": ag["id"], "name": "Caravana Curitiba", "transferDetails": "Saída 14h, volta após o show",
+            "items": [
+                {"kind": "ticket", "label": "Pista", "priceCents": 18000},
+                {"kind": "ticket", "label": "Camarote", "priceCents": 32000, "soldOut": True},
+                {"kind": "transfer", "label": "Ônibus ida e volta", "priceCents": 9000},
+            ],
+        },
+    )
+    assert pkg.status_code == 201, pkg.text
+    bad = client.post(f"{base}/manage/packages", headers=club_admin, json={"eventId": event["id"], "agencyId": "nao-existe", "name": "x"})
+    assert bad.status_code == 400
+    # cada show tem uma única agência
+    outra = client.post(f"{base}/manage/agencies", headers=club_admin, json={"name": "Outra Agência"}).json()
+    dois = client.post(f"{base}/manage/packages", headers=club_admin, json={"eventId": event["id"], "agencyId": outra["id"], "name": "y"})
+    assert dois.status_code == 400 and "Caravana Sul" in dois.json()["detail"]
+    mesma = client.post(f"{base}/manage/packages", headers=club_admin, json={"eventId": event["id"], "agencyId": ag["id"], "name": "Segundo pacote"})
+    assert mesma.status_code == 201
+    client.delete(f"{base}/manage/packages/{mesma.json()['id']}", headers=club_admin)
+    assert client.post(f"{base}/manage/agencies", headers=fan, json={"name": "x"}).status_code == 403
+
+    pk = client.get(f"{base}/events/{event['id']}/packages", headers=fan).json()
+    assert len(pk) == 1 and pk[0]["agencyName"] == "Caravana Sul" and pk[0]["hasTransfer"] is True
+    assert pk[0]["fromPriceCents"] == 9000 and len(pk[0]["items"]) == 3
+    assert client.get(f"{base}/events/{event['id']}", headers=fan).json()["ticketingName"] == "Ticketeira Teste"
+
+
+def test_ingressos_avulsos_do_show(client, club_admin, fan):
+    base = "/artists/vintage-culture"
+    ev = client.post(f"{base}/manage/events", headers=club_admin, json={"date": "2030-06-01", "city": "Recife"}).json()
+    for i, (label, cents) in enumerate([("Pista", 15000), ("Camarote", 30000)]):
+        r = client.post(f"{base}/manage/tickets", headers=club_admin, json={"eventId": ev["id"], "label": label, "priceCents": cents, "position": i})
+        assert r.status_code == 201, r.text
+    assert client.post(f"{base}/manage/tickets", headers=fan, json={"eventId": ev["id"], "label": "x"}).status_code == 403
+    out = client.get(f"{base}/events/{ev['id']}/tickets", headers=fan).json()
+    assert [t["label"] for t in out] == ["Pista", "Camarote"] and out[0]["priceCents"] == 15000
+
+
+def test_giros_com_motivo_e_compra_de_ingresso(client, club_admin, fan):
+    base = "/artists/vintage-culture"
+    ev = client.post(f"{base}/manage/events", headers=club_admin, json={"date": "2031-01-10", "city": "Natal"}).json()
+    ag = client.post(f"{base}/manage/agencies", headers=club_admin, json={"name": "Agência Natal"}).json()
+    pkg = client.post(
+        f"{base}/manage/packages",
+        headers=club_admin,
+        json={"eventId": ev["id"], "agencyId": ag["id"], "name": "Caravana Natal", "items": [
+            {"kind": "photo", "label": "Pista + transfer + selo + Photo Finder", "priceCents": 29000},
+            {"kind": "ticket", "label": "Camarote", "priceCents": 50000, "soldOut": True},
+        ]},
+    ).json()
+
+    antes = client.get(f"{base}/pickap/spins", headers=fan).json()
+    livres_antes = sum(1 for g in antes if not g["used"])
+    assert client.post(f"{base}/events/{ev['id']}/purchases", headers=fan, json={"packageId": pkg["id"], "item": 1}).status_code == 400  # esgotado
+    assert client.post(f"{base}/events/{ev['id']}/purchases", headers=fan, json={"packageId": pkg["id"], "item": 9}).status_code == 400
+    compra = client.post(f"{base}/events/{ev['id']}/purchases", headers=fan, json={"packageId": pkg["id"], "item": 0})
+    assert compra.status_code == 201, compra.text
+    c = compra.json()
+    assert c["includesPhotoFinder"] and c["includesSeal"] and c["includesTransfer"] and c["event"]["city"] == "Natal"
+
+    meus = client.get(f"{base}/me/tickets", headers=fan).json()
+    assert any(t["id"] == c["id"] for t in meus)
+    depois = client.get(f"{base}/pickap/spins", headers=fan).json()
+    novo = next(g for g in depois if "Compra de ingresso" in g["reason"] and "Natal" in g["reason"])
+    assert sum(1 for g in depois if not g["used"]) == livres_antes + 1
+
+    r = client.post(f"{base}/clubs/oficial/pickap/spin", headers=fan, json={"creditId": novo["id"]})
+    assert r.status_code == 200, r.text
+    usado = next(g for g in r.json()["credits"] if g["id"] == novo["id"])
+    assert usado["used"] and usado["prizeLabel"]
+    assert client.post(f"{base}/clubs/oficial/pickap/spin", headers=fan, json={"creditId": novo["id"]}).status_code == 400
+
+
+def test_photo_finder_com_rekognition_simulado(client, club_admin, fan, monkeypatch):
+    from app import rekognition
+
+    indexed: dict[str, list[str]] = {}
+    monkeypatch.setattr(rekognition, "enabled", lambda: True)
+    monkeypatch.setattr(rekognition, "index_photo", lambda ev, pid, data: indexed.setdefault(pid, [f"face-{pid}"]))
+    monkeypatch.setattr(rekognition, "delete_faces", lambda ev, ids: None)
+    monkeypatch.setattr(rekognition, "search_selfie", lambda ev, data: list(indexed)[:1])
+
+    base = "/artists/vintage-culture"
+    png = b"\x89PNG\r\n\x1a\n" + b"0" * 32
+    ev = client.post(f"{base}/manage/events", headers=club_admin, json={"date": "2020-01-05", "city": "Passado"}).json()
+    ag = client.post(f"{base}/manage/agencies", headers=club_admin, json={"name": "Agência Passado"}).json()
+    pkg = client.post(
+        f"{base}/manage/packages", headers=club_admin,
+        json={"eventId": ev["id"], "agencyId": ag["id"], "name": "Caravana", "items": [{"kind": "photo", "label": "Pista + Photo Finder", "priceCents": 29000}]},
+    ).json()
+
+    up = client.post(
+        f"{base}/manage/events/{ev['id']}/photos", headers=club_admin,
+        files=[("photos", ("a.png", png, "image/png")), ("photos", ("b.png", png, "image/png"))],
+    )
+    assert up.status_code == 201 and len(up.json()) == 2 and all(p["indexed"] for p in up.json())
+    assert client.post(f"{base}/manage/events/{ev['id']}/photos", headers=fan, files=[("photos", ("a.png", png, "image/png"))]).status_code == 403
+
+    selfie = {"selfie": ("eu.png", png, "image/png")}
+    # sem ingresso com Photo Finder, o fã não busca
+    st = client.get(f"{base}/events/{ev['id']}/photo-finder", headers=fan).json()
+    assert not st["eligible"] and "não inclui" in st["reason"]
+    assert client.post(f"{base}/events/{ev['id']}/photo-finder/search", headers=fan, files=selfie, data={"consent": "true"}).status_code == 403
+
+    # compra o pacote com Photo Finder e busca
+    assert client.post(f"{base}/events/{ev['id']}/purchases", headers=fan, json={"packageId": pkg["id"], "item": 0}).status_code == 201
+    assert client.get(f"{base}/events/{ev['id']}/photo-finder", headers=fan).json()["eligible"] is True
+    assert client.post(f"{base}/events/{ev['id']}/photo-finder/search", headers=fan, files=selfie, data={"consent": "false"}).status_code == 400
+    res = client.post(f"{base}/events/{ev['id']}/photo-finder/search", headers=fan, files=selfie, data={"consent": "true"})
+    assert res.status_code == 200, res.text
+    assert len(res.json()["matches"]) == 1 and res.json()["searched"] == 2
+
+    first = up.json()[0]["id"]
+    assert client.delete(f"{base}/manage/events/{ev['id']}/photos/{first}", headers=club_admin).status_code == 204
+    assert len(client.get(f"{base}/manage/events/{ev['id']}/photos", headers=club_admin).json()) == 1
