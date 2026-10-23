@@ -636,3 +636,38 @@ def test_dono_do_fa_clube_aparece_no_proprio_ranking(client, club_admin):
     rk = client.get("/artists/vintage-culture/ranking", headers=club_admin).json()
     oficial = next(c for c in rk["clubs"] if c["slug"] == "oficial")
     assert oficial["me"] is not None  # o dono é parte do fã clube, mesmo sem entrar como membro
+
+
+def test_vitrines_alugadas(client, club_admin, sponsor, fan):
+    from datetime import date, timedelta
+
+    from sqlalchemy import select
+
+    from app import models as m
+    from app.db import SessionLocal
+
+    base = "/artists/vintage-culture"
+    today = date.today()
+    with SessionLocal() as db:
+        artist = db.scalar(select(m.Artist).where(m.Artist.slug == "vintage-culture"))
+        env_slot = next(s for s in artist.ad_slots if s.club_id is None)
+        club_slot = next(s for s in artist.ad_slots if s.club_id is not None)
+        env_slot.price_cents = 50000
+        sp = db.scalar(select(m.Sponsor).where(m.Sponsor.email == "marca@superfas.dev"))
+        for slot, start, end, status in [
+            (env_slot, today - timedelta(days=3), today + timedelta(days=10), "approved"),  # no ar (14 dias = 2 semanas)
+            (club_slot, today + timedelta(days=5), today + timedelta(days=11), "approved"),  # agendada
+            (env_slot, today - timedelta(days=40), today - timedelta(days=30), "approved"),  # encerrada
+            (env_slot, today, today + timedelta(days=7), "pending"),  # pendente: não é aluguel
+        ]:
+            db.add(m.Campaign(sponsor_id=sp.id, slot_id=slot.id, brand="Marca Teste", title="Anúncio", start=start, end=end, status=status))
+        db.commit()
+    r = client.get(f"{base}/rentals", headers=club_admin)
+    assert r.status_code == 200, r.text
+    rows = [x for x in r.json() if x["title"] == "Anúncio"]  # outros testes também aprovam campanhas
+    assert [x["status"] for x in rows] == ["live", "scheduled", "ended"]
+    live = rows[0]
+    assert "diagramTop" in live and live["diagramHeight"] > 0
+    assert live["sponsor"] == "Marca Teste" and live["days"] == 14 and live["estimatedTotalCents"] == 100000 and live["fanClub"] is None
+    assert rows[1]["fanClub"] is not None
+    assert client.get(f"{base}/rentals", headers=fan).status_code == 403

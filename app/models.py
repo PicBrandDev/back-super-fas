@@ -517,6 +517,11 @@ class Campaign(Base):
     cta: Mapped[str] = mapped_column(String(60), default="")
     url: Mapped[str] = mapped_column(String(500), default="")
     art_path: Mapped[str] = mapped_column(String(255), default="")
+    target_city: Mapped[str] = mapped_column(String(80), default="")  # vazio = sem filtro de lugar
+    target_radius_km: Mapped[int] = mapped_column(Integer, default=0)  # 0 = o país todo
+    goal_views: Mapped[int] = mapped_column(Integer, default=0)  # meta de visualizações
+    goal_clicks: Mapped[int] = mapped_column(Integer, default=0)  # meta de cliques
+    budget_cents: Mapped[int] = mapped_column(Integer, default=0)  # valor calculado na hora de anunciar
     start: Mapped[date | None] = mapped_column(Date, nullable=True)
     end: Mapped[date | None] = mapped_column(Date, nullable=True)
     status: Mapped[str] = mapped_column(String(20), default="pending")  # pending | approved | rejected

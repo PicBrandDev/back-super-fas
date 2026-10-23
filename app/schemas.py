@@ -574,6 +574,11 @@ class CampaignOut(Camel):
     start: date | None = None
     end: date | None = None
     art_url: str | None = None  # caminho relativo à API (ex.: /uploads/abc.png)
+    target_city: str = ""  # onde o anúncio aparece (vazio = qualquer lugar)
+    target_radius_km: int = 0  # raio em km ao redor da cidade (0 = o país todo)
+    goal_views: int = 0
+    goal_clicks: int = 0
+    budget_cents: int = 0  # valor calculado para a campanha
     status: str  # live | approved | pending | rejected
 
 
@@ -604,6 +609,11 @@ def campaign_out(c: m.Campaign) -> CampaignOut:
         start=c.start,
         end=c.end,
         art_url=c.art_path or None,
+        target_city=c.target_city,
+        target_radius_km=c.target_radius_km,
+        goal_views=c.goal_views,
+        goal_clicks=c.goal_clicks,
+        budget_cents=c.budget_cents,
         status=campaign_status(c),
     )
 

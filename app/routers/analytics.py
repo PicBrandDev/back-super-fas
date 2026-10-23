@@ -208,3 +208,72 @@ def subscribers_analytics(artist: ManagedArtist, db: DB):
         by_state=[PlaceCount(place=k, subscribers=n) for k, n in by_state.most_common()],
         by_city=[PlaceCount(place=k, subscribers=n) for k, n in by_city.most_common(10)],
     )
+
+
+# ---------------------------------------------------------------- vitrines alugadas
+
+
+class RentalOut(Camel):
+    slot_key: str  # ex.: "home", "mural", "loja" ou "fa-clube-sp.home": diz em que tela a vitrine fica
+    slot_name: str
+    where: str  # onde a vitrine aparece (ex.: "Mural · topo")
+    diagram_top: int = 20  # posição da vitrine no desenho do celular (mesmos valores de quando o patrocinador aluga)
+    diagram_height: int = 16
+    fan_club: str | None = None  # fã clube dono da vitrine (vazio = vitrine do ambiente)
+    sponsor: str
+    title: str
+    start: date | None = None
+    end: date | None = None
+    days: int | None = None  # duração do aluguel em dias (None quando falta uma das datas)
+    status: str  # live | scheduled | ended
+    price_cents_per_week: int | None = None  # preço da vitrine por semana
+    estimated_total_cents: int | None = None  # semanas (arredondadas para cima) x preço, quando há as duas informações
+
+
+@router.get("/artists/{slug}/rentals", response_model=list[RentalOut])
+def rentals(artist: ManagedArtist, db: DB):
+    """Todas as vitrines alugadas do ambiente e dos fã clubes: quem alugou, por quanto tempo e qual vitrine."""
+    today = date.today()
+    q = (
+        select(m.Campaign)
+        .join(m.AdSlot, m.Campaign.slot_id == m.AdSlot.id)
+        .where(m.AdSlot.artist_id == artist.id, m.Campaign.status == "approved")
+    )
+    out: list[RentalOut] = []
+    for c in db.scalars(q):
+        days = (c.end - c.start).days + 1 if c.start and c.end else None
+        if c.end and c.end < today:
+            status = "ended"
+        elif c.start and c.start > today:
+            status = "scheduled"
+        else:
+            status = "live"
+        price = c.slot.price_cents
+        out.append(
+            RentalOut(
+                slot_key=c.slot.key,
+                slot_name=c.slot.name,
+                where=c.slot.where,
+                diagram_top=c.slot.diagram_top,
+                diagram_height=c.slot.diagram_height,
+                fan_club=c.slot.club.name if c.slot.club else None,
+                sponsor=c.brand or c.sponsor.brand or c.sponsor.email,
+                title=c.title,
+                start=c.start,
+                end=c.end,
+                days=days,
+                status=status,
+                price_cents_per_week=price,
+                estimated_total_cents=(-(-days // 7)) * price if days and price else None,
+            )
+        )
+    def key(r: RentalOut) -> tuple[int, int]:
+        # No ar: as que terminam primeiro; agendadas: as que começam primeiro; encerradas: as mais recentes.
+        if r.status == "ended":
+            return (2, -(r.end.toordinal() if r.end else 0))
+        if r.status == "scheduled":
+            return (1, (r.start or date.max).toordinal())
+        return (0, (r.end or date.max).toordinal())
+
+    out.sort(key=key)
+    return out

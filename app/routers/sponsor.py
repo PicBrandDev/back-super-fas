@@ -54,6 +54,11 @@ async def create_campaign(
     text: Annotated[str, Form(max_length=2000)] = "",
     start: Annotated[str, Form()] = "",
     end: Annotated[str, Form()] = "",
+    city: Annotated[str, Form(max_length=80)] = "",
+    radius_km: Annotated[int, Form(ge=0, le=5000)] = 0,
+    goal_views: Annotated[int, Form(ge=0, le=100_000_000)] = 0,
+    goal_clicks: Annotated[int, Form(ge=0, le=100_000_000)] = 0,
+    budget_cents: Annotated[int, Form(ge=0, le=1_000_000_000)] = 0,
     art: Annotated[UploadFile | None, File()] = None,
 ):
     """Envia uma campanha para aprovação (multipart/form-data, a arte é opcional).
@@ -99,6 +104,11 @@ async def create_campaign(
         cta=cta.strip(),
         url=link.strip(),
         art_path=art_path,
+        target_city=city.strip(),
+        target_radius_km=radius_km if city.strip() else 0,
+        goal_views=goal_views,
+        goal_clicks=goal_clicks,
+        budget_cents=budget_cents,
         start=d_start,
         end=d_end,
         status="pending",

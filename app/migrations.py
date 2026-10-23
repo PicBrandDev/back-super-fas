@@ -34,6 +34,8 @@ NEW_COLUMNS = {
         ("state", "VARCHAR(2) DEFAULT ''"),
     ],
     "instagram_shares": [("track_id", "VARCHAR(20)")],
+    "campaigns": [("target_city", "VARCHAR(80) DEFAULT ''"), ("target_radius_km", "INTEGER DEFAULT 0"),
+        ("goal_views", "INTEGER DEFAULT 0"), ("goal_clicks", "INTEGER DEFAULT 0"), ("budget_cents", "INTEGER DEFAULT 0")],
     "fandoms": [("share_code", "VARCHAR(12) DEFAULT ''")],
     "events": [("ticketing_name", "VARCHAR(60) DEFAULT ''"), ("ticketing_url", "VARCHAR(500) DEFAULT ''")],
     "fan_clubs": [("avatar_path", "VARCHAR(255) DEFAULT ''")],
