@@ -3,8 +3,8 @@ import logging
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import FastAPI
-from fastapi.staticfiles import StaticFiles
+from fastapi import FastAPI, HTTPException
+from fastapi.responses import FileResponse
 
 from . import instagram
 from .config import DEV_SECRET, get_settings
@@ -66,7 +66,17 @@ for r in (auth.router, fan.router, clubs.router, club_admin.router, analytics.ro
     app.include_router(r)
 
 Path(settings.upload_dir).mkdir(parents=True, exist_ok=True)
-app.mount("/uploads", StaticFiles(directory=settings.upload_dir), name="uploads")
+
+
+@app.get("/uploads/{name}", include_in_schema=False)
+def uploaded_file(name: str):
+    """Entrega as fotos enviadas. É uma rota comum (e não um StaticFiles montado) porque o StaticFiles dá 404
+    quando a API roda atrás de um prefixo (ROOT_PATH=/api), que é como ela sobe no servidor."""
+    folder = Path(settings.upload_dir).resolve()
+    path = (folder / name).resolve()
+    if path.parent != folder or name.startswith(".") or not path.is_file():
+        raise HTTPException(404)
+    return FileResponse(path)
 
 
 @app.get("/health", tags=["Sistema"])
