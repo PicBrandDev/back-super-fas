@@ -24,17 +24,20 @@ from app.models import new_id
 
 EMAIL = "patrocinador@fapage.com.br"
 TITLE = "Abra a felicidade no próximo show"
-ART = Path(__file__).resolve().parents[2] / "front-super-fas" / "public" / "ads" / "coca-cola.png"
 
 
 def save_art() -> str:
     """Copia a arte de exemplo para a pasta de uploads (se o arquivo estiver ao lado deste repositório)."""
-    if not ART.exists():
+    try:  # rodando pela entrada padrão (no servidor) não há __file__ de verdade, então fica sem arte
+        art = Path(__file__).resolve().parents[2] / "front-super-fas" / "public" / "ads" / "coca-cola.png"
+    except (NameError, IndexError):
+        return ""
+    if not art.exists():
         return ""
     folder = Path(get_settings().upload_dir)
     folder.mkdir(parents=True, exist_ok=True)
     name = f"{new_id()}.png"
-    shutil.copy(ART, folder / name)
+    shutil.copy(art, folder / name)
     return f"/uploads/{name}"
 
 
