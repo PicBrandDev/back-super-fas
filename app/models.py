@@ -477,7 +477,7 @@ class AdSlot(Base):
     id: Mapped[str] = mapped_column(String(20), primary_key=True, default=new_id)
     artist_id: Mapped[str] = mapped_column(ForeignKey("artists.id", ondelete="CASCADE"), index=True)
     club_id: Mapped[str | None] = mapped_column(ForeignKey("fan_clubs.id", ondelete="CASCADE"), nullable=True, index=True)
-    # Ambiente: home | mural | evento | pickap | loja | drops. Fã clube: "{slug do clube}.home" etc.
+    # Ambiente: home | mural | evento | pickap | loja | drops | entrada | pickap_video | pickap_resgate. Fã clube: "{slug do clube}.home" etc.
     key: Mapped[str] = mapped_column(String(80))
     name: Mapped[str] = mapped_column(String(120))
     where: Mapped[str] = mapped_column(String(200), default="")
@@ -517,6 +517,7 @@ class Campaign(Base):
     cta: Mapped[str] = mapped_column(String(60), default="")
     url: Mapped[str] = mapped_column(String(500), default="")
     art_path: Mapped[str] = mapped_column(String(255), default="")
+    video_url: Mapped[str] = mapped_column(String(500), default="")  # link http(s) ou /uploads/... (vitrine pickap_video)
     target_city: Mapped[str] = mapped_column(String(80), default="")  # vazio = sem filtro de lugar
     target_radius_km: Mapped[int] = mapped_column(Integer, default=0)  # 0 = o país todo
     goal_views: Mapped[int] = mapped_column(Integer, default=0)  # meta de visualizações

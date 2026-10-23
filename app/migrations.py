@@ -6,6 +6,8 @@
    - todo cantor ganha o fã clube master ("oficial");
    - a equipe antiga do cantor (artist_admins) vira a equipe do master (o primeiro é o dono);
    - posts da galera, roleta do PicKap e fãs passam a ser do fã clube master.
+4. Cria nas vitrines de cada cantor as que faltam de DEFAULT_AD_SLOTS (ex.: os anúncios dentro do app)
+   e atualiza o "onde" da vitrine do Mural se ainda for o texto padrão antigo.
 
 Tudo aqui pode rodar várias vezes sem efeito colateral.
 Quando o esquema começar a mudar com frequência, trocar por Alembic.
@@ -35,7 +37,8 @@ NEW_COLUMNS = {
     ],
     "instagram_shares": [("track_id", "VARCHAR(20)")],
     "campaigns": [("target_city", "VARCHAR(80) DEFAULT ''"), ("target_radius_km", "INTEGER DEFAULT 0"),
-        ("goal_views", "INTEGER DEFAULT 0"), ("goal_clicks", "INTEGER DEFAULT 0"), ("budget_cents", "INTEGER DEFAULT 0")],
+        ("goal_views", "INTEGER DEFAULT 0"), ("goal_clicks", "INTEGER DEFAULT 0"), ("budget_cents", "INTEGER DEFAULT 0"),
+        ("video_url", "VARCHAR(500) DEFAULT ''")],
     "fandoms": [("share_code", "VARCHAR(12) DEFAULT ''")],
     "events": [("ticketing_name", "VARCHAR(60) DEFAULT ''"), ("ticketing_url", "VARCHAR(500) DEFAULT ''")],
     "fan_clubs": [("avatar_path", "VARCHAR(255) DEFAULT ''")],
@@ -61,6 +64,32 @@ def upgrade(engine: Engine) -> None:
 
     with Session(engine) as db:
         _to_fan_clubs(db)
+        _default_ad_slots(db)
+
+
+def _default_ad_slots(db: Session) -> None:
+    """Cantores antigos ganham as vitrines padrão que faltam (no fim da lista), sem mexer nas que já existem."""
+    from .defaults import DEFAULT_AD_SLOTS, MURAL_WHERE, OLD_MURAL_WHERE
+
+    for artist in db.scalars(select(m.Artist)):
+        env = [s for s in artist.ad_slots if s.club_id is None]
+        keys = {s.key for s in artist.ad_slots}
+        pos = max((s.position for s in env), default=-1) + 1
+        for key, name, where, fmt, top, height in DEFAULT_AD_SLOTS:
+            if key in keys:
+                continue
+            db.add(
+                m.AdSlot(
+                    artist_id=artist.id, key=key, name=name, where=where, format=fmt,
+                    diagram_top=top, diagram_height=height, position=pos,
+                )
+            )
+            pos += 1
+            log.warning("Vitrine criada: %s.%s", artist.slug, key)
+        for s in env:
+            if s.key == "mural" and s.where == OLD_MURAL_WHERE:
+                s.where = MURAL_WHERE
+    db.commit()
 
 
 def _to_fan_clubs(db: Session) -> None:

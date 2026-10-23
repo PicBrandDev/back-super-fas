@@ -146,7 +146,7 @@ def test_master_cria_fa_clube_com_convites(client, master, fan):
     assert r.status_code == 201, r.text
     body = r.json()
     assert body["artist"]["slug"] == "alok" and body["artist"]["status"] == "setup"
-    assert body["artist"]["adSlotsSummary"] == "0 de 6 ocupadas"
+    assert body["artist"]["adSlotsSummary"] == "0 de 9 ocupadas"
     invite = body["invites"][0]
     assert invite["tempPassword"]
 
@@ -671,3 +671,88 @@ def test_vitrines_alugadas(client, club_admin, sponsor, fan):
     assert live["sponsor"] == "Marca Teste" and live["days"] == 14 and live["estimatedTotalCents"] == 100000 and live["fanClub"] is None
     assert rows[1]["fanClub"] is not None
     assert client.get(f"{base}/rentals", headers=fan).status_code == 403
+
+
+# ---------------------------------------------------------------- anúncios dentro do app
+
+
+def test_vitrines_do_app_em_ambiente_novo(client, master):
+    slug = client.post("/admin/fan-clubs", headers=master, json={"name": "Artista Anúncios"}).json()["artist"]["slug"]
+    slots = {s["id"]: s for s in client.get(f"/artists/{slug}/ad-slots", headers=master).json()}
+    assert {"entrada", "pickap_video", "pickap_resgate", "mural", "home"} <= set(slots)
+    assert slots["mural"]["where"] == "Mural · post pequeno entre os cartazes, a cada 4"
+    assert slots["pickap_video"]["name"] == "Vídeo antes do giro"
+
+
+def test_migracao_cria_vitrines_que_faltam():
+    from sqlalchemy import select
+
+    from app import models as m
+    from app.db import SessionLocal, engine
+    from app.migrations import upgrade
+
+    with SessionLocal() as db:
+        artist = db.scalar(select(m.Artist).where(m.Artist.slug == "vintage-culture"))
+        for s in list(artist.ad_slots):
+            if s.key == "pickap_resgate":
+                db.delete(s)
+            if s.key == "mural":
+                s.where = "Mural · aba Galera, a cada [n] posts"
+        db.commit()
+    upgrade(engine)
+    upgrade(engine)  # idempotente
+    with SessionLocal() as db:
+        artist = db.scalar(select(m.Artist).where(m.Artist.slug == "vintage-culture"))
+        env = [s for s in artist.ad_slots if s.club_id is None]
+        assert [s.key for s in env].count("pickap_resgate") == 1
+        resgate = next(s for s in env if s.key == "pickap_resgate")
+        assert resgate.position == max(s.position for s in env)
+        assert next(s for s in env if s.key == "mural").where == "Mural · post pequeno entre os cartazes, a cada 4"
+
+
+def test_anuncios_dentro_do_app(client, master, sponsor, fan):
+    empty = {"entry": None, "pickapVideo": None, "pickapClaim": None, "feed": None}
+    r = client.get(f"{VC}/ads/in-app", headers=fan)
+    assert r.status_code == 200, r.text
+    assert {k: r.json()[k] for k in ("pickapVideo", "pickapClaim", "entry")} == {k: None for k in ("pickapVideo", "pickapClaim", "entry")}
+
+    today = date.today()
+    form = {
+        "club": "vintage-culture", "slot": "pickap_video", "brand": "Bebida Teste", "title": "Gire com sabor",
+        "text": "Assista e gire", "link": "https://exemplo.com", "start": today.isoformat(), "end": (today + timedelta(days=7)).isoformat(),
+    }
+    # vitrine de vídeo sem vídeo
+    r = client.post("/sponsor/campaigns", headers=sponsor, data=form)
+    assert r.status_code == 400 and "vídeo" in r.json()["detail"]
+    # link inválido
+    r = client.post("/sponsor/campaigns", headers=sponsor, data={**form, "video_url": "javascript:alert(1)"})
+    assert r.status_code == 400
+    # arquivo em formato errado
+    r = client.post("/sponsor/campaigns", headers=sponsor, data=form, files={"video": ("v.avi", b"x" * 10, "video/x-msvideo")})
+    assert r.status_code == 400
+
+    r = client.post("/sponsor/campaigns", headers=sponsor, data={**form, "video_url": "https://cdn.exemplo.com/v.mp4"})
+    assert r.status_code == 201, r.text
+    camp = r.json()
+    assert camp["videoUrl"] == "https://cdn.exemplo.com/v.mp4"
+    assert client.get(f"{VC}/ads/in-app", headers=fan).json()["pickapVideo"] is None  # pendente
+    client.post(f"/campaigns/{camp['id']}/approve", headers=master)
+
+    ads = client.get(f"{VC}/ads/in-app", headers=fan).json()
+    v = ads["pickapVideo"]
+    assert v["id"] == camp["id"] and v["minSeconds"] == 30 and v["videoUrl"] == "https://cdn.exemplo.com/v.mp4"
+    assert v["sponsor"] == "Bebida Teste" and v["imageUrl"] is None and v["cta"] == "Saiba mais"
+    assert ads["entry"] is None
+    assert any(c["videoUrl"] for c in client.get("/admin/campaigns", headers=master).json())
+
+    # upload do vídeo
+    r = client.post("/sponsor/campaigns", headers=sponsor, data=form, files={"video": ("v.mp4", b"\x00" * 64, "video/mp4")})
+    assert r.status_code == 201, r.text
+    assert r.json()["videoUrl"].startswith("/uploads/") and r.json()["videoUrl"].endswith(".mp4")
+
+    # módulo de anúncios desligado: tudo null
+    client.patch("/admin/fan-clubs/vintage-culture", headers=master, json={"modules": {"ads": False}})
+    try:
+        assert client.get(f"{VC}/ads/in-app", headers=fan).json() == empty
+    finally:
+        client.patch("/admin/fan-clubs/vintage-culture", headers=master, json={"modules": {"ads": True}})
