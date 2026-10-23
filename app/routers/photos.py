@@ -148,7 +148,7 @@ def finder_status(event_id: str, artist: FanArtist, user: CurrentUser, db: DB):
     reason = _eligibility(db, artist, user, e)
     if reason is None and not rekognition.enabled():
         reason = "O reconhecimento facial ainda não foi ligado neste servidor."
-    if reason is None and n == 0:
+    if reason is None and n == 0 and not rekognition.shared_enabled():
         reason = "As fotos deste show ainda não foram publicadas."
     return FinderStatus(enabled=rekognition.enabled(), photos=n, eligible=reason is None, reason=reason)
 
@@ -174,6 +174,10 @@ async def finder_search(
     data = await selfie.read()
     if len(data) > MAX_IMAGE_BYTES:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "A selfie pode ter no máximo 5 MB.")
+    if rekognition.shared_enabled():
+        # Coleção e bucket configurados: devolve links temporários das fotos do S3 em que a pessoa aparece.
+        found = rekognition.presigned_photos(rekognition.search_shared(data))
+        return FinderResult(matches=[FinderMatch(id=i, src=url) for i, url in found], searched=0)
     photos = {p.id: p for p in db.scalars(select(m.EventPhoto).where(m.EventPhoto.event_id == e.id))}
     ids = rekognition.search_selfie(e.id, data)
     return FinderResult(matches=[FinderMatch(id=i, src=photos[i].path) for i in ids if i in photos], searched=len(photos))

@@ -35,6 +35,13 @@ class Settings(BaseSettings):
     rekognition_enabled: bool = False
     aws_region: str = "us-east-1"
     rekognition_threshold: float = 90.0  # semelhança mínima (0-100) para contar como a mesma pessoa
+    # Fotos já indexadas fora do Super Fãs: uma coleção do Rekognition com as fotos num bucket do S3. Com as duas
+    # variáveis abaixo preenchidas, o Photo Finder procura a selfie nessa coleção e devolve links temporários do S3.
+    rekognition_collection_id: str = ""
+    s3_bucket: str = ""
+    s3_photo_prefix: str = "photos/original/"  # onde ficam as fotos no bucket
+    s3_photo_suffix: str = ".jpg"
+    presigned_url_expires_seconds: int = 3600  # por quanto tempo o link de cada foto vale
 
     # Ranking "Fã Super": confere no Instagram os posts com a hashtag (API Graph da Meta). Desligado por padrão.
     # Exige uma conta profissional do Instagram ligada a uma Página, um app da Meta com o recurso

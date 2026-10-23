@@ -519,6 +519,37 @@ def test_photo_finder_com_rekognition_simulado(client, club_admin, fan, monkeypa
     assert len(client.get(f"{base}/manage/events/{ev['id']}/photos", headers=club_admin).json()) == 1
 
 
+def test_photo_finder_com_colecao_e_bucket_configurados(client, club_admin, fan, monkeypatch):
+    """Com a coleção e o bucket configurados, a busca devolve links temporários do S3 (sem fotos enviadas ao show)."""
+    from app import rekognition
+    from app.config import get_settings
+
+    cfg = get_settings()
+    monkeypatch.setattr(cfg, "rekognition_enabled", True)
+    monkeypatch.setattr(cfg, "rekognition_collection_id", "colecao-teste")
+    monkeypatch.setattr(cfg, "s3_bucket", "bucket-teste")
+    monkeypatch.setattr(rekognition, "search_shared", lambda data: ["abc123", "fotos/x/def456.jpg"])
+    monkeypatch.setattr(rekognition, "presigned_photos", lambda ids: [(i, f"https://s3.example/{rekognition.photo_key(i)}?assinado=1") for i in ids])
+    assert rekognition.photo_key("abc123") == "photos/original/abc123.jpg"
+    assert rekognition.photo_key("fotos/x/def456.jpg") == "fotos/x/def456.jpg"
+
+    base = "/artists/vintage-culture"
+    png = bytes([137]) + b"PNG" + bytes([13, 10, 26, 10]) + b"0" * 32
+    ev = client.post(f"{base}/manage/events", headers=club_admin, json={"date": "2020-02-05", "city": "Passado 2"}).json()
+    ag = client.post(f"{base}/manage/agencies", headers=club_admin, json={"name": "Agência Passado 2"}).json()
+    pkg = client.post(
+        f"{base}/manage/packages", headers=club_admin,
+        json={"eventId": ev["id"], "agencyId": ag["id"], "name": "Caravana", "items": [{"kind": "photo", "label": "Pista + Photo Finder", "priceCents": 29000}]},
+    ).json()
+    assert client.post(f"{base}/events/{ev['id']}/purchases", headers=fan, json={"packageId": pkg["id"], "item": 0}).status_code == 201
+    st = client.get(f"{base}/events/{ev['id']}/photo-finder", headers=fan).json()
+    assert st["eligible"] is True and st["photos"] == 0  # não precisa de fotos enviadas ao show
+    res = client.post(f"{base}/events/{ev['id']}/photo-finder/search", headers=fan, files={"selfie": ("eu.png", png, "image/png")}, data={"consent": "true"})
+    assert res.status_code == 200, res.text
+    urls = [m["src"] for m in res.json()["matches"]]
+    assert urls == ["https://s3.example/photos/original/abc123.jpg?assinado=1", "https://s3.example/fotos/x/def456.jpg?assinado=1"]
+
+
 def test_post_do_fa_com_texto_e_foto(client, fan):
     base = "/artists/vintage-culture"
     png = b"\x89PNG\r\n\x1a\n" + b"0" * 32
