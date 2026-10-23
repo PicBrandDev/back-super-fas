@@ -37,6 +37,7 @@ class Settings(BaseSettings):
     # Chaves da AWS. Se vazias, o boto3 procura sozinho (variáveis de ambiente, ~/.aws/credentials ou o papel da máquina).
     aws_access_key_id: str = ""
     aws_secret_access_key: str = ""
+    demo_photo_ticket: bool = False  # demonstração: todo fã ganha, sozinho, o ingresso com Photo Finder dos shows passados
     rekognition_threshold: float = 90.0  # semelhança mínima (0-100) para contar como a mesma pessoa
     # Fotos já indexadas fora do Super Fãs: uma coleção do Rekognition com as fotos num bucket do S3. Com as duas
     # variáveis abaixo preenchidas, o Photo Finder procura a selfie nessa coleção e devolve links temporários do S3.

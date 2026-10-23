@@ -342,6 +342,9 @@ def buy_ticket(event_id: str, body: PurchaseIn, artist: FanArtist, user: Current
 @router.get("/artists/{slug}/me/tickets", response_model=list[MyTicketOut])
 def my_tickets(artist: FanArtist, user: CurrentUser, db: DB):
     """Os ingressos que o fã comprou neste ambiente, dos shows mais próximos para os mais antigos."""
+    from ..demo import ensure_photo_tickets
+
+    ensure_photo_tickets(db, artist, user)
     q = select(m.TicketPurchase).where(m.TicketPurchase.artist_id == artist.id, m.TicketPurchase.user_id == user.id)
     rows = list(db.scalars(q))
     rows.sort(key=lambda t: (t.event.date, t.created_at))

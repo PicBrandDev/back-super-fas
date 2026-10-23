@@ -127,6 +127,9 @@ def delete_photo(event_id: str, photo_id: str, artist: ManagedArtist, db: DB):
 
 def _eligibility(db, artist: m.Artist, user: m.User, e: m.Event) -> str | None:
     """None quando o fã pode buscar; senão, o motivo (em português)."""
+    from ..demo import ensure_photo_tickets
+
+    ensure_photo_tickets(db, artist, user)
     if is_env_admin(db, user, artist):
         return None
     if e.date >= date.today():

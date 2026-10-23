@@ -551,6 +551,21 @@ def test_photo_finder_com_colecao_e_bucket_configurados(client, club_admin, fan,
     assert urls == ["https://s3.example/photos/original/abc123.jpg?assinado=1", "https://s3.example/fotos/x/def456.jpg?assinado=1"]
 
 
+def test_ingresso_com_photo_finder_automatico_na_demonstracao(client, club_admin, fan, monkeypatch):
+    from app.config import get_settings
+
+    base = "/artists/vintage-culture"
+    client.post(f"{base}/manage/events", headers=club_admin, json={"date": "2019-03-05", "city": "Show Antigo"})
+    antes = client.get(f"{base}/me/tickets", headers=fan).json()
+    n_antes = len([t for t in antes if t["kind"] == "photo"])
+    monkeypatch.setattr(get_settings(), "demo_photo_ticket", True)
+    depois = client.get(f"{base}/me/tickets", headers=fan).json()
+    fotos = [t for t in depois if t["kind"] == "photo"]
+    assert len(fotos) > n_antes
+    # rodar de novo não duplica
+    assert len([t for t in client.get(f"{base}/me/tickets", headers=fan).json() if t["kind"] == "photo"]) == len(fotos)
+
+
 def test_post_do_fa_com_texto_e_foto(client, fan):
     base = "/artists/vintage-culture"
     png = b"\x89PNG\r\n\x1a\n" + b"0" * 32
