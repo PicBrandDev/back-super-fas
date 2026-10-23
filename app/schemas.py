@@ -452,6 +452,25 @@ class HomeAdOut(Camel):
     url: str
 
 
+class InAppAdOut(Camel):
+    id: str
+    sponsor: str
+    title: str
+    text: str
+    cta: str
+    url: str
+    image_url: str | None = None
+    video_url: str | None = None
+    min_seconds: int | None = None  # só no vídeo antes do giro
+
+
+class InAppAdsOut(Camel):
+    entry: InAppAdOut | None = None  # modal ao abrir o app (vitrine "entrada")
+    pickap_video: InAppAdOut | None = None  # vídeo obrigatório antes do giro ("pickap_video")
+    pickap_claim: InAppAdOut | None = None  # modal ao ganhar um prêmio ("pickap_resgate")
+    feed: InAppAdOut | None = None  # post pequeno entre os cartazes do Mural ("mural")
+
+
 class PerkOut(Camel):
     title: str
     sub: str
@@ -574,6 +593,7 @@ class CampaignOut(Camel):
     start: date | None = None
     end: date | None = None
     art_url: str | None = None  # caminho relativo à API (ex.: /uploads/abc.png)
+    video_url: str | None = None  # link http(s) ou caminho relativo à API (ex.: /uploads/abc.mp4)
     target_city: str = ""  # onde o anúncio aparece (vazio = qualquer lugar)
     target_radius_km: int = 0  # raio em km ao redor da cidade (0 = o país todo)
     goal_views: int = 0
@@ -609,6 +629,7 @@ def campaign_out(c: m.Campaign) -> CampaignOut:
         start=c.start,
         end=c.end,
         art_url=c.art_path or None,
+        video_url=c.video_url or None,
         target_city=c.target_city,
         target_radius_km=c.target_radius_km,
         goal_views=c.goal_views,

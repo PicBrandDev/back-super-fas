@@ -17,6 +17,8 @@ from ..schemas import (
     FanPostIn,
     GiftOut,
     HomeAdOut,
+    InAppAdOut,
+    InAppAdsOut,
     MyTicketOut,
     PackageItemOut,
     PackageOut,
@@ -385,14 +387,52 @@ def list_tracks(artist: FanArtist, db: DB):
 
 @router.get("/artists/{slug}/ads/home", response_model=HomeAdOut | None)
 def home_ad(artist: FanArtist, db: DB):
-    slot = db.scalar(select(m.AdSlot).where(m.AdSlot.artist_id == artist.id, m.AdSlot.key == "home"))
+    c = live_campaign(db, artist, "home")
+    if not c:
+        return None
+    return HomeAdOut(sponsor=c.brand or c.sponsor.brand, title=c.title, text=c.text, cta=c.cta or "Saiba mais", url=c.url or "#")
+
+
+def live_campaign(db: Session, artist: m.Artist, key: str) -> m.Campaign | None:
+    """A campanha aprovada e no ar da vitrine (a mais antiga primeiro), se a vitrine estiver ligada."""
+    slot = db.scalar(select(m.AdSlot).where(m.AdSlot.artist_id == artist.id, m.AdSlot.key == key))
     if not slot or not slot.active:
         return None
     q = select(m.Campaign).where(m.Campaign.slot_id == slot.id, m.Campaign.status == "approved")
-    for c in db.scalars(q.order_by(m.Campaign.created_at)):
-        if campaign_status(c) == "live":
-            return HomeAdOut(sponsor=c.brand or c.sponsor.brand, title=c.title, text=c.text, cta=c.cta or "Saiba mais", url=c.url or "#")
-    return None
+    return next((c for c in db.scalars(q.order_by(m.Campaign.created_at)) if campaign_status(c) == "live"), None)
+
+
+# lugar do anúncio no app -> vitrine
+IN_APP_SLOTS = {"entry": "entrada", "pickap_video": "pickap_video", "pickap_claim": "pickap_resgate", "feed": "mural"}
+PICKAP_VIDEO_MIN_SECONDS = 30
+
+
+@router.get("/artists/{slug}/ads/in-app", response_model=InAppAdsOut)
+def in_app_ads(artist: FanArtist, db: DB):
+    """Os anúncios dentro do app: entrada (modal após o login), vídeo antes do giro, resgate do prêmio e post no Mural.
+
+    Cada um é a campanha aprovada e no ar da vitrine correspondente, ou null. Com o módulo de anúncios
+    desligado no ambiente, tudo vem null.
+    """
+    if (artist.modules or {}).get("ads", True) is False:
+        return InAppAdsOut()
+    out = {}
+    for place, key in IN_APP_SLOTS.items():
+        c = live_campaign(db, artist, key)
+        if not c:
+            continue
+        out[place] = InAppAdOut(
+            id=c.id,
+            sponsor=c.brand or c.sponsor.brand,
+            title=c.title,
+            text=c.text,
+            cta=c.cta or "Saiba mais",
+            url=c.url or "#",
+            image_url=c.art_path or None,
+            video_url=c.video_url or None,
+            min_seconds=PICKAP_VIDEO_MIN_SECONDS if place == "pickap_video" else None,
+        )
+    return InAppAdsOut(**out)
 
 
 @router.get("/artists/{slug}/ad-slots", response_model=list[AdSlotOut])

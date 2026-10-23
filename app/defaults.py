@@ -34,14 +34,22 @@ BLANK_THEME = {
 
 MODULES = ("mural", "agenda", "pickap", "loja", "drops", "photo", "ads")
 
+# Texto antigo do "onde" da vitrine do Mural (a subida da API troca pelo novo se ninguém editou).
+OLD_MURAL_WHERE = "Mural · aba Galera, a cada [n] posts"
+MURAL_WHERE = "Mural · post pequeno entre os cartazes, a cada 4"
+
 # key, nome, onde, formato, diagrama (top, altura)
 DEFAULT_AD_SLOTS = [
     ("home", "Card da Home", "Início · logo acima do Drop News", "Arte + título + texto + link", 20, 16),
-    ("mural", "Post patrocinado no Mural", "Mural · aba Galera, a cada [n] posts", "Post com imagem + link", 28, 24),
+    ("mural", "Post patrocinado no Mural", MURAL_WHERE, "Post com imagem + link", 28, 24),
     ("evento", "Patrocínio de evento", "Tela do evento · faixa acima de Onde comprar", "Logo + texto + link", 58, 12),
     ("pickap", "Prêmio patrocinado no PicKap", "Roleta · uma fatia com a marca e o prêmio", "Logo + prêmio ou cupom", 18, 44),
     ("loja", "Banner da Loja", "Loja · topo da página", "Banner 16:9 + link", 16, 20),
     ("drops", "“Apresenta” no Drops Hits", "Player de prévias · “[Marca] apresenta”", "Logo", 22, 10),
+    # Anúncios dentro do app (GET /artists/{slug}/ads/in-app)
+    ("entrada", "Anúncio de entrada", "Ao abrir o app · modal logo após o login", "Arte + título + texto + link", 22, 52),
+    ("pickap_video", "Vídeo antes do giro", "Roleta · vídeo de 30 s obrigatório antes de girar", "Vídeo até 60 s (MP4) + título + link", 10, 76),
+    ("pickap_resgate", "Anúncio no resgate do prêmio", "Roleta · modal quando o fã ganha um prêmio", "Arte + título + texto + link", 26, 44),
 ]
 
 NEW_CLUB_COLORS = ["#2F5BD3", "#1F7A4D", "#7A3FB8", "#14171C"]

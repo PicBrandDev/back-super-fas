@@ -3,6 +3,7 @@
 from datetime import date
 from pathlib import Path
 from typing import Annotated
+from urllib.parse import urlparse
 
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile, status
 from sqlalchemy import select
@@ -17,6 +18,27 @@ router = APIRouter(prefix="/sponsor", tags=["Patrocinador"])
 
 ART_TYPES = {"image/jpeg": ".jpg", "image/png": ".png"}
 MAX_ART_BYTES = 5 * 1024 * 1024
+VIDEO_TYPES = {"video/mp4": ".mp4", "video/webm": ".webm"}
+MAX_VIDEO_BYTES = 50 * 1024 * 1024
+VIDEO_SLOTS = {"pickap_video"}  # vitrines que exigem vídeo (link ou arquivo)
+
+
+def _save_upload(data: bytes, ext: str) -> str:
+    folder = Path(get_settings().upload_dir)
+    folder.mkdir(parents=True, exist_ok=True)
+    name = f"{new_id()}{ext}"
+    (folder / name).write_bytes(data)
+    return f"/uploads/{name}"
+
+
+def _check_video_url(v: str) -> str:
+    v = v.strip()
+    if not v:
+        return ""
+    u = urlparse(v)
+    if u.scheme not in ("http", "https") or not u.netloc or any(c.isspace() for c in v):
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "O link do vídeo precisa começar com http:// ou https://.")
+    return v
 
 
 @router.get("/me", response_model=SponsorOut)
@@ -59,11 +81,14 @@ async def create_campaign(
     goal_views: Annotated[int, Form(ge=0, le=100_000_000)] = 0,
     goal_clicks: Annotated[int, Form(ge=0, le=100_000_000)] = 0,
     budget_cents: Annotated[int, Form(ge=0, le=1_000_000_000)] = 0,
+    video_url: Annotated[str, Form(max_length=500)] = "",
     art: Annotated[UploadFile | None, File()] = None,
+    video: Annotated[UploadFile | None, File()] = None,
 ):
     """Envia uma campanha para aprovação (multipart/form-data, a arte é opcional).
 
     `club` é o cantor; `slot` é a vitrine (do ambiente, ex. "home", ou de um fã clube, ex. "fa-sp.home").
+    Vídeo: `video_url` (link http/https) ou o arquivo `video` (MP4/WebM, até 50 MB); obrigatório na vitrine "pickap_video".
     """
     artist = get_artist_or_404(db, club)
     if artist.status != "active":
@@ -85,11 +110,20 @@ async def create_campaign(
         data = await art.read()
         if len(data) > MAX_ART_BYTES:
             raise HTTPException(status.HTTP_400_BAD_REQUEST, "A arte pode ter no máximo 5 MB.")
-        folder = Path(get_settings().upload_dir)
-        folder.mkdir(parents=True, exist_ok=True)
-        name = f"{new_id()}{ext}"
-        (folder / name).write_bytes(data)
-        art_path = f"/uploads/{name}"
+        art_path = _save_upload(data, ext)
+
+    video_path = _check_video_url(video_url)
+    has_video_file = bool(video and video.filename)
+    if ad_slot.key in VIDEO_SLOTS and not video_path and not has_video_file:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Esta vitrine é de vídeo: envie o arquivo do vídeo ou o link dele.")
+    if video and has_video_file:
+        vext = VIDEO_TYPES.get(video.content_type or "")
+        if not vext:
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, "Envie o vídeo em MP4 ou WebM.")
+        vdata = await video.read(MAX_VIDEO_BYTES + 1)
+        if len(vdata) > MAX_VIDEO_BYTES:
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, "O vídeo pode ter no máximo 50 MB.")
+        video_path = _save_upload(vdata, vext)
 
     sponsor = db.get(m.Sponsor, user.sponsor_id)
     assert sponsor is not None
@@ -104,6 +138,7 @@ async def create_campaign(
         cta=cta.strip(),
         url=link.strip(),
         art_path=art_path,
+        video_url=video_path,
         target_city=city.strip(),
         target_radius_km=radius_km if city.strip() else 0,
         goal_views=goal_views,
