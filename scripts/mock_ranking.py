@@ -51,9 +51,9 @@ NAMES = ["Vitor Hora", "Isabela Oliveira", "Marina Esteves", "Zeca Esteves", "Di
 
 
 def ensure_fans(db, artist, rnd, now, domain: str = "exemplo.com") -> int:
-    """Se o ambiente ainda não tem fãs de exemplo (ex.: servidor novo), cria alguns nos fã clubes que existem."""
+    """Se o ambiente tem poucos fãs de exemplo (ex.: servidor novo), cria alguns nos fã clubes que existem."""
     have = [u for u in db.scalars(select(m.User).where(m.User.role == m.ROLE_FAN)) if u.email.endswith("@" + domain)]
-    if have:
+    if len(have) >= 12:  # já tem fãs de exemplo suficientes
         return 0
     clubs = list(db.scalars(select(m.FanClub).where(m.FanClub.artist_id == artist.id)))
     if not clubs:
@@ -120,6 +120,9 @@ def main() -> None:
             n_users += 1
             n_shares += total
         db.commit()
+        total = len(fans)
+        with_photo = sum(1 for u in fans if u.avatar_path)
+        print(f"fãs de exemplo: {total}, com foto de perfil: {with_photo} (pasta de fotos: {upload_dir})")
         print(f"+ {n_shares} compartilhamentos confirmados para {n_users} fãs de exemplo")
 
 
