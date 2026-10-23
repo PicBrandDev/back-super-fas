@@ -75,6 +75,47 @@ def ensure_fans(db, artist, rnd, now, domain: str = "exemplo.com") -> int:
     return len(NAMES)
 
 
+FIRST = ["Rafaela", "Thiago", "Larissa", "Bruno", "Camila", "Felipe", "Yasmin", "Gustavo", "Beatriz", "Leonardo", "Amanda", "Rodrigo", "Letícia", "Vinícius", "Natália", "Matheus"]
+LAST = ["Souza", "Lima", "Ferreira", "Martins", "Araújo", "Ribeiro", "Carvalho", "Gomes", "Rocha", "Dias", "Nascimento", "Teixeira", "Moraes", "Cunha", "Pinto", "Barbosa"]
+
+
+def _plain(text: str) -> str:
+    for a, b in (("ã", "a"), ("í", "i"), ("é", "e"), ("ó", "o"), ("á", "a"), ("ç", "c"), ("ú", "u"), ("â", "a"), ("ê", "e"), ("ô", "o")):
+        text = text.replace(a, b)
+    return text.lower()
+
+
+def fill_clubs(db, artist, rnd, now, per_club: int = 12, pool_min: int = 36, domain: str = "exemplo.com") -> list:
+    """Deixa todo fã clube (inclusive o oficial) com pelo menos `per_club` fãs de exemplo, para o ranking de cada um vir cheio."""
+    fans = [u for u in db.scalars(select(m.User).where(m.User.role == m.ROLE_FAN)) if u.email.endswith("@" + domain)]
+    pw = hash_password("senha123")
+    n = 0
+    while len(fans) < pool_min:
+        first, last = rnd.choice(FIRST), rnd.choice(LAST)
+        u = m.User(
+            email=f"{_plain(first)}.{_plain(last)}.r{len(fans)}{rnd.randint(10, 99)}@{domain}", name=f"{first} {last}",
+            handle=f"@{_plain(first)}.{_plain(last)}", password_hash=pw, role=m.ROLE_FAN,
+        )
+        db.add(u)
+        db.flush()
+        db.add(m.Fandom(artist_id=artist.id, user_id=u.id, created_at=now - timedelta(days=rnd.randint(1, 30))))
+        fans.append(u)
+        n += 1
+    added = 0
+    for club in db.scalars(select(m.FanClub).where(m.FanClub.artist_id == artist.id)):
+        member_ids = set(db.scalars(select(m.ClubMember.user_id).where(m.ClubMember.club_id == club.id)))
+        have = [u for u in fans if u.id in member_ids]
+        free = [u for u in fans if u.id not in member_ids]
+        rnd.shuffle(free)
+        for u in free[: max(0, per_club - len(have))]:
+            db.add(m.ClubMember(club_id=club.id, user_id=u.id, created_at=now - timedelta(days=rnd.randint(1, 30))))
+            added += 1
+    db.flush()
+    if n or added:
+        print(f"+ {n} fãs de exemplo novos e {added} entradas em fã clubes (mínimo de {per_club} por fã clube)")
+    return fans
+
+
 def main() -> None:
     rnd = random.Random(11)
     now = datetime.now(timezone.utc)
@@ -85,7 +126,7 @@ def main() -> None:
         made = ensure_fans(db, artist, rnd, now)
         if made:
             print(f"+ {made} fãs de exemplo criados nos fã clubes")
-        fans = [u for u in db.scalars(select(m.User).where(m.User.role == m.ROLE_FAN)) if u.email.endswith("@exemplo.com")]
+        fans = fill_clubs(db, artist, rnd, now)
         upload_dir = __import__("pathlib").Path(get_settings().upload_dir)
         upload_dir.mkdir(parents=True, exist_ok=True)
         for u in fans:
@@ -103,7 +144,7 @@ def main() -> None:
             instagram.share_code(db, f)
             # Poucos fãs com muitos compartilhamentos e muitos com poucos (cauda longa); alguns sem nenhum.
             total = max(0, int(rnd.paretovariate(1.4)) - 1)
-            total = min(total, 25) if rnd.random() < 0.75 else 0
+            total = max(2, min(total, 25))  # todo fã de exemplo aparece no ranking
             for i in range(total):
                 when = now - timedelta(days=rnd.randint(0, 20), hours=rnd.randint(0, 23))
                 db.add(

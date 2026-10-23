@@ -13,6 +13,17 @@ from .config import get_settings
 log = logging.getLogger("superfas.rekognition")
 
 
+def aws_kwargs() -> dict:
+    """Região e, se estiverem na configuração (.env), as chaves da AWS. O .env não vira variável de ambiente,
+    então sem isto o boto3 usaria as credenciais de outra conta que estiverem no computador."""
+    cfg = get_settings()
+    kw: dict = {"region_name": cfg.aws_region}
+    if cfg.aws_access_key_id and cfg.aws_secret_access_key:
+        kw["aws_access_key_id"] = cfg.aws_access_key_id
+        kw["aws_secret_access_key"] = cfg.aws_secret_access_key
+    return kw
+
+
 def enabled() -> bool:
     return get_settings().rekognition_enabled
 
@@ -34,7 +45,7 @@ def _client():
         import boto3
     except ImportError:  # pragma: no cover
         raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, "A biblioteca da AWS (boto3) não está instalada.")
-    return boto3.client("rekognition", region_name=get_settings().aws_region)
+    return boto3.client("rekognition", **aws_kwargs())
 
 
 def _aws_error(exc: Exception) -> HTTPException:
@@ -145,7 +156,7 @@ def presigned_photos(external_ids: list[str]) -> list[tuple[str, str]]:
     from botocore.exceptions import ClientError
 
     cfg = get_settings()
-    s3 = boto3.client("s3", region_name=cfg.aws_region)
+    s3 = boto3.client("s3", **aws_kwargs())
     out: list[tuple[str, str]] = []
     for ext in external_ids:
         key = photo_key(ext)

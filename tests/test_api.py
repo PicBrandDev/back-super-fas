@@ -480,6 +480,7 @@ def test_photo_finder_com_rekognition_simulado(client, club_admin, fan, monkeypa
 
     indexed: dict[str, list[str]] = {}
     monkeypatch.setattr(rekognition, "enabled", lambda: True)
+    monkeypatch.setattr(rekognition, "shared_enabled", lambda: False)  # o .env local pode ter coleção e bucket
     monkeypatch.setattr(rekognition, "index_photo", lambda ev, pid, data: indexed.setdefault(pid, [f"face-{pid}"]))
     monkeypatch.setattr(rekognition, "delete_faces", lambda ev, ids: None)
     monkeypatch.setattr(rekognition, "search_selfie", lambda ev, data: list(indexed)[:1])
