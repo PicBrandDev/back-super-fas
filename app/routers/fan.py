@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 
 from .. import models as m
 from .. import coupons as coupon_lib
+from .. import rewards as rewards_lib
 from ..defaults import ADDON_LABELS
 from ..schemas import (
     AddonOut,
@@ -32,6 +33,7 @@ from ..schemas import (
     MyCouponOut,
     PurchaseIn,
     QuoteOut,
+    RewardOut,
     SpinCreditOut,
     SpinOut,
     SubscribeIn,
@@ -351,6 +353,12 @@ def quote_ticket(event_id: str, body: PurchaseIn, artist: FanArtist, user: Curre
         subtotal_cents=item["price_cents"], discount_cents=off, total_cents=total,
         coupon=coupon.code if coupon else "", coupon_label=coupon_lib.label(coupon) if coupon else "",
     )
+
+
+@router.get("/artists/{slug}/me/rewards", response_model=list[RewardOut])
+def my_rewards(artist: FanArtist, user: CurrentUser, db: DB):
+    """Os brindes que o fã ganhou na roleta, com o código e como retirar."""
+    return [rewards_lib.out(db, r) for r in rewards_lib.mine(db, artist, user)]
 
 
 @router.get("/artists/{slug}/me/coupons", response_model=list[MyCouponOut])

@@ -16,6 +16,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from .. import models as m
+from .. import rewards
 from ..defaults import CLUB_AD_SLOTS, MASTER_CLUB_SLUG, MAX_CLUB_STAFF
 from .. import spins
 from ..mailer import send_owner_invite
@@ -372,7 +373,7 @@ def club_prizes(db: Session, club: m.FanClub) -> list[m.Prize]:
 
 @router.get("/artists/{slug}/clubs/{club}/pickap/prizes", response_model=list[PrizeOut])
 def list_club_prizes(club: FanClubDep, db: DB):
-    return [PrizeOut(id=p.id, label=p.label, is_retry=p.is_retry or None) for p in club_prizes(db, club)]
+    return [PrizeOut(id=p.id, label=p.label, is_retry=p.is_retry or None, kind=p.kind) for p in club_prizes(db, club)]
 
 
 def spin_wheel(db: Session, club: m.FanClub, user: m.User, credit_id: str | None = None) -> SpinOut:
@@ -390,10 +391,12 @@ def spin_wheel(db: Session, club: m.FanClub, user: m.User, credit_id: str | None
     if prize.is_retry:
         spins.grant(db, f, spins.RETRY)
     f.luck_points += prize.points
+    reward = rewards.create_for(db, club, user, prize)
     spins.sync(db, f)
     db.commit()
     return SpinOut(
-        prize=PrizeOut(id=prize.id, label=prize.label, is_retry=prize.is_retry or None),
+        prize=PrizeOut(id=prize.id, label=prize.label, is_retry=prize.is_retry or None, kind=prize.kind),
+        reward=rewards.out(db, reward) if reward else None,
         spins_left=f.spins,
         luck_points=f.luck_points,
         credits=spins.out(db, f),

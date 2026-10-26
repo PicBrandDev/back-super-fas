@@ -440,6 +440,30 @@ class Prize(Base):
     is_retry: Mapped[bool] = mapped_column(Boolean, default=False)
     points: Mapped[int] = mapped_column(Integer, default=0)  # pontos da sorte que a fatia dá
     position: Mapped[int] = mapped_column(Integer, default=0)
+    # "" (brinde comum) | "none" (não foi dessa vez) | "retry" | "coupon" (cupom de desconto no ingresso)
+    # | "ticket" (ingresso unitário de pista) | "pickup" (retirar na lojinha, ex.: camiseta, boné)
+    kind: Mapped[str] = mapped_column(String(12), default="")
+    percent: Mapped[int] = mapped_column(Integer, default=0)  # desconto do cupom (kind="coupon")
+    instructions: Mapped[str] = mapped_column(String(200), default="")  # como retirar (se vazio, usa o texto padrão do tipo)
+
+
+class Reward(Base):
+    """Brinde que o fã ganhou na roleta: guarda o código e como retirar (Meus brindes)."""
+
+    __tablename__ = "rewards"
+
+    id: Mapped[str] = mapped_column(String(20), primary_key=True, default=new_id)
+    artist_id: Mapped[str] = mapped_column(ForeignKey("artists.id", ondelete="CASCADE"), index=True)
+    club_id: Mapped[str | None] = mapped_column(ForeignKey("fan_clubs.id", ondelete="SET NULL"), nullable=True)
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    label: Mapped[str] = mapped_column(String(60))
+    kind: Mapped[str] = mapped_column(String(12), default="pickup")  # coupon | ticket | pickup | "" (comum)
+    code: Mapped[str] = mapped_column(String(12), index=True)  # código para retirar (ex.: BR-7K2M9)
+    instructions: Mapped[str] = mapped_column(String(300), default="")
+    coupon_code: Mapped[str] = mapped_column(String(30), default="")  # cupom gerado (kind="coupon")
+    expires_on: Mapped[date | None] = mapped_column(Date, nullable=True)
+    redeemed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
 
 
 class Product(Base):

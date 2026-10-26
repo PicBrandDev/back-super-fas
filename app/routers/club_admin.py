@@ -9,7 +9,7 @@ O conteúdo segue o padrão:
     DELETE /artists/{slug}/manage/{recurso}/{id}
 """
 
-from datetime import date
+from datetime import date, datetime, timezone
 from typing import Any, Callable, Literal, Optional
 
 from fastapi import APIRouter, HTTPException, status
@@ -18,7 +18,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from .. import models as m
-from ..schemas import Camel, MemberOut, br_date
+from ..schemas import Camel, MemberOut, RewardOut, br_date
 from ..security import DB, ManagedArtist
 
 router = APIRouter(tags=["Administração do ambiente"])
@@ -127,6 +127,9 @@ class PrizeIn(Camel):
     is_retry: bool = False
     points: int = Field(default=0, ge=0)
     position: int = 0
+    kind: Literal["", "none", "retry", "coupon", "ticket", "pickup"] = ""
+    percent: int = Field(default=0, ge=0, le=100)
+    instructions: str = Field(default="", max_length=200)
 
 
 class ProductIn(Camel):
@@ -314,3 +317,23 @@ def cancel_member(member_id: str, artist: ManagedArtist, db: DB):
     f.member_status = "canceled"
     db.commit()
     return {"ok": True}
+
+
+# ---------------------------------------------------------------- brindes da roleta (retirada)
+
+
+@router.post("/artists/{slug}/manage/rewards/{code}/redeem", response_model=RewardOut, tags=["Brindes da roleta"])
+def redeem_reward(code: str, artist: ManagedArtist, db: DB):
+    """A equipe dá baixa no brinde quando o fã retira (lojinha ou bilheteria) com o código."""
+    from .. import rewards
+
+    r = db.scalar(select(m.Reward).where(m.Reward.artist_id == artist.id, m.Reward.code == code.strip().upper()))
+    if not r or r.kind == "coupon":
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Brinde não encontrado para retirada.")
+    if r.redeemed_at:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Este brinde já foi retirado.")
+    if rewards.status_of(db, r) == "expired":
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "O prazo para retirar este brinde acabou.")
+    r.redeemed_at = datetime.now(timezone.utc)
+    db.commit()
+    return rewards.out(db, r)

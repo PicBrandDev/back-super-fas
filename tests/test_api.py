@@ -630,6 +630,59 @@ def test_cupom_de_desconto_na_compra(client, club_admin, fan, monkeypatch):
     assert client.post(q, headers=fan, json={**body, "coupon": "VINTAGE20"}).status_code == 400
 
 
+def test_brindes_da_roleta_guardados_em_meus_brindes(client, club_admin, fan):
+    base = "/artists/vintage-culture"
+    club = f"{base}/clubs/oficial"
+    # roleta só com brindes de cada tipo: sai o sorteado, e o servidor guarda o brinde com código e instruções
+    atuais = client.get(f"{club}/manage/prizes", headers=club_admin).json()
+    for p in atuais:
+        client.delete(f"{club}/manage/prizes/{p['id']}", headers=club_admin)
+
+    def monta(label, kind, percent=0):
+        r = client.post(f"{club}/manage/prizes", headers=club_admin, json={"label": label, "kind": kind, "percent": percent})
+        assert r.status_code == 201, r.text
+        return r.json()["id"]
+
+    def gira():
+        creditos = [g for g in client.get(f"{base}/pickap/spins", headers=fan).json() if not g["used"]]
+        assert creditos, "o fã precisa de um giro"
+        return client.post(f"{club}/pickap/spin", headers=fan, json={"creditId": creditos[0]["id"]})
+
+    def apaga_todas():
+        for p in client.get(f"{club}/manage/prizes", headers=club_admin).json():
+            client.delete(f"{club}/manage/prizes/{p['id']}", headers=club_admin)
+
+    antes = len(client.get(f"{base}/me/rewards", headers=fan).json())  # outros testes já giraram com este fã
+    monta("Não foi dessa vez", "none")
+    r = gira()
+    assert r.status_code == 200 and r.json()["prize"]["kind"] == "none" and r.json()["reward"] is None
+    assert len(client.get(f"{base}/me/rewards", headers=fan).json()) == antes
+
+    apaga_todas()
+    monta("20% no ingresso", "coupon", 20)
+    r = gira().json()
+    assert r["prize"]["kind"] == "coupon" and r["reward"]["kind"] == "coupon" and r["reward"]["couponCode"].startswith("ROLETA20-")
+    cupom = r["reward"]["couponCode"]
+    assert cupom in [c["code"] for c in client.get(f"{base}/me/coupons", headers=fan).json()]  # já aparece em Meus cupons
+
+    apaga_todas()
+    monta("Boné Vintage", "pickup")
+    r = gira().json()
+    rw = r["reward"]
+    assert rw["kind"] == "pickup" and rw["status"] == "available" and "lojinha" in rw["instructions"] and len(rw["code"]) == 5
+
+    meus = client.get(f"{base}/me/rewards", headers=fan).json()
+    assert [b["label"] for b in meus][:2] == ["Boné Vintage", "20% no ingresso"] and len(meus) == antes + 2
+
+    # a equipe dá baixa na retirada; não retira duas vezes e o fã não pode dar baixa
+    assert client.post(f"{base}/manage/rewards/{rw['code']}/redeem", headers=fan).status_code == 403
+    ok = client.post(f"{base}/manage/rewards/{rw['code'].lower()}/redeem", headers=club_admin)
+    assert ok.status_code == 200 and ok.json()["status"] == "redeemed"
+    assert client.post(f"{base}/manage/rewards/{rw['code']}/redeem", headers=club_admin).status_code == 400
+    assert client.post(f"{base}/manage/rewards/ZZZZZ/redeem", headers=club_admin).status_code == 404
+    assert client.get(f"{base}/me/rewards", headers=fan).json()[0]["status"] == "redeemed"
+
+
 def test_post_do_fa_com_texto_e_foto(client, fan):
     base = "/artists/vintage-culture"
     png = b"\x89PNG\r\n\x1a\n" + b"0" * 32

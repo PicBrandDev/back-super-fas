@@ -45,7 +45,7 @@ NEW_COLUMNS = {
     "events": [("ticketing_name", "VARCHAR(60) DEFAULT ''"), ("ticketing_url", "VARCHAR(500) DEFAULT ''")],
     "fan_clubs": [("avatar_path", "VARCHAR(255) DEFAULT ''")],
     "posts": [("club_id", "VARCHAR(20)"), ("views", "INTEGER DEFAULT 0"), ("image_path", "VARCHAR(255) DEFAULT ''")],
-    "prizes": [("club_id", "VARCHAR(20)")],
+    "prizes": [("club_id", "VARCHAR(20)"), ("kind", "VARCHAR(12) DEFAULT ''"), ("percent", "INTEGER DEFAULT 0"), ("instructions", "VARCHAR(200) DEFAULT ''")],
     "ad_slots": [("club_id", "VARCHAR(20)")],
 }
 

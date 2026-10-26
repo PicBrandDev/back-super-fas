@@ -89,7 +89,7 @@ def create_fan_club(body: FanClubCreate, _: MasterUser, db: DB):
             if vc_master:
                 for p in db.scalars(select(m.Prize).where(m.Prize.club_id == vc_master.id)):
                     db.add(
-                        m.Prize(artist_id=artist.id, club_id=master.id, label=p.label, is_retry=p.is_retry, points=p.points, position=p.position)
+                        m.Prize(artist_id=artist.id, club_id=master.id, label=p.label, is_retry=p.is_retry, points=p.points, position=p.position, kind=p.kind, percent=p.percent, instructions=p.instructions)
                     )
 
     # O primeiro convidado é o dono do fã clube master (o admin master do cantor); os outros, ajudantes.

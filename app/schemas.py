@@ -432,6 +432,19 @@ class PrizeOut(Camel):
     id: str
     label: str
     is_retry: bool | None = None
+    kind: str = ""  # "" | none | retry | coupon | ticket | pickup
+
+
+class RewardOut(Camel):
+    id: str
+    label: str
+    kind: str  # coupon | ticket | pickup | ""
+    code: str
+    instructions: str
+    coupon_code: str
+    status: Literal["available", "redeemed", "used", "expired"]
+    expires_on: date | None = None
+    won_at: str  # data em português
 
 
 class ProductOut(Camel):
@@ -559,6 +572,7 @@ class MyTicketOut(Camel):
 
 class SpinOut(Camel):
     prize: PrizeOut
+    reward: RewardOut | None = None  # o brinde guardado em Meus brindes (quando saiu um)
     spins_left: int
     credits: list[SpinCreditOut] = []
     luck_points: int
