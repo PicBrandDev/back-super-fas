@@ -82,6 +82,18 @@ class RegisterIn(Camel):
     artist: str | None = None  # slug do fã clube escolhido no cadastro
 
 
+class AddressIn(Camel):
+    """Endereço de quem está logado (contas antigas sem endereço completam por aqui; a revenda exige endereço completo)."""
+
+    zip_code: str = Field(pattern=r"^\d{5}-?\d{3}$")
+    street: str = Field(min_length=2, max_length=160)
+    number: str = Field(min_length=1, max_length=20)
+    complement: str = Field(default="", max_length=80)
+    neighborhood: str = Field(min_length=2, max_length=80)
+    city: str = Field(min_length=2, max_length=80)
+    state: str = Field(pattern=r"^[A-Za-z]{2}$")  # UF
+
+
 class ChangePasswordIn(Camel):
     current_password: str
     new_password: str = Field(min_length=8, max_length=128)

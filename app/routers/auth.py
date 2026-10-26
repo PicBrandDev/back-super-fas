@@ -4,7 +4,7 @@ from fastapi import APIRouter, File, HTTPException, UploadFile, status
 from sqlalchemy import select
 
 from .. import models as m
-from ..schemas import ChangePasswordIn, LoginIn, ProfileOut, RegisterIn, SessionUser, TokenOut, profile_out, session_user
+from ..schemas import AddressIn, ChangePasswordIn, LoginIn, ProfileOut, RegisterIn, SessionUser, TokenOut, profile_out, session_user
 from ..security import DB, CurrentUser, create_token, hash_password, master_club, verify_password
 from ..uploads import save_image
 
@@ -71,6 +71,22 @@ def me(user: CurrentUser):
 @router.get("/profile", response_model=ProfileOut)
 def profile(user: CurrentUser):
     """Tudo do perfil de quem está logado: dados, endereço e foto."""
+    return profile_out(user)
+
+
+@router.put("/address", response_model=ProfileOut)
+def set_address(body: AddressIn, user: CurrentUser, db: DB):
+    """Grava o endereço de quem está logado (CEP, rua, número, complemento, bairro, cidade e UF)."""
+    zip_digits = body.zip_code.replace("-", "")
+    user.zip_code = f"{zip_digits[:5]}-{zip_digits[5:]}"
+    user.street = body.street.strip()
+    user.number = body.number.strip()
+    user.complement = body.complement.strip()
+    user.neighborhood = body.neighborhood.strip()
+    user.city = body.city.strip()
+    user.state = body.state.strip().upper()
+    db.commit()
+    db.refresh(user)
     return profile_out(user)
 
 

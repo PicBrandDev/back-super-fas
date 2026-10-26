@@ -63,7 +63,7 @@ class ReviewOut(Camel):
 
 
 class ReviewIn(Camel):
-    rating: int = Field(ge=1, le=5)
+    rating: int
     comment: str = Field(default="", max_length=500)
 
 
@@ -136,6 +136,8 @@ class MyListingOut(Camel):
 
 class OrderIn(Camel):
     qty: int = Field(ge=1, le=10)
+    # e-mail da conta do comprador na ticketeira (para onde o vendedor transfere); vazio = o e-mail do cadastro
+    transfer_to: str = Field(default="", max_length=160)
 
 
 class DisputeIn(Camel):
@@ -194,6 +196,9 @@ class OrderOut(Camel):
     can_dispute: bool
     can_reply_dispute: bool
     can_review: bool
+    created_at: datetime | None = None  # quando a reserva foi feita (primeira etapa da linha do tempo)
+    transfer_to: str | None = None  # conta do comprador na ticketeira: o comprador vê sempre; o vendedor só depois do pagamento
+    seller_phone: str | None = None  # telefone do vendedor (só dígitos, com DDD, sem +55): só o comprador, e só depois do pagamento
     payment: dict | None = None  # provedor falso: {"provider": "fake"}; o gateway real traz os dados da cobrança
 
 

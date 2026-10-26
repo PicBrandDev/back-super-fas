@@ -30,6 +30,7 @@ from ..resale.schemas import (
     SellerOut,
     TicketTypeOut,
 )
+from ..schemas import br_date
 from ..security import DB, CurrentUser, MasterUser
 from .fan import FanArtist
 
@@ -124,6 +125,8 @@ def event_listings(event_id: str, artist: FanArtist, db: DB, ticketId: str | Non
 @router.get(f"{base}/listings/{{listing_id}}", response_model=ListingOut)
 def listing_detail(listing_id: str, artist: FanArtist, db: DB):
     li = listings.get_listing(db, artist, listing_id)
+    orders.sweep(db, listing_id=li.id)
+    db.refresh(li)
     e = db.get(m.Event, li.event_id)
     if li.status != L_LIVE or not access.is_open(db, e):
         raise not_found("Anúncio não encontrado.")
@@ -152,6 +155,7 @@ async def create_listing(
 @router.get(f"{base}/me/listings", response_model=list[MyListingOut])
 def my_listings(artist: FanArtist, user: CurrentUser, db: DB):
     orders.sweep(db, user_id=user.id)
+    orders.sweep(db, seller_id=user.id)
     q = select(Listing).where(Listing.artist_id == artist.id, Listing.seller_id == user.id).order_by(Listing.created_at.desc())
     return [views.my_listing_out(db, li) for li in db.scalars(q)]
 
@@ -177,7 +181,7 @@ def reserve(listing_id: str, body: OrderIn, artist: FanArtist, user: CurrentUser
     """Reserva a quantidade por 15 minutos. O header Idempotency-Key evita pedido em dobro se a requisição se repetir."""
     if idempotency_key is not None and not 8 <= len(idempotency_key) <= 80:
         raise ResaleError("IDEMPOTENCY_KEY", "A Idempotency-Key precisa ter de 8 a 80 caracteres.")
-    o = orders.reserve(db, artist, user, listing_id, body.qty, idempotency_key)
+    o = orders.reserve(db, artist, user, listing_id, body.qty, idempotency_key, body.transfer_to)
     return views.order_out(db, artist, o, user)
 
 
@@ -241,7 +245,7 @@ def order_dispute_reply(order_id: str, body: ReplyIn, artist: FanArtist, user: C
 @router.post(f"{base}/orders/{{order_id}}/review", response_model=ReviewOut, status_code=201)
 def order_review(order_id: str, body: ReviewIn, artist: FanArtist, user: CurrentUser, db: DB):
     r = orders.review(db, user, _mine(db, artist, user, order_id), body.rating, body.comment)
-    return ReviewOut(id=r.id, rating=r.rating, comment=r.comment, created_at="", buyer_name=trust.short_name(user))
+    return ReviewOut(id=r.id, rating=r.rating, comment=r.comment, created_at=br_date(r.created_at.date()), buyer_name=trust.short_name(user))
 
 
 # ---------------------------------------------------------------- vendedor

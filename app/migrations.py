@@ -49,6 +49,7 @@ NEW_COLUMNS = {
     "posts": [("club_id", "VARCHAR(20)"), ("views", "INTEGER DEFAULT 0"), ("image_path", "VARCHAR(255) DEFAULT ''")],
     "prizes": [("club_id", "VARCHAR(20)"), ("kind", "VARCHAR(12) DEFAULT ''"), ("percent", "INTEGER DEFAULT 0"), ("instructions", "VARCHAR(200) DEFAULT ''")],
     "ad_slots": [("club_id", "VARCHAR(20)")],
+    "resale_orders": [("transfer_to_enc", "VARCHAR(600) DEFAULT ''")],
 }
 
 
