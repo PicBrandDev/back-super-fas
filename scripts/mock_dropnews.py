@@ -28,11 +28,11 @@ ARTIST = "vintage-culture"
 TARGET = 8
 
 NEW_POSTS = [
-    "Fanzone no ar! Prévias exclusivas, roleta do PicKap e fotos oficiais dos shows, tudo num lugar só.",
+    "Fanzone no ar! Prévias exclusivas, roleta do PicKup e fotos oficiais dos shows, tudo num lugar só.",
     "Próxima parada: São Paulo, 07 de novembro. Pacotes com transfer e selo no app já estão à venda.",
     "Fotos oficiais do show de Campinas liberadas. Mande uma selfie no Photo Finder e encontre as suas.",
     "Bastidores da turnê: soundcheck, estrada e muita história. Em breve, mais aqui no mural.",
-    "A roleta do PicKap tem prêmio novo: camiseta Tour 2026. Quem ganhar mostra aqui!",
+    "A roleta do PicKup tem prêmio novo: camiseta Tour 2026. Quem ganhar mostra aqui!",
     "Quem postou com a #EuSouUmSuperFaDoVintage esta semana subiu no ranking Fã Super. Confiram a lista.",
     "Vocês são o melhor público do Brasil. Sem exagero.",
     "Drop novo na área: Faixa inédita 01 já está no Drops Hits. Corre ouvir.",

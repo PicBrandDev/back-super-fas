@@ -92,7 +92,7 @@ def test_admin_cria_conteudo_e_fa_ve(client, club_admin, fan):
     assert drop["author"]["official"] is True and drop["author"]["name"] == "Vintage Culture"
     assert client.get(f"{VC}/products", headers=fan).json()[0]["priceLabel"] == "R$ 89,90"
     assert client.get(f"{VC}/tracks", headers=fan).json()[0]["num"] == "01"
-    assert len(client.get(f"{VC}/pickap/prizes", headers=fan).json()) == 3
+    assert len(client.get(f"{VC}/pickup/prizes", headers=fan).json()) == 3
     assert client.get(f"{VC}/membership/perks", headers=fan).json()[0]["title"] == "Drop News exclusivos"
 
     # editar e apagar
@@ -108,7 +108,7 @@ def test_acoes_do_fa(client, fan, club_admin):
     assert r.status_code == 201 and r.json()["author"]["handle"] == "@fa.teste"
 
     before = client.get("/me?artist=vintage-culture", headers=fan).json()
-    spin = client.post(f"{VC}/pickap/spin", headers=fan)
+    spin = client.post(f"{VC}/pickup/spin", headers=fan)
     assert spin.status_code == 200, spin.text
     assert spin.json()["spinsLeft"] in (before["spins"] - 1, before["spins"])
 
@@ -252,7 +252,7 @@ def test_fa_clubes_do_ambiente(client, club_admin, fan, sponsor, master):
     assert client.post(f"{SP}/staff", headers=helper, json={"email": "y@exemplo.com"}).status_code == 403
     assert {s["role"] for s in client.get(f"{SP}/staff", headers=owner).json()} == {"owner", "helper"}
 
-    # PicKap do clube
+    # PicKup do clube
     assert client.post(f"{SP}/manage/prizes", headers=helper, json={"label": "Boné SP"}).status_code == 201
 
     # Fã: lista, entra, posta e gira
@@ -265,7 +265,7 @@ def test_fa_clubes_do_ambiente(client, club_admin, fan, sponsor, master):
     p = client.post(f"{SP}/posts", headers=fan, json={"text": "Oi SP"})
     assert p.status_code == 201 and p.json()["club"]["slug"] == "fa-clube-sp"
     assert any(x["club"] and x["club"]["slug"] == "fa-clube-sp" for x in client.get(f"{VC}/posts?kind=galera", headers=fan).json())
-    spin = client.post(f"{SP}/pickap/spin", headers=fan)
+    spin = client.post(f"{SP}/pickup/spin", headers=fan)
     assert spin.status_code == 200 and spin.json()["prize"]["label"] == "Boné SP"
     assert client.get(f"{SP}/members", headers=owner).json()[0]["handle"] == "@fa.teste"
     assert client.get(f"{SP}/members", headers=fan).status_code == 403
@@ -275,7 +275,7 @@ def test_fa_clubes_do_ambiente(client, club_admin, fan, sponsor, master):
     assert other["invite"]["emailSent"] is False  # sem SMTP nos testes: a senha provisória é mostrada na tela
     rio = login(client, "dono-rio@exemplo.com", other["invite"]["tempPassword"])
     slots = client.get(f"{SP}/ad-slots", headers=sponsor).json()
-    assert [s["id"] for s in slots] == ["fa-clube-sp.home", "fa-clube-sp.mural", "fa-clube-sp.pickap"]
+    assert [s["id"] for s in slots] == ["fa-clube-sp.home", "fa-clube-sp.mural", "fa-clube-sp.pickup"]
     today = date.today()
     camp = client.post(
         "/sponsor/campaigns",
@@ -453,7 +453,7 @@ def test_giros_com_motivo_e_compra_de_ingresso(client, club_admin, fan):
         ]},
     ).json()
 
-    antes = client.get(f"{base}/pickap/spins", headers=fan).json()
+    antes = client.get(f"{base}/pickup/spins", headers=fan).json()
     livres_antes = sum(1 for g in antes if not g["used"])
     assert client.post(f"{base}/events/{ev['id']}/purchases", headers=fan, json={"packageId": pkg["id"], "item": 1}).status_code == 400  # esgotado
     assert client.post(f"{base}/events/{ev['id']}/purchases", headers=fan, json={"packageId": pkg["id"], "item": 9}).status_code == 400
@@ -464,15 +464,15 @@ def test_giros_com_motivo_e_compra_de_ingresso(client, club_admin, fan):
 
     meus = client.get(f"{base}/me/tickets", headers=fan).json()
     assert any(t["id"] == c["id"] for t in meus)
-    depois = client.get(f"{base}/pickap/spins", headers=fan).json()
+    depois = client.get(f"{base}/pickup/spins", headers=fan).json()
     novo = next(g for g in depois if "Compra de ingresso" in g["reason"] and "Natal" in g["reason"])
     assert sum(1 for g in depois if not g["used"]) == livres_antes + 1
 
-    r = client.post(f"{base}/clubs/oficial/pickap/spin", headers=fan, json={"creditId": novo["id"]})
+    r = client.post(f"{base}/clubs/oficial/pickup/spin", headers=fan, json={"creditId": novo["id"]})
     assert r.status_code == 200, r.text
     usado = next(g for g in r.json()["credits"] if g["id"] == novo["id"])
     assert usado["used"] and usado["prizeLabel"]
-    assert client.post(f"{base}/clubs/oficial/pickap/spin", headers=fan, json={"creditId": novo["id"]}).status_code == 400
+    assert client.post(f"{base}/clubs/oficial/pickup/spin", headers=fan, json={"creditId": novo["id"]}).status_code == 400
 
 
 def test_photo_finder_com_rekognition_simulado(client, club_admin, fan, monkeypatch):
@@ -644,9 +644,9 @@ def test_brindes_da_roleta_guardados_em_meus_brindes(client, club_admin, fan):
         return r.json()["id"]
 
     def gira():
-        creditos = [g for g in client.get(f"{base}/pickap/spins", headers=fan).json() if not g["used"]]
+        creditos = [g for g in client.get(f"{base}/pickup/spins", headers=fan).json() if not g["used"]]
         assert creditos, "o fã precisa de um giro"
-        return client.post(f"{club}/pickap/spin", headers=fan, json={"creditId": creditos[0]["id"]})
+        return client.post(f"{club}/pickup/spin", headers=fan, json={"creditId": creditos[0]["id"]})
 
     def apaga_todas():
         for p in client.get(f"{club}/manage/prizes", headers=club_admin).json():
@@ -713,10 +713,10 @@ def test_ranking_fa_super_com_instagram_simulado(client, club_admin, fan, monkey
     out = sh.json()
     assert out["hashtag"] == "EuSouUmSuperFaDoVintage" and out["code"].startswith("FS-") and f"#{out['hashtag']} {out['code']}" in out["caption"]
     # "já postei": rende 1 giro na hora e o compartilhamento fica aguardando a conferência
-    antes = sum(1 for g in client.get(f"{base}/pickap/spins", headers=fan).json() if not g["used"])
+    antes = sum(1 for g in client.get(f"{base}/pickup/spins", headers=fan).json() if not g["used"])
     cl = client.post(f"{base}/shares/{out['shareId']}/claim", headers=fan)
     assert cl.status_code == 200 and cl.json()["spinGranted"] is True
-    depois = client.get(f"{base}/pickap/spins", headers=fan).json()
+    depois = client.get(f"{base}/pickup/spins", headers=fan).json()
     assert sum(1 for g in depois if not g["used"]) == antes + 1 and any(g["reason"].startswith("Compartilhou no Instagram") for g in depois)
     assert client.post(f"{base}/shares/{out['shareId']}/claim", headers=fan).json()["already"] is True  # só conta uma vez
     assert client.post(f"{base}/shares/nao-existe/claim", headers=fan).status_code == 404
@@ -760,7 +760,7 @@ def test_giros_por_post_e_por_camiseta(client, club_admin, fan):
     base = "/artists/vintage-culture"
 
     def livres():
-        return sum(1 for g in client.get(f"{base}/pickap/spins", headers=fan).json() if not g["used"])
+        return sum(1 for g in client.get(f"{base}/pickup/spins", headers=fan).json() if not g["used"])
 
     antes = livres()
     # posts rendem 1 giro cada, até 3 por dia
@@ -772,7 +772,7 @@ def test_giros_por_post_e_por_camiseta(client, club_admin, fan):
     # o fã já pode ter postado antes (em outros testes): o teto é 3 giros por dia, então sobram pelo menos 2 sem giro
     assert sum(rendeu) <= 3 and rendeu.count(False) >= 2
     assert livres() == antes + sum(rendeu)
-    motivos = [g["reason"] for g in client.get(f"{base}/pickap/spins", headers=fan).json()]
+    motivos = [g["reason"] for g in client.get(f"{base}/pickup/spins", headers=fan).json()]
     assert any(x.startswith("Post publicado em") for x in motivos) or sum(rendeu) == 0
 
     # camiseta (roupas) rende giro; acessório não
@@ -864,9 +864,9 @@ def test_vitrines_alugadas(client, club_admin, sponsor, fan):
 def test_vitrines_do_app_em_ambiente_novo(client, master):
     slug = client.post("/admin/fan-clubs", headers=master, json={"name": "Artista Anúncios"}).json()["artist"]["slug"]
     slots = {s["id"]: s for s in client.get(f"/artists/{slug}/ad-slots", headers=master).json()}
-    assert {"entrada", "pickap_video", "pickap_resgate", "mural", "home"} <= set(slots)
+    assert {"entrada", "pickup_video", "pickup_resgate", "mural", "home"} <= set(slots)
     assert slots["mural"]["where"] == "Mural · post pequeno entre os cartazes, a cada 4"
-    assert slots["pickap_video"]["name"] == "Vídeo antes do giro"
+    assert slots["pickup_video"]["name"] == "Vídeo antes do giro"
 
 
 def test_migracao_cria_vitrines_que_faltam():
@@ -879,7 +879,7 @@ def test_migracao_cria_vitrines_que_faltam():
     with SessionLocal() as db:
         artist = db.scalar(select(m.Artist).where(m.Artist.slug == "vintage-culture"))
         for s in list(artist.ad_slots):
-            if s.key == "pickap_resgate":
+            if s.key == "pickup_resgate":
                 db.delete(s)
             if s.key == "mural":
                 s.where = "Mural · aba Galera, a cada [n] posts"
@@ -889,21 +889,21 @@ def test_migracao_cria_vitrines_que_faltam():
     with SessionLocal() as db:
         artist = db.scalar(select(m.Artist).where(m.Artist.slug == "vintage-culture"))
         env = [s for s in artist.ad_slots if s.club_id is None]
-        assert [s.key for s in env].count("pickap_resgate") == 1
-        resgate = next(s for s in env if s.key == "pickap_resgate")
+        assert [s.key for s in env].count("pickup_resgate") == 1
+        resgate = next(s for s in env if s.key == "pickup_resgate")
         assert resgate.position == max(s.position for s in env)
         assert next(s for s in env if s.key == "mural").where == "Mural · post pequeno entre os cartazes, a cada 4"
 
 
 def test_anuncios_dentro_do_app(client, master, sponsor, fan):
-    empty = {"entry": None, "pickapVideo": None, "pickapClaim": None, "feed": None}
+    empty = {"entry": None, "pickupVideo": None, "pickupClaim": None, "feed": None}
     r = client.get(f"{VC}/ads/in-app", headers=fan)
     assert r.status_code == 200, r.text
-    assert {k: r.json()[k] for k in ("pickapVideo", "pickapClaim", "entry")} == {k: None for k in ("pickapVideo", "pickapClaim", "entry")}
+    assert {k: r.json()[k] for k in ("pickupVideo", "pickupClaim", "entry")} == {k: None for k in ("pickupVideo", "pickupClaim", "entry")}
 
     today = date.today()
     form = {
-        "club": "vintage-culture", "slot": "pickap_video", "brand": "Bebida Teste", "title": "Gire com sabor",
+        "club": "vintage-culture", "slot": "pickup_video", "brand": "Bebida Teste", "title": "Gire com sabor",
         "text": "Assista e gire", "link": "https://exemplo.com", "start": today.isoformat(), "end": (today + timedelta(days=7)).isoformat(),
     }
     # vitrine de vídeo sem vídeo
@@ -920,11 +920,11 @@ def test_anuncios_dentro_do_app(client, master, sponsor, fan):
     assert r.status_code == 201, r.text
     camp = r.json()
     assert camp["videoUrl"] == "https://cdn.exemplo.com/v.mp4"
-    assert client.get(f"{VC}/ads/in-app", headers=fan).json()["pickapVideo"] is None  # pendente
+    assert client.get(f"{VC}/ads/in-app", headers=fan).json()["pickupVideo"] is None  # pendente
     client.post(f"/campaigns/{camp['id']}/approve", headers=master)
 
     ads = client.get(f"{VC}/ads/in-app", headers=fan).json()
-    v = ads["pickapVideo"]
+    v = ads["pickupVideo"]
     assert v["id"] == camp["id"] and v["minSeconds"] == 30 and v["videoUrl"] == "https://cdn.exemplo.com/v.mp4"
     assert v["sponsor"] == "Bebida Teste" and v["imageUrl"] is None and v["cta"] == "Saiba mais"
     assert ads["entry"] is None

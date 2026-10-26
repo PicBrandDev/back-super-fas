@@ -20,7 +20,7 @@ ART_TYPES = {"image/jpeg": ".jpg", "image/png": ".png"}
 MAX_ART_BYTES = 5 * 1024 * 1024
 VIDEO_TYPES = {"video/mp4": ".mp4", "video/webm": ".webm"}
 MAX_VIDEO_BYTES = 50 * 1024 * 1024
-VIDEO_SLOTS = {"pickap_video"}  # vitrines que exigem vídeo (link ou arquivo)
+VIDEO_SLOTS = {"pickup_video"}  # vitrines que exigem vídeo (link ou arquivo)
 
 
 def _save_upload(data: bytes, ext: str) -> str:
@@ -88,7 +88,7 @@ async def create_campaign(
     """Envia uma campanha para aprovação (multipart/form-data, a arte é opcional).
 
     `club` é o cantor; `slot` é a vitrine (do ambiente, ex. "home", ou de um fã clube, ex. "fa-sp.home").
-    Vídeo: `video_url` (link http/https) ou o arquivo `video` (MP4/WebM, até 50 MB); obrigatório na vitrine "pickap_video".
+    Vídeo: `video_url` (link http/https) ou o arquivo `video` (MP4/WebM, até 50 MB); obrigatório na vitrine "pickup_video".
     """
     artist = get_artist_or_404(db, club)
     if artist.status != "active":

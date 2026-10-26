@@ -27,13 +27,13 @@ from app.db import SessionLocal
 ARTIST = "vintage-culture"
 
 OFFICIAL = [
-    "Fanzone no ar! Prévias exclusivas, roleta do PicKap e fotos oficiais dos shows, tudo num lugar só.",
+    "Fanzone no ar! Prévias exclusivas, roleta do PicKup e fotos oficiais dos shows, tudo num lugar só.",
     "Próxima parada: São Paulo, 07 de novembro. Pacotes com transfer e selo no app já estão à venda.",
     "Obrigado, Campinas! Vocês fizeram uma noite que a gente vai lembrar por muito tempo.",
     "Drop novo na área: Faixa inédita 01 já está no Drops Hits. Quem ouvir primeiro conta aqui o que achou.",
     "Quem postou com a #EuSouUmSuperFaDoVintage esta semana subiu no ranking Fã Super. Confiram a lista.",
     "Fotos oficiais do show de Campinas liberadas. Mande uma selfie no Photo Finder e encontre as suas.",
-    "A roleta do PicKap tem prêmio novo: camiseta Tour 2026. Quem ganhar mostra aqui!",
+    "A roleta do PicKup tem prêmio novo: camiseta Tour 2026. Quem ganhar mostra aqui!",
     "Bastidores da turnê: soundcheck, estrada e muita história. Em breve, mais aqui no mural.",
     "Lembrete: o transfer de cada pacote sai 4 horas antes do show. Confirmem o ponto de encontro com a agência.",
     "Vocês são o melhor público do Brasil. Sem exagero.",
@@ -56,7 +56,7 @@ FANS = [
     "Alguém tem a lista de faixas do último set? Preciso rever.",
     "Vamos fazer um encontro antes do show? Sugestões de bar?",
     "Esse drop novo é o melhor do ano, não aceito discussão.",
-    "Quem acertou a roleta do PicKap esta semana?",
+    "Quem acertou a roleta do PicKup esta semana?",
     "Dica: chegar cedo garante a grade. Aprendi do jeito difícil.",
     "Montei uma playlist com os maiores hits, quem quer o link?",
 ]

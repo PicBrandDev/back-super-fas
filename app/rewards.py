@@ -1,4 +1,4 @@
-"""Brindes que o fã ganha na roleta do PicKap (Meus brindes): cupom de desconto, ingresso de pista, retirada na lojinha."""
+"""Brindes que o fã ganha na roleta do PicKup (Meus brindes): cupom de desconto, ingresso de pista, retirada na lojinha."""
 
 import secrets
 from datetime import date, timedelta
@@ -40,7 +40,7 @@ def create_for(db: Session, club: m.FanClub, user: m.User, prize: m.Prize) -> m.
         db.add(
             m.Coupon(
                 artist_id=club.artist_id, user_id=user.id, code=coupon_code, kind="percent", value=prize.percent or 10,
-                max_uses=1, expires_on=expires, source="Prêmio da roleta do PicKap",
+                max_uses=1, expires_on=expires, source="Prêmio da roleta do PicKup",
             )
         )
         how = prize.instructions or f"Cupom de {prize.percent or 10}% no ingresso. Ele já está em Meus cupons: é só aplicar no carrinho da compra."

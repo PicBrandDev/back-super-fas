@@ -42,7 +42,7 @@
           "qtyLabel": "20 un."
         },
         {
-          "name": "+1 giro no PicKap",
+          "name": "+1 giro no PicKup",
           "phase": "before",
           "qtyLabel": "todos"
         },
@@ -96,7 +96,7 @@
           "qtyLabel": "15 un."
         },
         {
-          "name": "+1 giro no PicKap",
+          "name": "+1 giro no PicKup",
           "phase": "before",
           "qtyLabel": "todos"
         },
@@ -172,7 +172,7 @@
           "qtyLabel": "10 un."
         },
         {
-          "name": "+1 giro no PicKap",
+          "name": "+1 giro no PicKup",
           "phase": "before",
           "qtyLabel": "todos"
         }
@@ -387,7 +387,7 @@
       "sub": "Bastidores e notícias só para membros"
     },
     {
-      "title": "Giros extras no PicKap",
+      "title": "Giros extras no PicKup",
       "sub": "+5 giros todo mês"
     },
     {
@@ -501,7 +501,7 @@
     "home": 50000,
     "mural": 35000,
     "evento": 40000,
-    "pickap": 60000,
+    "pickup": 60000,
     "loja": 30000,
     "drops": 25000
   },
@@ -528,7 +528,7 @@
       "endOffset": 35
     },
     {
-      "slot": "pickap",
+      "slot": "pickup",
       "brand": "Marca Teste",
       "title": "Fatia patrocinada: kit da marca",
       "text": "Um kit por semana na roleta.",

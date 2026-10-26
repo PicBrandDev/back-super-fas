@@ -242,7 +242,7 @@ class Coupon(Base):
     artist_id: Mapped[str] = mapped_column(ForeignKey("artists.id", ondelete="CASCADE"), index=True)
     code: Mapped[str] = mapped_column(String(30))  # sempre em maiúsculas
     user_id: Mapped[str | None] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=True, index=True)
-    source: Mapped[str] = mapped_column(String(80), default="")  # de onde veio, ex.: "Prêmio da roleta do PicKap"
+    source: Mapped[str] = mapped_column(String(80), default="")  # de onde veio, ex.: "Prêmio da roleta do PicKup"
     kind: Mapped[str] = mapped_column(String(10), default="percent")  # percent | fixed
     value: Mapped[int] = mapped_column(Integer, default=0)  # % (1 a 100) ou centavos
     active: Mapped[bool] = mapped_column(Boolean, default=True)
@@ -252,7 +252,7 @@ class Coupon(Base):
 
 
 class SpinCredit(Base):
-    """Um giro da roleta (PicKap) do fã, com o motivo de ele existir (compra de ingresso, boas-vindas...)."""
+    """Um giro da roleta (PicKup) do fã, com o motivo de ele existir (compra de ingresso, boas-vindas...)."""
 
     __tablename__ = "spin_credits"
 
@@ -429,7 +429,7 @@ class EventEntry(Base):
 
 
 class Prize(Base):
-    """Fatia da roleta do PicKap (cada fã clube tem a sua roleta)."""
+    """Fatia da roleta do PicKup (cada fã clube tem a sua roleta)."""
 
     __tablename__ = "prizes"
 
@@ -549,7 +549,7 @@ class AdSlot(Base):
     id: Mapped[str] = mapped_column(String(20), primary_key=True, default=new_id)
     artist_id: Mapped[str] = mapped_column(ForeignKey("artists.id", ondelete="CASCADE"), index=True)
     club_id: Mapped[str | None] = mapped_column(ForeignKey("fan_clubs.id", ondelete="CASCADE"), nullable=True, index=True)
-    # Ambiente: home | mural | evento | pickap | loja | drops | entrada | pickap_video | pickap_resgate. Fã clube: "{slug do clube}.home" etc.
+    # Ambiente: home | mural | evento | pickup | loja | drops | entrada | pickup_video | pickup_resgate. Fã clube: "{slug do clube}.home" etc.
     key: Mapped[str] = mapped_column(String(80))
     name: Mapped[str] = mapped_column(String(120))
     where: Mapped[str] = mapped_column(String(200), default="")
@@ -589,7 +589,7 @@ class Campaign(Base):
     cta: Mapped[str] = mapped_column(String(60), default="")
     url: Mapped[str] = mapped_column(String(500), default="")
     art_path: Mapped[str] = mapped_column(String(255), default="")
-    video_url: Mapped[str] = mapped_column(String(500), default="")  # link http(s) ou /uploads/... (vitrine pickap_video)
+    video_url: Mapped[str] = mapped_column(String(500), default="")  # link http(s) ou /uploads/... (vitrine pickup_video)
     target_city: Mapped[str] = mapped_column(String(80), default="")  # vazio = sem filtro de lugar
     target_radius_km: Mapped[int] = mapped_column(Integer, default=0)  # 0 = o país todo
     goal_views: Mapped[int] = mapped_column(Integer, default=0)  # meta de visualizações

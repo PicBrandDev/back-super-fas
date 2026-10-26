@@ -32,7 +32,7 @@ BLANK_THEME = {
     "fontLabel": "var(--font-plex-mono), ui-monospace, monospace",
 }
 
-MODULES = ("mural", "agenda", "pickap", "loja", "drops", "photo", "ads")
+MODULES = ("mural", "agenda", "pickup", "loja", "drops", "photo", "ads")
 
 # Texto antigo do "onde" da vitrine do Mural (a subida da API troca pelo novo se ninguém editou).
 OLD_MURAL_WHERE = "Mural · aba Galera, a cada [n] posts"
@@ -43,13 +43,13 @@ DEFAULT_AD_SLOTS = [
     ("home", "Card da Home", "Início · logo acima do Drop News", "Arte + título + texto + link", 20, 16),
     ("mural", "Post patrocinado no Mural", MURAL_WHERE, "Post com imagem + link", 28, 24),
     ("evento", "Patrocínio de evento", "Tela do evento · faixa acima de Onde comprar", "Logo + texto + link", 58, 12),
-    ("pickap", "Prêmio patrocinado no PicKap", "Roleta · uma fatia com a marca e o prêmio", "Logo + prêmio ou cupom", 18, 44),
+    ("pickup", "Prêmio patrocinado no PicKup", "Roleta · uma fatia com a marca e o prêmio", "Logo + prêmio ou cupom", 18, 44),
     ("loja", "Banner da Loja", "Loja · topo da página", "Banner 16:9 + link", 16, 20),
     ("drops", "“Apresenta” no Drops Hits", "Player de prévias · “[Marca] apresenta”", "Logo", 22, 10),
     # Anúncios dentro do app (GET /artists/{slug}/ads/in-app)
     ("entrada", "Anúncio de entrada", "Ao abrir o app · modal logo após o login", "Arte + título + texto + link", 22, 52),
-    ("pickap_video", "Vídeo antes do giro", "Roleta · vídeo de 30 s obrigatório antes de girar", "Vídeo até 60 s (MP4) + título + link", 10, 76),
-    ("pickap_resgate", "Anúncio no resgate do prêmio", "Roleta · modal quando o fã ganha um prêmio", "Arte + título + texto + link", 26, 44),
+    ("pickup_video", "Vídeo antes do giro", "Roleta · vídeo de 30 s obrigatório antes de girar", "Vídeo até 60 s (MP4) + título + link", 10, 76),
+    ("pickup_resgate", "Anúncio no resgate do prêmio", "Roleta · modal quando o fã ganha um prêmio", "Arte + título + texto + link", 26, 44),
 ]
 
 NEW_CLUB_COLORS = ["#2F5BD3", "#1F7A4D", "#7A3FB8", "#14171C"]
@@ -58,7 +58,7 @@ NEW_CLUB_COLORS = ["#2F5BD3", "#1F7A4D", "#7A3FB8", "#14171C"]
 CLUB_AD_SLOTS = [
     ("home", "Card do fã clube", "Página do fã clube · topo", "Arte + título + texto + link", 20, 16),
     ("mural", "Post patrocinado no mural do clube", "Mural do fã clube · entre os posts da galera", "Post com imagem + link", 28, 24),
-    ("pickap", "Fatia patrocinada no PicKap do clube", "Roleta do fã clube · uma fatia com a marca", "Logo + prêmio ou cupom", 18, 44),
+    ("pickup", "Fatia patrocinada no PicKup do clube", "Roleta do fã clube · uma fatia com a marca", "Logo + prêmio ou cupom", 18, 44),
 ]
 
 MAX_CLUB_STAFF = 10  # por fã clube: 1 dono + ajudantes
