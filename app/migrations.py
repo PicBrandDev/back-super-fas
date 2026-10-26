@@ -39,6 +39,7 @@ NEW_COLUMNS = {
     "campaigns": [("target_city", "VARCHAR(80) DEFAULT ''"), ("target_radius_km", "INTEGER DEFAULT 0"),
         ("goal_views", "INTEGER DEFAULT 0"), ("goal_clicks", "INTEGER DEFAULT 0"), ("budget_cents", "INTEGER DEFAULT 0"),
         ("video_url", "VARCHAR(500) DEFAULT ''")],
+    "event_packages": [("experiences", "JSON DEFAULT '[]'")],
     "fandoms": [("share_code", "VARCHAR(12) DEFAULT ''")],
     "events": [("ticketing_name", "VARCHAR(60) DEFAULT ''"), ("ticketing_url", "VARCHAR(500) DEFAULT ''")],
     "fan_clubs": [("avatar_path", "VARCHAR(255) DEFAULT ''")],
@@ -65,6 +66,26 @@ def upgrade(engine: Engine) -> None:
     with Session(engine) as db:
         _to_fan_clubs(db)
         _default_ad_slots(db)
+        _packages_without_photo_option(db)
+
+
+def _packages_without_photo_option(db: Session) -> None:
+    """O Photo Finder vem em todos os pacotes: sai a opção "com Photo Finder" (o pacote só dela é apagado e as
+    opções antigas viram "selo"), e pacotes sem a lista de experiências passam a ter lista vazia."""
+    changed = False
+    for p in db.scalars(select(m.EventPackage)):
+        if p.experiences is None:
+            p.experiences = []
+            changed = True
+        items = list(p.items or [])
+        if items and all(i.get("kind") == "photo" for i in items):
+            db.delete(p)
+            changed = True
+        elif any(i.get("kind") == "photo" for i in items):
+            p.items = [{**i, "kind": "seal", "label": i["label"].replace(" + Photo Finder", "")} if i.get("kind") == "photo" else i for i in items]
+            changed = True
+    if changed:
+        db.commit()
 
 
 def _default_ad_slots(db: Session) -> None:

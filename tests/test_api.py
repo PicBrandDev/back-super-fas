@@ -502,12 +502,12 @@ def test_photo_finder_com_rekognition_simulado(client, club_admin, fan, monkeypa
     assert client.post(f"{base}/manage/events/{ev['id']}/photos", headers=fan, files=[("photos", ("a.png", png, "image/png"))]).status_code == 403
 
     selfie = {"selfie": ("eu.png", png, "image/png")}
-    # sem ingresso com Photo Finder, o fã não busca
+    # sem ingresso do show, o fã não busca
     st = client.get(f"{base}/events/{ev['id']}/photo-finder", headers=fan).json()
-    assert not st["eligible"] and "não inclui" in st["reason"]
+    assert not st["eligible"] and "precisa de um ingresso" in st["reason"]
     assert client.post(f"{base}/events/{ev['id']}/photo-finder/search", headers=fan, files=selfie, data={"consent": "true"}).status_code == 403
 
-    # compra o pacote com Photo Finder e busca
+    # compra o ingresso (o Photo Finder vem em todos) e busca
     assert client.post(f"{base}/events/{ev['id']}/purchases", headers=fan, json={"packageId": pkg["id"], "item": 0}).status_code == 201
     assert client.get(f"{base}/events/{ev['id']}/photo-finder", headers=fan).json()["eligible"] is True
     assert client.post(f"{base}/events/{ev['id']}/photo-finder/search", headers=fan, files=selfie, data={"consent": "false"}).status_code == 400
@@ -557,13 +557,32 @@ def test_ingresso_com_photo_finder_automatico_na_demonstracao(client, club_admin
     base = "/artists/vintage-culture"
     client.post(f"{base}/manage/events", headers=club_admin, json={"date": "2019-03-05", "city": "Show Antigo"})
     antes = client.get(f"{base}/me/tickets", headers=fan).json()
-    n_antes = len([t for t in antes if t["kind"] == "photo"])
+    n_antes = len(antes)
     monkeypatch.setattr(get_settings(), "demo_photo_ticket", True)
     depois = client.get(f"{base}/me/tickets", headers=fan).json()
-    fotos = [t for t in depois if t["kind"] == "photo"]
-    assert len(fotos) > n_antes
+    assert len(depois) > n_antes and all(t["includesPhotoFinder"] for t in depois)
     # rodar de novo não duplica
-    assert len([t for t in client.get(f"{base}/me/tickets", headers=fan).json() if t["kind"] == "photo"]) == len(fotos)
+    assert len(client.get(f"{base}/me/tickets", headers=fan).json()) == len(depois)
+
+
+def test_pacotes_com_experiencias_e_photo_finder_em_todos(client, club_admin, fan):
+    base = "/artists/vintage-culture"
+    ev = client.post(f"{base}/manage/events", headers=club_admin, json={"date": "2031-05-10", "city": "Recife"}).json()
+    ag = client.post(f"{base}/manage/agencies", headers=club_admin, json={"name": "Agência Recife"}).json()
+    ok = client.post(
+        f"{base}/manage/packages", headers=club_admin,
+        json={"eventId": ev["id"], "agencyId": ag["id"], "name": "Jantar + camarim", "experiences": ["jantar", "camarim"],
+              "items": [{"kind": "ticket", "label": "Camarote + jantar", "priceCents": 90000}]},
+    )
+    assert ok.status_code == 201 and ok.json()["experiences"] == ["jantar", "camarim"]
+    assert client.post(f"{base}/manage/packages", headers=club_admin, json={"eventId": ev["id"], "agencyId": ag["id"], "name": "X", "experiences": ["spa"], "items": []}).status_code == 422
+    sem = client.post(f"{base}/manage/packages", headers=club_admin, json={"eventId": ev["id"], "agencyId": ag["id"], "name": "Simples", "items": [{"kind": "ticket", "label": "Pista", "priceCents": 15000}]}).json()
+    assert sem["experiences"] == []
+    pacotes = {p["name"]: p for p in client.get(f"{base}/events/{ev['id']}/packages", headers=fan).json()}
+    assert pacotes["Jantar + camarim"]["experiences"] == ["jantar", "camarim"] and pacotes["Simples"]["experiences"] == []
+    # todo ingresso, mesmo "só ingresso", inclui o Photo Finder
+    compra = client.post(f"{base}/events/{ev['id']}/purchases", headers=fan, json={"packageId": sem["id"], "item": 0}).json()
+    assert compra["includesPhotoFinder"] is True
 
 
 def test_post_do_fa_com_texto_e_foto(client, fan):

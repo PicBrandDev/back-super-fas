@@ -400,6 +400,7 @@ class PackageOut(Camel):
     url: str  # link de venda do pacote (cai no site da agência se vazio)
     transfer_details: str
     has_transfer: bool
+    experiences: list[str] = []  # jantar | camarim | pre | after
     from_price_cents: int | None  # menor preço entre os itens
     items: list[PackageItemOut]
 

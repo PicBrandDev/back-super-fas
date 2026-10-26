@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session
 from . import models as m
 from .config import get_settings
 
-FALLBACK = ("Pista + transfer + selo + Photo Finder", "Caravana Vintage", 29000)
+FALLBACK = ("Pista + transfer + selo", "Caravana Vintage", 26000)
 
 
 def _ensure_past_event(db: Session, artist: m.Artist) -> None:
@@ -36,17 +36,17 @@ def ensure_photo_tickets(db: Session, artist: m.Artist, user: m.User) -> None:
     for ev in db.scalars(select(m.Event).where(m.Event.artist_id == artist.id)):
         if ev.date >= date.today():
             continue
-        if db.scalar(select(m.TicketPurchase.id).where(m.TicketPurchase.user_id == user.id, m.TicketPurchase.event_id == ev.id, m.TicketPurchase.kind == "photo")):
+        if db.scalar(select(m.TicketPurchase.id).where(m.TicketPurchase.user_id == user.id, m.TicketPurchase.event_id == ev.id)):
             continue
         label, agency, price = FALLBACK
         pkg_name = "Pacote com Photo Finder"
         for pkg in db.scalars(select(m.EventPackage).where(m.EventPackage.event_id == ev.id)):
-            item = next((i for i in (pkg.items or []) if i.get("kind") == "photo"), None)
+            item = next((i for i in (pkg.items or []) if i.get("kind") == "seal"), None)
             if item:
                 label, price = item["label"], int(item.get("price_cents", price))
                 agency, pkg_name = pkg.agency.name, pkg.name
                 break
-        db.add(m.TicketPurchase(artist_id=artist.id, user_id=user.id, event_id=ev.id, package_name=pkg_name, agency_name=agency, label=label, kind="photo", price_cents=price))
+        db.add(m.TicketPurchase(artist_id=artist.id, user_id=user.id, event_id=ev.id, package_name=pkg_name, agency_name=agency, label=label, kind="seal", price_cents=price))
         created = True
     if created:
         db.commit()

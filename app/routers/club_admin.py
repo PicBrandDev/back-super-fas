@@ -68,7 +68,7 @@ class AgencyIn(Camel):
 
 
 class PackageItemIn(Camel):
-    kind: Literal["ticket", "transfer", "seal", "photo"] = "ticket"  # só ingresso | + transfer | + selo no app | + Photo Finder
+    kind: Literal["ticket", "transfer", "seal", "photo"] = "ticket"  # só ingresso | + transfer | + selo no app ("photo" é legado)
     label: str = Field(min_length=1, max_length=120)  # ex.: "Pista", "Camarote", "Ônibus ida e volta"
     price_cents: int = Field(default=0, ge=0)
     sold_out: bool = False
@@ -82,6 +82,7 @@ class PackageIn(Camel):
     transfer_details: str = Field(default="", max_length=300)
     url: str = Field(default="", max_length=500)
     items: list[PackageItemIn] = Field(default_factory=list, max_length=30)
+    experiences: list[Literal["jantar", "camarim", "pre", "after"]] = Field(default_factory=list, max_length=4)
     active: bool = True
     position: int = 0
 

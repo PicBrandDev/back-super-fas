@@ -85,7 +85,7 @@ def ticket_out(t: m.TicketPurchase) -> MyTicketOut:
         price_cents=t.price_cents,
         includes_transfer=t.kind in ("transfer", "seal", "photo"),
         includes_seal=t.kind in ("seal", "photo"),
-        includes_photo_finder=t.kind == "photo",
+        includes_photo_finder=True,  # o Photo Finder vem em todo ingresso
         bought=br_date(t.created_at.date()),
     )
 
@@ -235,6 +235,7 @@ def list_packages(event_id: str, artist: FanArtist, db: DB):
                 url=p.url or p.agency.url,
                 transfer_details=p.transfer_details,
                 has_transfer=any(i.kind in ("transfer", "seal", "photo") for i in items),
+                experiences=list(p.experiences or []),
                 from_price_cents=min(prices) if prices else None,
                 items=items,
             )

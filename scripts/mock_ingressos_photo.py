@@ -19,7 +19,7 @@ from app import models as m
 from app.db import SessionLocal
 
 ARTIST = "vintage-culture"
-FALLBACK = ("Pista + transfer + selo + Photo Finder", "Caravana Vintage", 29000)
+FALLBACK = ("Pista + transfer + selo", "Caravana Vintage", 26000)
 
 
 def main() -> None:
@@ -44,18 +44,18 @@ def main() -> None:
             label, agency, price = FALLBACK
             pkg_name = "Pacote com Photo Finder"
             for pkg in db.scalars(select(m.EventPackage).where(m.EventPackage.event_id == ev.id)):
-                item = next((i for i in (pkg.items or []) if i.get("kind") == "photo"), None)
+                item = next((i for i in (pkg.items or []) if i.get("kind") == "seal"), None)
                 if item:
                     label, price = item["label"], int(item.get("price_cents", price))
                     agency, pkg_name = pkg.agency.name, pkg.name
                     break
             for u in users:
-                if db.scalar(select(m.TicketPurchase).where(m.TicketPurchase.user_id == u.id, m.TicketPurchase.event_id == ev.id, m.TicketPurchase.kind == "photo")):
+                if db.scalar(select(m.TicketPurchase).where(m.TicketPurchase.user_id == u.id, m.TicketPurchase.event_id == ev.id)):
                     continue
                 db.add(
                     m.TicketPurchase(
                         artist_id=artist.id, user_id=u.id, event_id=ev.id, package_name=pkg_name, agency_name=agency,
-                        label=label, kind="photo", price_cents=price,
+                        label=label, kind="seal", price_cents=price,
                     )
                 )
                 added += 1

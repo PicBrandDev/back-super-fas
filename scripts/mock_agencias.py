@@ -56,10 +56,9 @@ def main() -> None:
                 print(f"- {ev.city}: já tem pacotes, pulei")
                 continue
             agency = rnd.choice(agencies)  # cada show tem uma única agência
-            # Três pacotes por show: só ingresso, ingresso + transfer e ingresso + transfer + selo no app.
+            # Três pacotes por show: só ingresso, ingresso + transfer e ingresso + transfer + selo no app (todos com Photo Finder).
             fee = rnd.choice([70, 90, 110])  # transfer
             seal = 40  # selo exclusivo no app do Vintage
-            photo = 30  # Photo Finder: suas fotos do show no app
             types = [("Pista", base), ("Pista Premium", int(base * 1.6)), ("Camarote", int(base * 2.4))]
 
             def sold_out(label: str) -> bool:
@@ -73,12 +72,6 @@ def main() -> None:
                     "Ingresso, ônibus ida e volta e o selo exclusivo do show no app do Vintage.",
                     "seal",
                     lambda label, price: (f"{label} + transfer + selo", price + fee + seal),
-                ),
-                (
-                    "Ingresso + transfer + selo + Photo Finder",
-                    "Tudo do pacote com selo e o Photo Finder: depois do show, retire no app as fotos em que você aparece.",
-                    "photo",
-                    lambda label, price: (f"{label} + transfer + selo + Photo Finder", price + fee + seal + photo),
                 ),
             ]
             for pos, (name, desc, kind, build) in enumerate(variants):

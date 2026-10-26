@@ -136,11 +136,11 @@ def _eligibility(db, artist: m.Artist, user: m.User, e: m.Event) -> str | None:
         return "O Photo Finder abre depois do show."
     has = db.scalar(
         select(m.TicketPurchase).where(
-            m.TicketPurchase.user_id == user.id, m.TicketPurchase.event_id == e.id, m.TicketPurchase.kind == "photo"
+            m.TicketPurchase.user_id == user.id, m.TicketPurchase.event_id == e.id
         )
     )
     if not has:
-        return "O seu ingresso deste show não inclui o Photo Finder."
+        return "Você precisa de um ingresso deste show para usar o Photo Finder."
     return None
 
 
