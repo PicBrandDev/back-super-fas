@@ -39,6 +39,7 @@ NEW_COLUMNS = {
     "campaigns": [("target_city", "VARCHAR(80) DEFAULT ''"), ("target_radius_km", "INTEGER DEFAULT 0"),
         ("goal_views", "INTEGER DEFAULT 0"), ("goal_clicks", "INTEGER DEFAULT 0"), ("budget_cents", "INTEGER DEFAULT 0"),
         ("video_url", "VARCHAR(500) DEFAULT ''")],
+    "ticket_purchases": [("coupon_code", "VARCHAR(30) DEFAULT ''"), ("discount_cents", "INTEGER DEFAULT 0")],
     "event_packages": [("addons", "JSON DEFAULT '[]'")],
     "fandoms": [("share_code", "VARCHAR(12) DEFAULT ''")],
     "events": [("ticketing_name", "VARCHAR(60) DEFAULT ''"), ("ticketing_url", "VARCHAR(500) DEFAULT ''")],

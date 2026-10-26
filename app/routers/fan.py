@@ -8,6 +8,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from .. import models as m
+from .. import coupons as coupon_lib
 from ..defaults import ADDON_LABELS
 from ..schemas import (
     AddonOut,
@@ -28,7 +29,9 @@ from ..schemas import (
     PostOut,
     PrizeOut,
     ProductOut,
+    MyCouponOut,
     PurchaseIn,
+    QuoteOut,
     SpinCreditOut,
     SpinOut,
     SubscribeIn,
@@ -311,14 +314,10 @@ def store_checkout(body: CheckoutIn, artist: FanArtist, user: CurrentUser, db: D
     return CheckoutOut(items=len(products), spins_granted=granted)
 
 
-@router.post("/artists/{slug}/events/{event_id}/purchases", response_model=MyTicketOut, status_code=201)
-def buy_ticket(event_id: str, body: PurchaseIn, artist: FanArtist, user: CurrentUser, db: DB):
-    """Compra de ingresso (simulada): registra o ingresso do fã e dá 1 giro da roleta, com o motivo."""
-    from .. import spins as spin_lib
-
-    e = _event(db, artist, event_id)
+def _price(db, artist: m.Artist, user: m.User, event: m.Event, body: PurchaseIn):
+    """Confere a opção, as experiências e o cupom; devolve (pacote, opção com rótulo e subtotal, cupom, desconto, total)."""
     pkg = db.get(m.EventPackage, body.package_id)
-    if not pkg or pkg.event_id != e.id or not pkg.active:
+    if not pkg or pkg.event_id != event.id or not pkg.active:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Pacote não encontrado.")
     items = pkg.items or []
     if body.item >= len(items):
@@ -338,6 +337,38 @@ def buy_ticket(event_id: str, body: PurchaseIn, artist: FanArtist, user: Current
         "label": " + ".join([item["label"], *(ADDON_LABELS.get(k, k) for k in chosen)]),
         "price_cents": item["price_cents"] + sum(offered[k]["price_cents"] for k in chosen),
     }
+    coupon = coupon_lib.find(db, artist, user, body.coupon) if body.coupon.strip() else None
+    off = coupon_lib.discount(coupon, item["price_cents"]) if coupon else 0
+    return pkg, item, coupon, off, item["price_cents"] - off
+
+
+@router.post("/artists/{slug}/events/{event_id}/quote", response_model=QuoteOut)
+def quote_ticket(event_id: str, body: PurchaseIn, artist: FanArtist, user: CurrentUser, db: DB):
+    """Valor do carrinho (ingresso + experiências) com o cupom, sem comprar: usado na tela de pagamento."""
+    e = _event(db, artist, event_id)
+    _, item, coupon, off, total = _price(db, artist, user, e, body)
+    return QuoteOut(
+        subtotal_cents=item["price_cents"], discount_cents=off, total_cents=total,
+        coupon=coupon.code if coupon else "", coupon_label=coupon_lib.label(coupon) if coupon else "",
+    )
+
+
+@router.get("/artists/{slug}/me/coupons", response_model=list[MyCouponOut])
+def my_coupons(artist: FanArtist, user: CurrentUser, db: DB):
+    """Cupons pessoais do fã que ainda valem (ex.: o de 10% que ganhou na roleta)."""
+    coupon_lib.ensure_roulette_coupon(db, artist, user)
+    return [MyCouponOut(code=c.code, label=coupon_lib.label(c), source=c.source, expires_on=c.expires_on) for c in coupon_lib.mine(db, artist, user)]
+
+
+@router.post("/artists/{slug}/events/{event_id}/purchases", response_model=MyTicketOut, status_code=201)
+def buy_ticket(event_id: str, body: PurchaseIn, artist: FanArtist, user: CurrentUser, db: DB):
+    """Compra de ingresso (simulada): registra o ingresso do fã e dá 1 giro da roleta, com o motivo."""
+    from .. import spins as spin_lib
+
+    e = _event(db, artist, event_id)
+    pkg, item, coupon, off, total = _price(db, artist, user, e, body)
+    if coupon:
+        coupon.used += 1
     purchase = m.TicketPurchase(
         artist_id=artist.id,
         user_id=user.id,
@@ -346,7 +377,9 @@ def buy_ticket(event_id: str, body: PurchaseIn, artist: FanArtist, user: Current
         agency_name=pkg.agency.name,
         label=item["label"],
         kind=item["kind"],
-        price_cents=item["price_cents"],
+        price_cents=total,
+        coupon_code=coupon.code if coupon else "",
+        discount_cents=off,
     )
     db.add(purchase)
     f = get_fandom(db, artist, user)

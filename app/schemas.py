@@ -524,6 +524,22 @@ class PurchaseIn(Camel):
     package_id: str
     item: int = Field(ge=0)  # posição da opção dentro do pacote
     addons: list[str] = Field(default_factory=list, max_length=10)  # experiências escolhidas (chaves do pacote)
+    coupon: str = Field(default="", max_length=30)  # cupom de desconto (opcional)
+
+
+class MyCouponOut(Camel):
+    code: str
+    label: str  # ex.: "10% de desconto"
+    source: str
+    expires_on: date | None = None
+
+
+class QuoteOut(Camel):
+    subtotal_cents: int  # ingresso + experiências
+    discount_cents: int
+    total_cents: int
+    coupon: str  # código aplicado ("" sem cupom)
+    coupon_label: str  # ex.: "10% de desconto"
 
 
 class MyTicketOut(Camel):

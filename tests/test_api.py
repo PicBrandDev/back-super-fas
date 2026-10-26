@@ -593,6 +593,43 @@ def test_ingresso_com_experiencias_avulsas_e_photo_finder_em_todos(client, club_
     assert simples["includesPhotoFinder"] is True and simples["priceCents"] == 15000
 
 
+def test_cupom_de_desconto_na_compra(client, club_admin, fan, monkeypatch):
+    from app.config import get_settings
+
+    base = "/artists/vintage-culture"
+    ev = client.post(f"{base}/manage/events", headers=club_admin, json={"date": "2031-06-10", "city": "Salvador"}).json()
+    ag = client.post(f"{base}/manage/agencies", headers=club_admin, json={"name": "Agência Salvador"}).json()
+    pkg = client.post(
+        f"{base}/manage/packages", headers=club_admin,
+        json={"eventId": ev["id"], "agencyId": ag["id"], "name": "Caravana", "addons": [{"key": "jantar", "priceCents": 50000}],
+              "items": [{"kind": "ticket", "label": "Pista", "priceCents": 50000}]},
+    ).json()
+    body = {"packageId": pkg["id"], "item": 0, "addons": ["jantar"]}
+    q = f"{base}/events/{ev['id']}/quote"
+    assert client.post(q, headers=fan, json=body).json()["totalCents"] == 100000
+
+    # cupom geral criado pela administração (código em maiúsculas), 20%
+    cp = client.post(f"{base}/manage/coupons", headers=club_admin, json={"code": "vintage20", "kind": "percent", "value": 20, "maxUses": 1})
+    assert cp.status_code == 201 and cp.json()["code"] == "VINTAGE20"
+    assert client.post(f"{base}/manage/coupons", headers=club_admin, json={"code": "ZERO", "kind": "percent", "value": 150}).status_code == 400
+    r = client.post(q, headers=fan, json={**body, "coupon": " vintage20 "}).json()
+    assert (r["subtotalCents"], r["discountCents"], r["totalCents"], r["coupon"], r["couponLabel"]) == (100000, 20000, 80000, "VINTAGE20", "20% de desconto")
+    assert client.post(q, headers=fan, json={**body, "coupon": "NAOEXISTE"}).status_code == 400
+
+    # cupom pessoal da roleta (demonstração): aparece em "meus cupons" e vale só uma vez
+    assert client.get(f"{base}/me/coupons", headers=fan).json() == []
+    monkeypatch.setattr(get_settings(), "demo_photo_ticket", True)
+    meus = client.get(f"{base}/me/coupons", headers=fan).json()
+    assert [c["code"] for c in meus] == ["ROLETA10"] and meus[0]["label"] == "10% de desconto" and meus[0]["source"].startswith("Prêmio da roleta")
+    compra = client.post(f"{base}/events/{ev['id']}/purchases", headers=fan, json={**body, "coupon": "ROLETA10"})
+    assert compra.status_code == 201 and compra.json()["priceCents"] == 90000
+    assert client.get(f"{base}/me/coupons", headers=fan).json() == []
+    assert client.post(q, headers=fan, json={**body, "coupon": "ROLETA10"}).status_code == 400  # uso único
+    # o cupom geral de uso único também esgota depois de usado
+    assert client.post(f"{base}/events/{ev['id']}/purchases", headers=fan, json={**body, "coupon": "VINTAGE20"}).json()["priceCents"] == 80000
+    assert client.post(q, headers=fan, json={**body, "coupon": "VINTAGE20"}).status_code == 400
+
+
 def test_post_do_fa_com_texto_e_foto(client, fan):
     base = "/artists/vintage-culture"
     png = b"\x89PNG\r\n\x1a\n" + b"0" * 32

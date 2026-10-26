@@ -80,6 +80,16 @@ class AddonIn(Camel):
     sold_out: bool = False
 
 
+class CouponIn(Camel):
+    code: str = Field(min_length=3, max_length=30, pattern=r"^[A-Za-z0-9_-]+$")
+    kind: Literal["percent", "fixed"] = "percent"
+    value: int = Field(ge=1)  # % (1 a 100) ou centavos
+    active: bool = True
+    expires_on: date | None = None
+    max_uses: int = Field(default=0, ge=0)  # 0 = ilimitado
+    source: str = Field(default="", max_length=80)
+
+
 class PackageIn(Camel):
     event_id: str
     agency_id: str
@@ -166,6 +176,13 @@ def _check_package(db: Session, artist: m.Artist, data: dict[str, Any]) -> None:
                 raise HTTPException(status.HTTP_400_BAD_REQUEST, f"Este show já é da agência {other.agency.name}. Todos os pacotes dele precisam ser dessa agência.")
 
 
+def _check_coupon(db: Session, artist: m.Artist, data: dict[str, Any]) -> None:
+    if "code" in data:
+        data["code"] = data["code"].strip().upper()
+    if data.get("kind") == "percent" and data.get("value", 1) > 100:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "O desconto percentual vai de 1 a 100.")
+
+
 def _post_defaults(db: Session, artist: m.Artist, data: dict[str, Any]) -> None:
     # Posts criados pela administração do ambiente são oficiais (sem fã clube).
     if "kind" in data:
@@ -179,6 +196,7 @@ RESOURCES: list[tuple[str, type, type[Camel], Any, Callable | None]] = [
     ("tickets", m.EventTicket, TicketIn, m.EventTicket.position, _check_event),
     ("agencies", m.Agency, AgencyIn, m.Agency.name, None),
     ("packages", m.EventPackage, PackageIn, m.EventPackage.position, _check_package),
+    ("coupons", m.Coupon, CouponIn, m.Coupon.code, _check_coupon),
     ("posts", m.Post, PostIn, m.Post.created_at.desc(), _post_defaults),
     ("products", m.Product, ProductIn, m.Product.position, None),
     ("tracks", m.Track, TrackIn, m.Track.position, None),

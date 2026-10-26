@@ -223,10 +223,32 @@ class TicketPurchase(Base):
     agency_name: Mapped[str] = mapped_column(String(120), default="")
     label: Mapped[str] = mapped_column(String(160))  # ex.: "Pista + transfer + selo"
     kind: Mapped[str] = mapped_column(String(10), default="ticket")  # ticket | transfer | seal | photo
-    price_cents: Mapped[int] = mapped_column(Integer, default=0)
+    price_cents: Mapped[int] = mapped_column(Integer, default=0)  # valor pago, já com o desconto do cupom
+    coupon_code: Mapped[str] = mapped_column(String(30), default="")
+    discount_cents: Mapped[int] = mapped_column(Integer, default=0)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
 
     event: Mapped["Event"] = relationship()
+
+
+class Coupon(Base):
+    """Cupom de desconto na compra do ingresso: percentual sobre o total ou valor fixo.
+    Sem `user_id` vale para qualquer fã; com `user_id` é pessoal (ex.: prêmio da roleta)."""
+
+    __tablename__ = "coupons"
+    __table_args__ = (UniqueConstraint("artist_id", "code", "user_id"),)
+
+    id: Mapped[str] = mapped_column(String(20), primary_key=True, default=new_id)
+    artist_id: Mapped[str] = mapped_column(ForeignKey("artists.id", ondelete="CASCADE"), index=True)
+    code: Mapped[str] = mapped_column(String(30))  # sempre em maiúsculas
+    user_id: Mapped[str | None] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=True, index=True)
+    source: Mapped[str] = mapped_column(String(80), default="")  # de onde veio, ex.: "Prêmio da roleta do PicKap"
+    kind: Mapped[str] = mapped_column(String(10), default="percent")  # percent | fixed
+    value: Mapped[int] = mapped_column(Integer, default=0)  # % (1 a 100) ou centavos
+    active: Mapped[bool] = mapped_column(Boolean, default=True)
+    expires_on: Mapped[date | None] = mapped_column(Date, nullable=True)
+    max_uses: Mapped[int] = mapped_column(Integer, default=0)  # 0 = ilimitado
+    used: Mapped[int] = mapped_column(Integer, default=0)
 
 
 class SpinCredit(Base):
