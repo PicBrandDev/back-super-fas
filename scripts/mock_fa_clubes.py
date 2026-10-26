@@ -49,7 +49,7 @@ POSTS = [
     "Vamos fazer um encontro antes do show? Sugestões de bar?",
     "Troco camiseta tamanho M por G, alguém topa?",
     "Esse drop novo é o melhor do ano, não aceito discussão.",
-    "Quem acertou a roleta do PicKap esta semana?",
+    "Quem acertou a roleta do PicKup esta semana?",
     "Foto do show saiu! Procurem no Photo Finder.",
     "Dica: chegar cedo garante a grade. Aprendi do jeito difícil.",
     "Saudade do show de verão. Quando volta?",

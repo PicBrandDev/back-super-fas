@@ -52,5 +52,5 @@ def ensure_roulette_coupon(db: Session, artist: m.Artist, user: m.User) -> None:
         return
     if db.scalar(select(m.Coupon.id).where(m.Coupon.artist_id == artist.id, m.Coupon.user_id == user.id, m.Coupon.code == ROULETTE_CODE)):
         return
-    db.add(m.Coupon(artist_id=artist.id, user_id=user.id, code=ROULETTE_CODE, kind="percent", value=10, max_uses=1, source="Prêmio da roleta do PicKap"))
+    db.add(m.Coupon(artist_id=artist.id, user_id=user.id, code=ROULETTE_CODE, kind="percent", value=10, max_uses=1, source="Prêmio da roleta do PicKup"))
     db.commit()

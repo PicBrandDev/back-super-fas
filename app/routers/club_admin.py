@@ -1,7 +1,7 @@
 """Administração do ambiente do cantor: conteúdo oficial (CRUD) e assinantes.
 
 Todas as rotas exigem ser da equipe do fã clube master daquele cantor (ou o admin da plataforma).
-O PicKap, o mural da galera e a equipe de cada fã clube ficam em clubs.py.
+O PicKup, o mural da galera e a equipe de cada fã clube ficam em clubs.py.
 O conteúdo segue o padrão:
     GET    /artists/{slug}/manage/{recurso}
     POST   /artists/{slug}/manage/{recurso}

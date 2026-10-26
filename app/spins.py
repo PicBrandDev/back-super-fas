@@ -1,4 +1,4 @@
-"""Giros da roleta (PicKap): cada giro tem um motivo e é gasto individualmente."""
+"""Giros da roleta (PicKup): cada giro tem um motivo e é gasto individualmente."""
 
 from datetime import datetime, timezone
 

@@ -488,8 +488,8 @@ class InAppAdOut(Camel):
 
 class InAppAdsOut(Camel):
     entry: InAppAdOut | None = None  # modal ao abrir o app (vitrine "entrada")
-    pickap_video: InAppAdOut | None = None  # vídeo obrigatório antes do giro ("pickap_video")
-    pickap_claim: InAppAdOut | None = None  # modal ao ganhar um prêmio ("pickap_resgate")
+    pickup_video: InAppAdOut | None = None  # vídeo obrigatório antes do giro ("pickup_video")
+    pickup_claim: InAppAdOut | None = None  # modal ao ganhar um prêmio ("pickup_resgate")
     feed: InAppAdOut | None = None  # post pequeno entre os cartazes do Mural ("mural")
 
 

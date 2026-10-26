@@ -1,4 +1,4 @@
-"""Monta a roleta do PicKap de todos os fã clubes do Vintage Culture com 7 fatias:
+"""Monta a roleta do PicKup de todos os fã clubes do Vintage Culture com 7 fatias:
 2 x "Não foi dessa vez", 2 cupons de desconto no ingresso (10% e 20%), ingresso unitário de pista,
 camiseta e boné (estes dois retirados na lojinha do Vintage). O que o fã ganha vai para "Meus brindes".
 

@@ -2,7 +2,7 @@
 
 Cada cantor tem quantos fã clubes quiser: o master (cuja equipe administra o ambiente) e os outros,
 cada um com um dono e ajudantes. O fã entra em quantos quiser (grátis).
-Por fã clube: membros, mural da galera, PicKap e vitrines de anúncio.
+Por fã clube: membros, mural da galera, PicKup e vitrines de anúncio.
 """
 
 import random
@@ -364,14 +364,14 @@ async def create_club_post_media(
     return out
 
 
-# ---------------------------------------------------------------- PicKap do fã clube
+# ---------------------------------------------------------------- PicKup do fã clube
 
 
 def club_prizes(db: Session, club: m.FanClub) -> list[m.Prize]:
     return list(db.scalars(select(m.Prize).where(m.Prize.club_id == club.id).order_by(m.Prize.position)))
 
 
-@router.get("/artists/{slug}/clubs/{club}/pickap/prizes", response_model=list[PrizeOut])
+@router.get("/artists/{slug}/clubs/{club}/pickup/prizes", response_model=list[PrizeOut])
 def list_club_prizes(club: FanClubDep, db: DB):
     return [PrizeOut(id=p.id, label=p.label, is_retry=p.is_retry or None, kind=p.kind) for p in club_prizes(db, club)]
 
@@ -403,7 +403,7 @@ def spin_wheel(db: Session, club: m.FanClub, user: m.User, credit_id: str | None
     )
 
 
-@router.post("/artists/{slug}/clubs/{club}/pickap/spin", response_model=SpinOut)
+@router.post("/artists/{slug}/clubs/{club}/pickup/spin", response_model=SpinOut)
 def spin_club(club: FanClubDep, user: CurrentUser, db: DB, body: SpinIn | None = None):
     if not is_member(db, club, user) and not can_manage_club(db, user, club):
         raise forbidden("Entre no fã clube para girar a roleta dele.")

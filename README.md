@@ -4,7 +4,7 @@ API dos fã clubes. Atende o front [front-super-fas](../front-super-fas).
 
 Cada cantor tem um ambiente com quantos fã clubes quiser (1 master + os outros). A equipe do fã clube master administra
 o ambiente (conteúdo oficial e os outros fã clubes); cada fã clube tem 1 dono + ajudantes, membros,
-mural da galera, PicKap e vitrines de anúncio próprios. A assinatura de membro é do ambiente.
+mural da galera, PicKup e vitrines de anúncio próprios. A assinatura de membro é do ambiente.
 
 Stack: **FastAPI · SQLAlchemy 2 · PostgreSQL** (SQLite no desenvolvimento) · login com JWT.
 
@@ -44,14 +44,14 @@ Documentação interativa em `/docs`. Resumo:
 - `GET /artists`, `GET /artists/{slug}`, `GET /me?artist=`, `GET /me/fandoms`
 - `GET|POST /artists/{slug}/posts` (fã posta em `galera` ou `instagram`)
 - `GET /artists/{slug}/events`, `/events/{id}`, `/events/{id}/vendors`, `/events/{id}/gifts`, `POST /events/{id}/luck/join`
-- `GET /artists/{slug}/pickap/prizes`, `POST /artists/{slug}/pickap/spin` (o servidor sorteia)
+- `GET /artists/{slug}/pickup/prizes`, `POST /artists/{slug}/pickup/spin` (o servidor sorteia)
 - `GET /artists/{slug}/products`, `/tracks`, `/ads/home`, `/ad-slots`, `/membership/perks`
 - `POST /artists/{slug}/membership/subscribe` (assinatura simulada, sem cobrança)
 
 **Fã clubes** (qualquer conta logada vê; a equipe administra)
 - `GET /artists/{slug}/clubs`, `GET /artists/{slug}/clubs/{club}`, `POST .../join`, `POST .../leave`
 - Mural: `GET|POST /artists/{slug}/clubs/{club}/posts` (só membro posta)
-- PicKap: `GET .../pickap/prizes`, `POST .../pickap/spin`
+- PicKup: `GET .../pickup/prizes`, `POST .../pickup/spin`
 - Anúncios: `GET .../ad-slots`, `GET .../ads/home`, `GET .../campaigns` (equipe)
 - Equipe: `GET|POST .../staff`, `DELETE .../staff/{id}` (dono: o ambiente escolhe; ajudantes: o dono convida; até 10)
 - Membros: `GET .../members`, `DELETE .../members/{userId}`

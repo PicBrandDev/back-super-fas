@@ -2,8 +2,8 @@
 (o que o fã recebe em GET /artists/vintage-culture/ads/in-app):
 
     entrada         -> entry        Festival Maré (festival / ingressos)
-    pickap_video    -> pickapVideo  DJ Mag (vídeo vertical da votação Top 100 DJs)
-    pickap_resgate  -> pickapClaim  Onda (conta digital, fictícia)
+    pickup_video    -> pickupVideo  Departamento (vídeo vertical do lançamento Toxic, com o Vintage Culture)
+    pickup_resgate  -> pickupClaim  Onda (conta digital, fictícia)
     mural           -> feed         Spotify (post discreto chamando para ouvir o artista)
 
 São marcas de fora (nada da loja ou do artista), com as artes e o vídeo que estão no front em
@@ -29,7 +29,7 @@ from app import models as m
 from app.db import SessionLocal, engine
 from app.migrations import upgrade
 
-VIDEO_URL = "/ads/djmag-top100.mp4"  # servido pelo front (public/ads); em produção, um link http(s) ou upload
+VIDEO_URL = "/ads/toxic-departamento.mp4"  # servido pelo front (public/ads); em produção, um link http(s) ou upload
 
 # (vitrine, marca, e-mail do patrocinador, título, texto, cta, link, arte, vídeo)
 ADS = [
@@ -39,12 +39,12 @@ ADS = [
         "https://example.com/mare", "/ads/exemplo-mare.svg", "",
     ),
     (
-        "pickap_video", "DJ Mag", "djmag@patrocinio.example", "Vote no Vintage Culture no Top 100 DJs",
-        "A votação da DJ Mag está aberta. Assista e libere o seu giro.", "Votar agora",
-        "https://top100djsvote.djmag.com", "/ads/djmag-top100.jpg", VIDEO_URL,
+        "pickup_video", "Departamento", "departamento@patrocinio.example", "Toxic: Vintage Culture x Departamento",
+        "Três anos de estúdio e finalmente saiu. Assista e libere o seu giro.", "Ouvir agora",
+        "https://open.spotify.com/search/Vintage%20Culture%20Departamento%20Toxic", "/ads/toxic-departamento.jpg", VIDEO_URL,
     ),
     (
-        "pickap_resgate", "Onda", "onda@patrocinio.example", "Ganhou? Guarde o prêmio na Onda",
+        "pickup_resgate", "Onda", "onda@patrocinio.example", "Ganhou? Guarde o prêmio na Onda",
         "Conta digital com cartão sem anuidade, Pix na hora e cashback em ingressos.", "Abrir minha conta",
         "https://example.com/onda", "/ads/exemplo-onda.svg", "",
     ),
@@ -55,7 +55,10 @@ ADS = [
     ),
 ]
 
-RETIRED = [("pickap_video", "pulso@patrocinio.example"), ("mural", "sinal@patrocinio.example")]
+RETIRED = [
+    ("pickup_video", "pulso@patrocinio.example"), ("pickup_video", "djmag@patrocinio.example"),
+    ("mural", "sinal@patrocinio.example"),
+]
 
 
 def main() -> None:

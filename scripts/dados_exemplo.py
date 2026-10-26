@@ -109,7 +109,7 @@ def official(api: Api, admin: str, base: str) -> None:
             api.must("POST", f"{base}/manage/{name}", admin, json_body={**item, "position": i})
     for i, item in enumerate(DATA["prizes"]):  # roleta do fã clube master
         api.must("POST", f"{base}/clubs/oficial/manage/prizes", admin, json_body={**item, "position": i})
-    print("✓ Drop News, loja, Drops Hits, benefícios e PicKap do fã clube master")
+    print("✓ Drop News, loja, Drops Hits, benefícios e PicKup do fã clube master")
 
 
 def clubs(api: Api, admin: str, base: str, senha: str) -> None:

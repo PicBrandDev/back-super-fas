@@ -5,7 +5,7 @@
 3. Converte os dados para o modelo de fã clubes:
    - todo cantor ganha o fã clube master ("oficial");
    - a equipe antiga do cantor (artist_admins) vira a equipe do master (o primeiro é o dono);
-   - posts da galera, roleta do PicKap e fãs passam a ser do fã clube master.
+   - posts da galera, roleta do PicKup e fãs passam a ser do fã clube master.
 4. Cria nas vitrines de cada cantor as que faltam de DEFAULT_AD_SLOTS (ex.: os anúncios dentro do app)
    e atualiza o "onde" da vitrine do Mural se ainda for o texto padrão antigo.
 
@@ -66,9 +66,51 @@ def upgrade(engine: Engine) -> None:
             conn.execute(text("ALTER TABLE ad_slots ALTER COLUMN key TYPE VARCHAR(80)"))
 
     with Session(engine) as db:
+        _pickap_to_pickup(db)
         _to_fan_clubs(db)
         _default_ad_slots(db)
         _packages_without_photo_option(db)
+
+
+def _pickap_to_pickup(db: Session) -> None:
+    """O módulo PicKap virou PicKup (grafia certa de pick-up, o toca-discos): troca a key das vitrines
+    ("pickap", "pickap_video", "pickap_resgate", "{clube}.pickap"), o módulo do cantor e os textos gravados.
+    Roda antes de _default_ad_slots para não criar vitrines novas ao lado das antigas."""
+
+    def fix(s: str) -> str:
+        return s.replace("PicKap", "PicKup").replace("pickap", "pickup") if s else s
+
+    changed = False
+    for artist in db.scalars(select(m.Artist)):
+        mods = artist.modules or {}
+        if "pickap" in mods:
+            mods = dict(mods)
+            mods.setdefault("pickup", mods["pickap"])
+            del mods["pickap"]
+            artist.modules = mods
+            changed = True
+        keys = {s.key for s in artist.ad_slots}
+        for s in artist.ad_slots:
+            if "pickap" in s.key:
+                if fix(s.key) in keys:
+                    log.warning("Vitrine %s.%s ficou com a key antiga: %s já existe", artist.slug, s.key, fix(s.key))
+                    continue
+                s.key = fix(s.key)
+                changed = True
+            for col in ("name", "where", "format"):
+                if "PicKap" in (getattr(s, col) or ""):
+                    setattr(s, col, fix(getattr(s, col)))
+                    changed = True
+    for c in db.scalars(select(m.Coupon).where(m.Coupon.source.contains("PicKap"))):
+        c.source = fix(c.source)
+        changed = True
+    for p in db.scalars(select(m.Post).where(m.Post.official.is_(True))):
+        if "PicKap" in (p.text or "") or "pickap" in (p.url or ""):
+            p.text, p.url = fix(p.text), fix(p.url)
+            changed = True
+    if changed:
+        db.commit()
+        log.warning("PicKap renomeado para PicKup nos dados gravados")
 
 
 def _packages_without_photo_option(db: Session) -> None:

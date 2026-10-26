@@ -275,18 +275,18 @@ def join_luck(event_id: str, artist: FanArtist, user: CurrentUser, db: DB):
     return {"joined": True}
 
 
-# ---------------------------------------------------------------- PicKap, loja, drops
+# ---------------------------------------------------------------- PicKup, loja, drops
 
 
-@router.get("/artists/{slug}/pickap/prizes", response_model=list[PrizeOut])
+@router.get("/artists/{slug}/pickup/prizes", response_model=list[PrizeOut])
 def list_prizes(artist: FanArtist, db: DB):
-    """Roleta do fã clube master (cada fã clube tem a sua em /clubs/{club}/pickap)."""
+    """Roleta do fã clube master (cada fã clube tem a sua em /clubs/{club}/pickup)."""
     mc = master_club(db, artist)
     prizes = db.scalars(select(m.Prize).where(m.Prize.club_id == mc.id).order_by(m.Prize.position)).all() if mc else []
     return [PrizeOut(id=p.id, label=p.label, is_retry=p.is_retry or None) for p in prizes]
 
 
-@router.get("/artists/{slug}/pickap/spins", response_model=list[SpinCreditOut])
+@router.get("/artists/{slug}/pickup/spins", response_model=list[SpinCreditOut])
 def list_spins(artist: FanArtist, user: CurrentUser, db: DB):
     """Os giros do fã, cada um com o motivo (compra de ingresso, boas-vindas...)."""
     from .. import spins as spin_lib
@@ -491,7 +491,7 @@ def my_tickets(artist: FanArtist, user: CurrentUser, db: DB):
     return [ticket_out(t) for t in rows]
 
 
-@router.post("/artists/{slug}/pickap/spin", response_model=SpinOut)
+@router.post("/artists/{slug}/pickup/spin", response_model=SpinOut)
 def spin(artist: FanArtist, user: CurrentUser, db: DB):
     """Gira a roleta do fã clube master."""
     from .clubs import spin_wheel
@@ -546,8 +546,8 @@ def live_campaign(db: Session, artist: m.Artist, key: str) -> m.Campaign | None:
 
 
 # lugar do anúncio no app -> vitrine
-IN_APP_SLOTS = {"entry": "entrada", "pickap_video": "pickap_video", "pickap_claim": "pickap_resgate", "feed": "mural"}
-PICKAP_VIDEO_MIN_SECONDS = 30
+IN_APP_SLOTS = {"entry": "entrada", "pickup_video": "pickup_video", "pickup_claim": "pickup_resgate", "feed": "mural"}
+PICKUP_VIDEO_MIN_SECONDS = 30
 
 
 @router.get("/artists/{slug}/ads/in-app", response_model=InAppAdsOut)
@@ -573,7 +573,7 @@ def in_app_ads(artist: FanArtist, db: DB):
             url=c.url or "#",
             image_url=c.art_path or None,
             video_url=c.video_url or None,
-            min_seconds=PICKAP_VIDEO_MIN_SECONDS if place == "pickap_video" else None,
+            min_seconds=PICKUP_VIDEO_MIN_SECONDS if place == "pickup_video" else None,
         )
     return InAppAdsOut(**out)
 
