@@ -9,6 +9,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from .. import models as m
+from ..resale.guards import release_artist
 from ..defaults import BLANK_THEME, DEFAULT_AD_SLOTS, MODULES, NEW_CLUB_COLORS
 from ..schemas import (
     AdSlotOut,
@@ -123,6 +124,7 @@ def delete_fan_club(slug: str, _: MasterUser, db: DB):
     artist = get_artist_or_404(db, slug)
     if artist.status == "active":
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Coloque o fã clube em configuração antes de apagar.")
+    release_artist(db, artist)  # revenda de ingressos: bloqueia se houve revenda e libera as chaves que travam a exclusão
     db.delete(artist)
     db.commit()
 

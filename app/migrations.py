@@ -20,6 +20,7 @@ from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session
 
 from . import models as m
+from .resale import models as _resale_models  # noqa: F401  (registra as tabelas da revenda antes do create_all)
 from .db import Base
 
 log = logging.getLogger("superfas.migrations")
