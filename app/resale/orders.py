@@ -2,6 +2,7 @@
 varredura de prazos. Toda mudança de estado é um UPDATE condicional (`access.cas`): só quem vence a troca executa os efeitos
 (devolver saldo, lançar no livro-razão), então ações repetidas ou concorrentes nunca agem duas vezes."""
 
+import re
 from datetime import datetime, timedelta
 
 from sqlalchemy import false, func, select, update
@@ -32,12 +33,15 @@ from .base import (
     ResaleError,
     aware,
     conflict,
+    encrypt,
     forbidden,
     not_found,
     split_fee,
     utcnow,
 )
 from .models import Dispute, LedgerEntry, Listing, Order, ResaleSetting, Review
+
+EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 
 DISPUTE_REASONS = ("not_received", "invalid_ticket", "wrong_type", "other")
 
@@ -111,7 +115,7 @@ def _refund(db: Session, o: Order, actor: m.User | None, frm: tuple[str, ...], r
 # ---------------------------------------------------------------- varredura de prazos (preguiçosa e idempotente)
 
 
-def sweep(db: Session, *, order_id: str | None = None, listing_id: str | None = None, event_id: str | None = None, user_id: str | None = None, artist_id: str | None = None, now: datetime | None = None) -> None:
+def sweep(db: Session, *, order_id: str | None = None, listing_id: str | None = None, event_id: str | None = None, user_id: str | None = None, artist_id: str | None = None, seller_id: str | None = None, now: datetime | None = None) -> None:
     """Aplica os prazos vencidos. Sem filtro varre tudo (o cron futuro); com filtro, só o escopo lido/alterado agora."""
     now = now or utcnow()
 
@@ -150,6 +154,8 @@ def sweep(db: Session, *, order_id: str | None = None, listing_id: str | None = 
         q = q.where(Listing.event_id == event_id)
     elif artist_id:
         q = q.where(Listing.artist_id == artist_id)
+    elif seller_id:
+        q = q.where(Listing.seller_id == seller_id)
     elif order_id or user_id:
         q = q.where(false())  # escopo de pedido/usuário não fecha anúncios
     for li in db.scalars(q).all():
@@ -168,7 +174,14 @@ def sweep(db: Session, *, order_id: str | None = None, listing_id: str | None = 
 # ---------------------------------------------------------------- reserva
 
 
-def reserve(db: Session, artist: m.Artist, buyer: m.User, listing_id: str, qty: int, idem_key: str | None) -> Order:
+def _transfer_email(raw: str, buyer: m.User) -> str:
+    v = (raw or "").strip() or (buyer.email or "").strip()
+    if not EMAIL_RE.match(v):
+        raise ResaleError("TRANSFER_TO_INVALID", "Informe o e-mail da sua conta na ticketeira.")
+    return v.lower()
+
+
+def reserve(db: Session, artist: m.Artist, buyer: m.User, listing_id: str, qty: int, idem_key: str | None, transfer_to: str = "") -> Order:
     if idem_key:
         prior = db.scalar(select(Order).where(Order.buyer_id == buyer.id, Order.idempotency_key == idem_key))
         if prior:  # repetição do mesmo pedido: devolve o que já existe
@@ -178,6 +191,7 @@ def reserve(db: Session, artist: m.Artist, buyer: m.User, listing_id: str, qty: 
     li = db.get(Listing, listing_id)
     if not li or li.artist_id != artist.id:
         raise not_found("Anúncio não encontrado.")
+    transfer_email = _transfer_email(transfer_to, buyer)
     sweep(db, listing_id=li.id, user_id=None)
     sweep(db, user_id=buyer.id)
     db.refresh(li)
@@ -222,6 +236,7 @@ def reserve(db: Session, artist: m.Artist, buyer: m.User, listing_id: str, qty: 
         listing_id=li.id, artist_id=artist.id, event_id=li.event_id, buyer_id=buyer.id, seller_id=li.seller_id, qty=qty,
         unit_price_cents=li.unit_price_cents, gross_cents=gross, fee_bps=bps, fee_cents=fee, seller_net_cents=net,
         status=O_RESERVED, reserved_until=utcnow() + timedelta(minutes=RESERVE_MINUTES), idempotency_key=idem_key,
+        transfer_to_enc=encrypt(transfer_email),
     )
     db.add(o)
     try:
@@ -289,6 +304,8 @@ def confirm_payment(db: Session, o: Order, ref: str, amount_cents: int | None = 
 
 def cancel(db: Session, buyer: m.User, o: Order) -> Order:
     _party(o, buyer, "buyer")
+    sweep(db, order_id=o.id)
+    db.refresh(o)
     if _same(o, O_CANCELLED):
         return o
     if o.status != O_RESERVED:

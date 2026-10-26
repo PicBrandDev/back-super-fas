@@ -98,7 +98,8 @@ def eligibility(db: Session, artist: m.Artist, user: m.User) -> tuple[bool, bool
         return False, False, ["role"]
     from ..routers.fan import get_fandom  # evita import circular
 
-    if not get_fandom(db, artist, user, create=False):  # não cria o Fandom só por consultar
+    staff_here = user.role == m.ROLE_ARTIST_ADMIN and any(st.club.artist_id == artist.id for st in user.staff_of)
+    if not staff_here and not get_fandom(db, artist, user, create=False):  # não cria o Fandom só por consultar
         missing.append("fandom")
     if not address_complete(user):
         missing.append("address")

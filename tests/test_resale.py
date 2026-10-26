@@ -283,7 +283,7 @@ def test_fluxo_completo_com_taxa_e_livro_razao(client, club_admin, world):
     assert led["release_seller"]["amountCents"] == 30600 and led["fee"]["amountCents"] == 5400 and "refund" not in led
     assert led["hold"]["amountCents"] == led["release_seller"]["amountCents"] + led["fee"]["amountCents"]  # o escrow zera
     # avaliação (uma vez, 1 a 5) e confiança do vendedor
-    assert client.post(f"{R}/orders/{o['id']}/review", headers=comp, json={"rating": 6}).status_code == 422
+    assert client.post(f"{R}/orders/{o['id']}/review", headers=comp, json={"rating": 6}).json()["code"] == "RATING_INVALID"
     assert client.post(f"{R}/orders/{o['id']}/review", headers=comp, json={"rating": 5, "comment": "Tudo certo!"}).status_code == 201
     assert client.post(f"{R}/orders/{o['id']}/review", headers=comp, json={"rating": 4}).json()["code"] == "ALREADY_REVIEWED"
     seller_id = o["counterparty"]["userId"]
@@ -306,9 +306,7 @@ def test_privacidade_nenhuma_resposta_publica_traz_cpf_telefone_ou_email(client,
         client.get(f"{R}/events/{world['event']}/listings", headers=comp).text,
         client.get(f"{R}/listings/{li['id']}", headers=comp).text,
         client.get(f"{R}/sellers/{o['counterparty']['userId']}", headers=comp).text,
-        client.get(f"{R}/orders/{o['id']}", headers=comp).text,
         client.get(f"{R}/orders/{o['id']}", headers=vend).text,
-        client.get(f"{R}/me/orders", headers=comp).text,
         client.get(f"{ADM}/listings/{li['id']}", headers=club_admin).text,
         client.get(f"{ADM}/orders", headers=club_admin).text,
         client.get("/me/identity", headers=vend).text,
@@ -316,6 +314,9 @@ def test_privacidade_nenhuma_resposta_publica_traz_cpf_telefone_ou_email(client,
     for text in dumps:
         assert cpf not in text and "98877" not in text and me["email"] not in text and not any(c in text for c in ("cpfEnc", "cpf_enc", "cpfHash"))
         assert "resale-priv-" not in text  # o prefixo do e-mail nunca vira nome público
+    # o comprador que já pagou recebe só o telefone do vendedor (para o WhatsApp); CPF e e-mail continuam fora
+    for text in (client.get(f"{R}/orders/{o['id']}", headers=comp).text, client.get(f"{R}/me/orders", headers=comp).text):
+        assert "19988776655" in text and cpf not in text and me["email"] not in text and "cpfEnc" not in text and "resale-priv-" not in text
 
 
 # ---------------------------------------------------------------- reserva, saldo e prazos

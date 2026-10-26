@@ -6,8 +6,8 @@ from sqlalchemy.orm import Session
 from .. import models as m
 from ..schemas import br_date
 from . import access, payments, trust
-from .base import L_LIVE, L_PENDING, L_REJECTED, MAX_ATTEMPTS, O_ACTIVE, O_AWAITING, O_COMPLETED, O_DISPUTED, O_RESERVED, O_TRANSFERRED, aware, utcnow
-from .models import Dispute, Listing, Order, Review
+from .base import L_LIVE, L_PENDING, L_REJECTED, MAX_ATTEMPTS, O_ACTIVE, O_AWAITING, O_COMPLETED, O_DISPUTED, O_RESERVED, O_TRANSFERRED, aware, decrypt, utcnow
+from .models import Dispute, Listing, Order, Review, UserIdentity
 from .schemas import DisputeOut, ListingOut, MyListingOut, OrderOut, SellerOut
 
 
@@ -48,6 +48,11 @@ def order_out(db: Session, artist: m.Artist, o: Order, viewer: m.User | None, se
     is_buyer, is_seller = role == "buyer" and viewer is not None, role == "seller"
     start_ok = o.status == O_RESERVED and aware(o.reserved_until) >= now
     reviewed = bool(db.scalar(select(Review.id).where(Review.order_id == o.id)))
+    # o vendedor só recebe a conta de destino quando o pagamento entrou (antes disso não há o que transferir)
+    paid = o.status in (O_AWAITING, O_TRANSFERRED, O_DISPUTED, O_COMPLETED)
+    show_dest = bool(o.transfer_to_enc) and (role == "buyer" or viewer is None or paid)
+    # e o comprador só recebe o WhatsApp do vendedor depois de pagar (para combinar a transferência)
+    seller_ident = db.get(UserIdentity, o.seller_id) if paid and is_buyer else None
     return OrderOut(
         id=o.id, status=o.status, role=role, listing_id=o.listing_id, event_id=o.event_id, event_city=e.city, event_date=e.date, event_venue=e.venue,
         ticket_label=li.ticket_label if li else "", qty=o.qty, unit_price_cents=o.unit_price_cents, gross_cents=o.gross_cents, fee_cents=o.fee_cents,
@@ -63,6 +68,8 @@ def order_out(db: Session, artist: m.Artist, o: Order, viewer: m.User | None, se
         can_reply_dispute=bool(is_seller and o.status == O_DISPUTED and d and d.status == "open"),
         can_review=bool(is_buyer and o.status == O_COMPLETED and not reviewed),
         payment={"provider": "fake"} if payments.is_fake() else None,
+        created_at=aware(o.created_at), transfer_to=decrypt(o.transfer_to_enc) if show_dest else None,
+        seller_phone=decrypt(seller_ident.phone_enc) if seller_ident else None,
     )
 
 
