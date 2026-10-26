@@ -52,6 +52,8 @@ Rotas sugeridas no front (`src/app/[artista]/(fan)/revenda/...`):
 | `/revenda/identidade` | Informar CPF e telefone (necessário para vender) | `GET/PUT /me/identity` |
 | `/admin/revenda` | Admin: chaves por show, taxa, fila de provas, disputas, pedidos, livro-razão | seção 7 |
 
+Endereço incompleto (`missing: ["address"]`): `PUT /auth/address` `{ zipCode, street, number, complement, neighborhood, city, state }` → `ProfileOut`.
+
 **Antes de vender ou comprar**, chame `GET /me/eligibility`: `{ canBuy, canSell, missing }`. `missing` pode conter `role` (conta sem permissão), `fandom` (não entrou no ambiente), `address` (completar endereço no perfil), `cpf`, `phone`. Leve o usuário ao passo que falta.
 
 ## 4. Fluxos
@@ -115,7 +117,7 @@ Todos com prefixo `/artists/{slug}/resale` (exceto `/me/identity`). Resumo dos c
 - `POST /events/{eventId}/listings` — **multipart/form-data**: `ticketId`, `qty` (1–10), `unitPriceCents`, `codes` (**repetir o campo**, um por ingresso, igual a `qty`), `proof` (arquivo). → `201 MyListingOut`.
 - `GET /me/listings` → `[MyListingOut]`
 - `POST /listings/{id}/cancel` → `MyListingOut` (só sem pedidos em andamento: `HAS_ACTIVE_ORDERS`).
-- `POST /listings/{id}/resubmit` — multipart: `codes[]`, `proof`.
+- `POST /listings/{id}/resubmit` — multipart: `codes` (repetir o campo, um por ingresso), `proof`.
 
 `ListingOut`:
 ```json
@@ -143,7 +145,7 @@ Sugestão de UI: selo "Identidade informada" quando `identityLevel == "declared"
 - `GET /sellers/{userId}/reviews?page=` → `[{ id, rating, comment, createdAt, buyerName }]`
 
 ### Pedidos
-- `POST /listings/{id}/orders` `{ qty }` + header `Idempotency-Key` → `201 OrderOut`. Erros: `QTY_UNAVAILABLE` (409, alguém levou antes), `OWN_LISTING`, `ALREADY_RESERVED`, `TOO_MANY_RESERVATIONS` (429, máx. 3 reservas em aberto), `RESALE_CLOSED`, `LISTING_NOT_LIVE`, `NOT_ELIGIBLE`, `PRICE_ABOVE_FACE`.
+- `POST /listings/{id}/orders` `{ qty, transferTo }` + header `Idempotency-Key` → `201 OrderOut`. `transferTo` é o e-mail da conta do comprador na ticketeira (para onde o vendedor transfere); vazio = o e-mail do cadastro. Erro `TRANSFER_TO_INVALID` (400). Erros: `QTY_UNAVAILABLE` (409, alguém levou antes), `OWN_LISTING`, `ALREADY_RESERVED`, `TOO_MANY_RESERVATIONS` (429, máx. 3 reservas em aberto), `RESALE_CLOSED`, `LISTING_NOT_LIVE`, `NOT_ELIGIBLE`, `PRICE_ABOVE_FACE`.
 - `GET /me/orders?role=buyer|seller|all` → `[OrderOut]`
 - `GET /orders/{id}` → `OrderOut`
 - `POST /orders/{id}/pay` — pagamento simulado (só `canPay`).
@@ -172,7 +174,9 @@ Sugestão de UI: selo "Identidade informada" quando `identityLevel == "declared"
 }
 ```
 - O **comprador** paga `grossCents`. O **vendedor** recebe `sellerNetCents` (= bruto − `feeCents`). Mostre cada um o que lhe cabe.
-- O vendedor **não** vê dados pessoais do comprador, só `buyerHandle`/`buyerName`.
+- O vendedor **não** vê dados pessoais do comprador, só `buyerHandle`/`buyerName` e, **depois do pagamento**, `transferTo` (a conta da ticketeira que o próprio comprador informou para receber o ingresso). O comprador vê o seu `transferTo` sempre.
+- Do outro lado, **depois do pagamento** o comprador recebe `sellerPhone` (só dígitos, com DDD, sem o +55) para falar com o vendedor no WhatsApp (`https://wa.me/55{sellerPhone}`). Antes de pagar, para o vendedor, para o admin e depois de reembolso ou cancelamento vem `null`.
+- `createdAt` é quando a reserva foi feita (primeira etapa da linha do tempo).
 
 ## 7. Endpoints do admin do ambiente
 

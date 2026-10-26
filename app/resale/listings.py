@@ -216,6 +216,9 @@ def approve(db: Session, admin: m.User, li: Listing) -> Listing:
     if li.status != L_PENDING:
         raise conflict("INVALID_STATE", "Só dá para aprovar um anúncio em análise.")
     access.ensure_open(db, db.get(m.Event, li.event_id))
+    t = db.get(m.EventTicket, li.event_ticket_id) if li.event_ticket_id else None
+    if t and t.price_cents and li.unit_price_cents > t.price_cents:
+        raise conflict("PRICE_ABOVE_FACE", "O preço deste anúncio está acima do valor de face atual. Rejeite e peça um novo anúncio.")
     if not access.cas(db, Listing, li.id, L_PENDING, status=L_LIVE, reviewed_by=admin.id, reviewed_at=utcnow(), review_reason=""):
         raise conflict("INVALID_STATE", "O anúncio mudou de situação. Atualize a página.")
     access.audit(db, "listing", li.id, "approved", admin, L_PENDING, L_LIVE)

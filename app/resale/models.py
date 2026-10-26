@@ -145,6 +145,8 @@ class Order(Base):
     close_reason: Mapped[str] = mapped_column(String(40), default="")
     idempotency_key: Mapped[str | None] = mapped_column(String(80), nullable=True)
     payment_ref: Mapped[str] = mapped_column(String(80), default="")
+    # e-mail da conta do comprador na ticketeira (cifrado): para onde o vendedor transfere; ele só vê depois do pagamento
+    transfer_to_enc: Mapped[str] = mapped_column(String(600), default="")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
 
