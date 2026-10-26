@@ -82,7 +82,7 @@ class PackageIn(Camel):
     transfer_details: str = Field(default="", max_length=300)
     url: str = Field(default="", max_length=500)
     items: list[PackageItemIn] = Field(default_factory=list, max_length=30)
-    experiences: list[Literal["jantar", "camarim", "pre", "after"]] = Field(default_factory=list, max_length=4)
+    experiences: list[Literal["jantar", "camarim", "pre", "after", "hotel"]] = Field(default_factory=list, max_length=4)
     active: bool = True
     position: int = 0
 

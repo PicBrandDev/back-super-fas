@@ -27,6 +27,7 @@ EXPERIENCES = [
     ("camarim", "Meet & greet no camarim", "Encontro com o Vintage no camarim e foto com ele no show. Vagas limitadas.", 600),
     ("pre", "Pré-esquenta", "Festa de pré-esquenta com DJs convidados e open bar, até a abertura dos portões.", 120),
     ("after", "After oficial", "After party pós-show com open bar e entrada garantida, na mesma noite.", 180),
+    ("hotel", "Hotel com hospedagem", "Diária em hotel parceiro perto do show, com café da manhã e late check-out.", 380),
 ]
 TYPES = [("Pista", 1.0), ("Pista Premium", 1.6), ("Camarote", 2.4)]
 
@@ -56,10 +57,10 @@ def main() -> None:
 
             packs = [(key, name, desc, extra, [key]) for key, name, desc, extra in EXPERIENCES]
             packs.append(("completa", "Experiência completa Vintage",
-                          "Jantar, meet & greet no camarim com foto, pré-esquenta e after, tudo no mesmo pacote.", 1100, [k for k, *_ in EXPERIENCES]))
+                          "Hospedagem em hotel, jantar, meet & greet no camarim com foto, pré-esquenta e after, tudo no mesmo pacote.", 1450, [k for k, *_ in EXPERIENCES]))
             for key, name, desc, extra, exps in packs:
-                tipos = TYPES if key in ("pre", "after") else TYPES[1:]  # jantar e camarim só com Pista Premium ou Camarote
-                nome = {"jantar": "jantar com o Vintage", "camarim": "meet & greet no camarim", "pre": "pré-esquenta", "after": "after", "completa": "experiência completa"}[key]
+                tipos = TYPES if key in ("pre", "after", "hotel") else TYPES[1:]  # jantar e camarim só com Pista Premium ou Camarote
+                nome = {"jantar": "jantar com o Vintage", "camarim": "meet & greet no camarim", "pre": "pré-esquenta", "after": "after", "hotel": "hospedagem em hotel", "completa": "experiência completa"}[key]
                 items = [
                     {"kind": "ticket", "label": f"{label} + {nome}", "price_cents": price(label, mult, extra) * 100, "sold_out": False}
                     for label, mult in tipos
