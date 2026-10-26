@@ -3,14 +3,15 @@ import logging
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import FastAPI, HTTPException
-from fastapi.responses import FileResponse
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.responses import FileResponse, JSONResponse
 
 from . import instagram
 from .config import DEV_SECRET, get_settings
 from .db import SessionLocal, engine
 from .migrations import upgrade
-from .routers import analytics, auth, club_admin, clubs, drops, fan, master, photos, ranking, sponsor
+from .resale.base import ResaleError
+from .routers import analytics, auth, club_admin, clubs, drops, fan, master, photos, ranking, resale, resale_admin, sponsor
 from .seed import seed
 
 logging.basicConfig(level=logging.INFO)
@@ -62,7 +63,13 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-for r in (auth.router, fan.router, clubs.router, club_admin.router, analytics.router, drops.router, photos.router, ranking.router, master.router, sponsor.router):
+@app.exception_handler(ResaleError)
+async def resale_error_handler(request: Request, exc: ResaleError):
+    """Erros da revenda levam `detail` (português) e `code` (máquina) para o front decidir a mensagem e a ação."""
+    return JSONResponse(status_code=exc.status_code, content={"detail": exc.detail, "code": exc.code})
+
+
+for r in (auth.router, fan.router, clubs.router, club_admin.router, analytics.router, drops.router, photos.router, ranking.router, master.router, sponsor.router, resale.router, resale_admin.router):
     app.include_router(r)
 
 Path(settings.upload_dir).mkdir(parents=True, exist_ok=True)

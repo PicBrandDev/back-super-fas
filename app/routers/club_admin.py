@@ -18,6 +18,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from .. import models as m
+from ..resale.guards import ensure_deletable, ensure_editable
 from ..schemas import Camel, MemberOut, RewardOut, br_date
 from ..security import DB, ManagedArtist
 
@@ -256,6 +257,7 @@ def _register(name: str, model: type, In: type[Camel], order_by: Any, hook: Call
                 data.pop(f)
         if hook:
             hook(db, artist, data)
+        ensure_editable(db, obj, data)  # revenda: não muda data/horário do show com compra em andamento
         for f, v in data.items():
             setattr(obj, f, v)
         db.commit()
@@ -264,7 +266,9 @@ def _register(name: str, model: type, In: type[Camel], order_by: Any, hook: Call
 
     @router.delete(f"{path}/{{item_id}}", status_code=204, tags=tag, name=f"delete_{name}")
     def delete_item(item_id: str, artist: ManagedArtist, db: DB):
-        db.delete(get_obj(db, artist, item_id))
+        obj = get_obj(db, artist, item_id)
+        ensure_deletable(db, obj)  # revenda de ingressos: não apaga show/ingresso que sustenta dinheiro retido
+        db.delete(obj)
         db.commit()
 
 

@@ -63,6 +63,13 @@ class Settings(BaseSettings):
 
     # Onde ficam as artes enviadas pelos patrocinadores.
     upload_dir: str = "./uploads"
+    # Revenda de ingressos: chave (Fernet, base64 de 32 bytes) que cifra CPF, telefone e códigos dos ingressos; se vazia, deriva do
+    # JWT_SECRET (troque em produção). O pepper separa o hash do CPF. Provas dos ingressos ficam fora do /uploads público.
+    resale_pii_key: str = ""
+    resale_pepper: str = ""
+    resale_payment_provider: str = "fake"  # fake = pagamento simulado (desligue em produção quando houver gateway)
+    resale_allow_fake_payment: bool = False  # fora do SQLite (servidor), o pagamento simulado só liga com esta chave explícita
+    private_upload_dir: str = ""  # se vazio: a pasta "private" ao lado do upload_dir
 
 
 @lru_cache
