@@ -63,3 +63,13 @@ CLUB_AD_SLOTS = [
 
 MAX_CLUB_STAFF = 10  # por fã clube: 1 dono + ajudantes
 MASTER_CLUB_SLUG = "oficial"
+
+
+# Experiências que o fã pode adicionar ao ingresso (chave -> nome mostrado e usado no rótulo do ingresso).
+ADDON_LABELS = {
+    "jantar": "Jantar com o Vintage",
+    "camarim": "Meet & greet no camarim",
+    "pre": "Pré-esquenta",
+    "after": "After",
+    "hotel": "Hotel com hospedagem",
+}

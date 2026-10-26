@@ -74,6 +74,12 @@ class PackageItemIn(Camel):
     sold_out: bool = False
 
 
+class AddonIn(Camel):
+    key: Literal["jantar", "camarim", "pre", "after", "hotel"]
+    price_cents: int = Field(default=0, ge=0)
+    sold_out: bool = False
+
+
 class PackageIn(Camel):
     event_id: str
     agency_id: str
@@ -82,7 +88,7 @@ class PackageIn(Camel):
     transfer_details: str = Field(default="", max_length=300)
     url: str = Field(default="", max_length=500)
     items: list[PackageItemIn] = Field(default_factory=list, max_length=30)
-    experiences: list[Literal["jantar", "camarim", "pre", "after", "hotel"]] = Field(default_factory=list, max_length=4)
+    addons: list[AddonIn] = Field(default_factory=list, max_length=10)
     active: bool = True
     position: int = 0
 

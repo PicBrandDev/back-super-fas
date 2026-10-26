@@ -390,6 +390,13 @@ class PackageItemOut(Camel):
     sold_out: bool = False
 
 
+class AddonOut(Camel):
+    key: str  # jantar | camarim | pre | after | hotel
+    label: str
+    price_cents: int
+    sold_out: bool = False
+
+
 class PackageOut(Camel):
     id: str
     name: str
@@ -400,7 +407,7 @@ class PackageOut(Camel):
     url: str  # link de venda do pacote (cai no site da agência se vazio)
     transfer_details: str
     has_transfer: bool
-    experiences: list[str] = []  # jantar | camarim | pre | after
+    addons: list["AddonOut"] = []  # experiências que o fã adiciona ao ingresso
     from_price_cents: int | None  # menor preço entre os itens
     items: list[PackageItemOut]
 
@@ -516,6 +523,7 @@ class CheckoutOut(Camel):
 class PurchaseIn(Camel):
     package_id: str
     item: int = Field(ge=0)  # posição da opção dentro do pacote
+    addons: list[str] = Field(default_factory=list, max_length=10)  # experiências escolhidas (chaves do pacote)
 
 
 class MyTicketOut(Camel):

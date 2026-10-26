@@ -354,9 +354,10 @@ class EventPackage(Base):
     url: Mapped[str] = mapped_column(String(500), default="")  # link de venda do pacote
     # [{"kind": "ticket" (só ingresso) | "transfer" (ingresso + transfer) | "seal" (+ selo no app) | "photo" (legado: igual a seal), "label": "Pista", "price_cents": 18000, "sold_out": false}]
     items: Mapped[list] = mapped_column(JSON, default=list)
-    # Experiências do pacote: "jantar" (jantar com o Vintage), "camarim" (meet & greet no camarim, foto com ele no show),
-    # "pre" (pré-esquenta), "after" (after), "hotel" (hospedagem em hotel). O Photo Finder vem em todos os pacotes, então não é uma opção.
-    experiences: Mapped[list] = mapped_column(JSON, default=list)
+    # Experiências que o fã adiciona ao ingresso, cada uma com o seu preço:
+    # [{"key": "jantar" | "camarim" | "pre" | "after" | "hotel", "price_cents": 45000, "sold_out": false}]
+    # O Photo Finder vem em todos os pacotes, então não é uma experiência à parte.
+    addons: Mapped[list] = mapped_column(JSON, default=list)
     active: Mapped[bool] = mapped_column(Boolean, default=True)
     position: Mapped[int] = mapped_column(Integer, default=0)
 
