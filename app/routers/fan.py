@@ -16,6 +16,9 @@ from ..schemas import (
     AdSlotOut,
     ArtistOut,
     CheckoutIn,
+    StoreLineOut,
+    StoreOrderOut,
+    StoreQuoteOut,
     CheckoutOut,
     EventOut,
     FanPostIn,
@@ -295,25 +298,103 @@ def list_spins(artist: FanArtist, user: CurrentUser, db: DB):
     return out
 
 
+SHIPPING_CENTS = 1990  # frete fixo da entrega (simulado)
+FREE_SHIPPING_FROM_CENTS = 30000  # frete grátis a partir deste subtotal
+SIZES = ("P", "M", "G", "GG")
+
+
+def _store_price(db, artist: m.Artist, body: CheckoutIn):
+    """Confere os itens, tamanhos e a entrega; devolve (linhas, produtos por id, subtotal, frete, total)."""
+    lines, prods = [], {}
+    for it in body.items:
+        p = db.get(m.Product, it.product_id)
+        if p is None or p.artist_id != artist.id:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "Produto não encontrado.")
+        if not p.price_cents:
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, f"{p.name} ainda não tem preço definido.")
+        size = it.size.strip().upper()
+        if p.category == "roupas" and size not in SIZES:
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, f"Escolha o tamanho de {p.name} (P, M, G ou GG).")
+        if p.category != "roupas":
+            size = ""
+        prods[p.id] = p
+        lines.append(
+            StoreLineOut(
+                product_id=p.id, name=p.name, category=p.category, qty=it.qty, size=size,
+                unit_cents=p.price_cents, total_cents=p.price_cents * it.qty,
+            )
+        )
+    subtotal = sum(l.total_cents for l in lines)
+    if body.delivery == "ship" and len(body.address.strip()) < 8:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Informe o endereço de entrega.")
+    shipping = 0 if body.delivery == "pickup" or subtotal >= FREE_SHIPPING_FROM_CENTS else SHIPPING_CENTS
+    return lines, prods, subtotal, shipping, subtotal + shipping
+
+
+@router.post("/artists/{slug}/store/quote", response_model=StoreQuoteOut)
+def store_quote(body: CheckoutIn, artist: FanArtist, db: DB):
+    """Valores do carrinho da loja (itens, frete e total), calculados pela API, sem comprar."""
+    lines, _, subtotal, shipping, total = _store_price(db, artist, body)
+    return StoreQuoteOut(lines=lines, subtotal_cents=subtotal, shipping_cents=shipping, total_cents=total, free_shipping_from_cents=FREE_SHIPPING_FROM_CENTS)
+
+
 @router.post("/artists/{slug}/store/checkout", response_model=CheckoutOut, status_code=201)
 def store_checkout(body: CheckoutIn, artist: FanArtist, user: CurrentUser, db: DB):
-    """Compra da sacola da loja (simulada): registra os produtos e dá 1 giro da roleta por camiseta."""
+    """Compra da loja (pagamento simulado): grava o pedido com código para retirar e dá 1 giro da roleta por camiseta."""
     from .. import spins as spin_lib
+    from ..rewards import CODE_ALPHABET
+    import secrets
 
-    products = [db.get(m.Product, pid) for pid in dict.fromkeys(body.product_ids)]
-    if any(p is None or p.artist_id != artist.id for p in products):
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Produto não encontrado.")
+    lines, prods, subtotal, shipping, total = _store_price(db, artist, body)
     f = get_fandom(db, artist, user)
     assert f is not None
-    granted = 0
-    for p in products:
-        assert p is not None
-        db.add(m.ProductPurchase(artist_id=artist.id, user_id=user.id, product_id=p.id, name=p.name, category=p.category, price_cents=p.price_cents or 0))
+    while True:
+        code = "LJ-" + "".join(secrets.choice(CODE_ALPHABET) for _ in range(5))
+        if not db.scalar(select(m.StoreOrder.id).where(m.StoreOrder.artist_id == artist.id, m.StoreOrder.code == code)):
+            break
+    order = m.StoreOrder(
+        artist_id=artist.id, user_id=user.id, code=code, delivery=body.delivery,
+        address=body.address.strip() if body.delivery == "ship" else "",
+        subtotal_cents=subtotal, shipping_cents=shipping, total_cents=total,
+    )
+    db.add(order)
+    db.flush()
+    granted = units = 0
+    for l in lines:
+        p = prods[l.product_id]
+        db.add(
+            m.ProductPurchase(
+                artist_id=artist.id, user_id=user.id, product_id=p.id, name=p.name, category=p.category,
+                price_cents=l.unit_cents, qty=l.qty, size=l.size, order_id=order.id,
+            )
+        )
+        units += l.qty
         if p.category == "roupas":
-            spin_lib.grant(db, f, f"Compra de camiseta · {p.name}")
-            granted += 1
+            for _ in range(l.qty):
+                spin_lib.grant(db, f, f"Compra de camiseta · {p.name}")
+                granted += 1
     db.commit()
-    return CheckoutOut(items=len(products), spins_granted=granted)
+    return CheckoutOut(items=units, spins_granted=granted, order_code=code, total_cents=total, delivery=body.delivery)
+
+
+@router.get("/artists/{slug}/me/orders", response_model=list[StoreOrderOut])
+def my_orders(artist: FanArtist, user: CurrentUser, db: DB):
+    """Pedidos da loja do fã, do mais novo para o mais antigo, com o código para retirar."""
+    q = select(m.StoreOrder).where(m.StoreOrder.artist_id == artist.id, m.StoreOrder.user_id == user.id).order_by(m.StoreOrder.created_at.desc())
+    out = []
+    for o in db.scalars(q):
+        rows = db.scalars(select(m.ProductPurchase).where(m.ProductPurchase.order_id == o.id)).all()
+        lines = [
+            StoreLineOut(product_id=r.product_id or "", name=r.name, category=r.category, qty=r.qty, size=r.size, unit_cents=r.price_cents, total_cents=r.price_cents * r.qty)
+            for r in rows
+        ]
+        out.append(
+            StoreOrderOut(
+                id=o.id, code=o.code, delivery=o.delivery, address=o.address, lines=lines,
+                subtotal_cents=o.subtotal_cents, shipping_cents=o.shipping_cents, total_cents=o.total_cents, created_at=br_date(o.created_at),
+            )
+        )
+    return out
 
 
 def _price(db, artist: m.Artist, user: m.User, event: m.Event, body: PurchaseIn):
@@ -424,7 +505,7 @@ def spin(artist: FanArtist, user: CurrentUser, db: DB):
 @router.get("/artists/{slug}/products", response_model=list[ProductOut])
 def list_products(artist: FanArtist, db: DB):
     items = db.scalars(select(m.Product).where(m.Product.artist_id == artist.id).order_by(m.Product.position)).all()
-    return [ProductOut(id=p.id, name=p.name, category=p.category, price_label=brl(p.price_cents), color=p.color) for p in items]
+    return [ProductOut(id=p.id, name=p.name, category=p.category, price_label=brl(p.price_cents), price_cents=p.price_cents, color=p.color) for p in items]
 
 
 @router.get("/artists/{slug}/tracks", response_model=list[TrackOut])

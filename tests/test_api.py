@@ -779,10 +779,31 @@ def test_giros_por_post_e_por_camiseta(client, club_admin, fan):
     camiseta = client.post(f"{base}/manage/products", headers=club_admin, json={"name": "Camiseta Teste", "category": "roupas", "priceCents": 12000}).json()
     outro = client.post(f"{base}/manage/products", headers=club_admin, json={"name": "Boné Teste", "category": "acessorios", "priceCents": 8000}).json()
     base_livres = livres()
-    ck = client.post(f"{base}/store/checkout", headers=fan, json={"productIds": [camiseta["id"], outro["id"]]})
+    itens = [{"productId": camiseta["id"], "qty": 2, "size": "m"}, {"productId": outro["id"], "qty": 1}]
+    quote = client.post(f"{base}/store/quote", headers=fan, json={"items": itens})
+    assert quote.status_code == 200, quote.text
+    q = quote.json()
+    assert q["subtotalCents"] == 2 * 12000 + 8000 and q["shippingCents"] == 0 and q["totalCents"] == 32000  # retirada na lojinha não paga frete
+    assert [l["size"] for l in q["lines"]] == ["M", ""]  # tamanho só nas roupas
+
+    # entrega: frete fixo abaixo de R$ 300, grátis a partir daí, e o endereço é obrigatório
+    pequeno = [{"productId": outro["id"], "qty": 1}]
+    assert client.post(f"{base}/store/quote", headers=fan, json={"items": pequeno, "delivery": "ship"}).status_code == 400
+    ship = client.post(f"{base}/store/quote", headers=fan, json={"items": pequeno, "delivery": "ship", "address": "Rua das Flores, 100, Campinas"}).json()
+    assert ship["shippingCents"] == 1990 and ship["totalCents"] == 8000 + 1990
+    assert client.post(f"{base}/store/quote", headers=fan, json={"items": itens, "delivery": "ship", "address": "Rua das Flores, 100, Campinas"}).json()["shippingCents"] == 0
+
+    # roupa sem tamanho e produto inexistente
+    assert client.post(f"{base}/store/quote", headers=fan, json={"items": [{"productId": camiseta["id"], "qty": 1}]}).status_code == 400
+    assert client.post(f"{base}/store/checkout", headers=fan, json={"items": [{"productId": "nao-existe", "qty": 1}]}).status_code == 404
+
+    ck = client.post(f"{base}/store/checkout", headers=fan, json={"items": itens})
     assert ck.status_code == 201, ck.text
-    assert ck.json()["spinsGranted"] == 1 and livres() == base_livres + 1
-    assert client.post(f"{base}/store/checkout", headers=fan, json={"productIds": ["nao-existe"]}).status_code == 404
+    c = ck.json()
+    assert c["spinsGranted"] == 2 and c["items"] == 3 and c["totalCents"] == 32000 and c["orderCode"].startswith("LJ-")  # 1 giro por camiseta (qty 2)
+    assert livres() == base_livres + 2
+    pedidos = client.get(f"{base}/me/orders", headers=fan).json()
+    assert pedidos[0]["code"] == c["orderCode"] and pedidos[0]["totalCents"] == 32000 and [l["qty"] for l in pedidos[0]["lines"]] == [2, 1]
 
 
 def test_selo_de_dono_do_fa_clube_nos_posts(client, club_admin, fan):

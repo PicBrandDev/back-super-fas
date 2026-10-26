@@ -489,8 +489,30 @@ class ProductPurchase(Base):
     product_id: Mapped[str | None] = mapped_column(ForeignKey("products.id", ondelete="SET NULL"), nullable=True)
     name: Mapped[str] = mapped_column(String(120))
     category: Mapped[str] = mapped_column(String(20), default="roupas")
-    price_cents: Mapped[int] = mapped_column(Integer, default=0)
+    price_cents: Mapped[int] = mapped_column(Integer, default=0)  # valor unitário
+    qty: Mapped[int] = mapped_column(Integer, default=1)
+    size: Mapped[str] = mapped_column(String(4), default="")  # P, M, G, GG (roupas)
+    order_id: Mapped[str | None] = mapped_column(ForeignKey("store_orders.id", ondelete="SET NULL"), nullable=True, index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+
+
+class StoreOrder(Base):
+    """Pedido da lojinha: itens, entrega (retirar na lojinha do Vintage ou receber em casa) e valores (pagamento simulado)."""
+
+    __tablename__ = "store_orders"
+
+    id: Mapped[str] = mapped_column(String(20), primary_key=True, default=new_id)
+    artist_id: Mapped[str] = mapped_column(ForeignKey("artists.id", ondelete="CASCADE"), index=True)
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    code: Mapped[str] = mapped_column(String(10), index=True)  # ex.: LJ-7K2M9 (para retirar)
+    delivery: Mapped[str] = mapped_column(String(8), default="pickup")  # pickup | ship
+    address: Mapped[str] = mapped_column(String(200), default="")
+    subtotal_cents: Mapped[int] = mapped_column(Integer, default=0)
+    shipping_cents: Mapped[int] = mapped_column(Integer, default=0)
+    total_cents: Mapped[int] = mapped_column(Integer, default=0)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+
+    items: Mapped[list["ProductPurchase"]] = relationship(primaryjoin="StoreOrder.id == ProductPurchase.order_id", viewonly=True)
 
 
 class Track(Base):

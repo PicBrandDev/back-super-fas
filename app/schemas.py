@@ -452,6 +452,7 @@ class ProductOut(Camel):
     name: str
     category: str
     price_label: str
+    price_cents: int | None = None
     color: str
 
 
@@ -524,13 +525,54 @@ class SpinIn(Camel):
     credit_id: str | None = None  # qual giro gastar (vazio = o mais antigo disponível)
 
 
+class StoreItemIn(Camel):
+    product_id: str
+    qty: int = Field(default=1, ge=1, le=10)
+    size: str = Field(default="", max_length=4)  # P, M, G ou GG (obrigatório nas roupas)
+
+
 class CheckoutIn(Camel):
-    product_ids: list[str] = Field(min_length=1, max_length=20)
+    items: list[StoreItemIn] = Field(min_length=1, max_length=20)
+    delivery: Literal["pickup", "ship"] = "pickup"  # retirar na lojinha do Vintage ou receber em casa
+    address: str = Field(default="", max_length=200)  # obrigatório na entrega
+
+
+class StoreLineOut(Camel):
+    product_id: str
+    name: str
+    category: str
+    qty: int
+    size: str
+    unit_cents: int
+    total_cents: int
+
+
+class StoreQuoteOut(Camel):
+    lines: list[StoreLineOut]
+    subtotal_cents: int
+    shipping_cents: int
+    total_cents: int
+    free_shipping_from_cents: int  # frete grátis a partir deste subtotal
 
 
 class CheckoutOut(Camel):
-    items: int  # produtos comprados
+    items: int  # unidades compradas
     spins_granted: int  # giros ganhos (1 por camiseta)
+    order_code: str = ""  # código do pedido (mostrar na retirada)
+    total_cents: int = 0
+    delivery: str = "pickup"
+
+
+class StoreOrderOut(Camel):
+    id: str
+    code: str
+    delivery: str
+    address: str
+    lines: list[StoreLineOut]
+    subtotal_cents: int
+    shipping_cents: int
+    total_cents: int
+    created_at: str  # data em português
 
 
 class PurchaseIn(Camel):
