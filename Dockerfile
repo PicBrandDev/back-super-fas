@@ -10,7 +10,7 @@ RUN pip install -r requirements.txt
 
 COPY app ./app
 
-RUN useradd --system --uid 1001 api && mkdir -p /data/uploads && chown -R api /data
+RUN useradd --system --uid 1001 api && mkdir -p /data/uploads /data/private && chown -R api /data
 USER api
 ENV UPLOAD_DIR=/data/uploads
 
