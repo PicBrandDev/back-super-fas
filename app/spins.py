@@ -56,15 +56,8 @@ def grant_for_post(db: Session, f: m.Fandom, club_name: str) -> bool:
     return True
 
 
-SHARE_DAILY_CAP = 3  # compartilhamentos que dão giro por dia
-
-
 def grant_for_share(db: Session, f: m.Fandom, what: str) -> bool:
-    """1 giro por compartilhamento no Instagram, até SHARE_DAILY_CAP por dia. True quando o giro foi dado."""
-    start = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0, tzinfo=None)
-    today = [c for c in _credits(db, f) if c.reason.startswith("Compartilhou no Instagram") and c.created_at.replace(tzinfo=None) >= start]
-    if len(today) >= SHARE_DAILY_CAP:
-        return False
+    """1 giro por compartilhamento no Instagram, sem limite por dia. Sempre devolve True (o giro foi dado)."""
     grant(db, f, f"Compartilhou no Instagram · {what}"[:200])
     return True
 
