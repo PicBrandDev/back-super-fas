@@ -133,7 +133,10 @@ def _derive(label: str) -> bytes:
 def _fernet() -> Fernet:
     _require_keys()
     key = get_settings().resale_pii_key.strip()
-    return Fernet(key.encode() if key else base64.urlsafe_b64encode(_derive("resale-pii")))
+    try:
+        return Fernet(key.encode() if key else base64.urlsafe_b64encode(_derive("resale-pii")))
+    except ValueError as exc:  # chave fora do formato Fernet (aspas, espaço, pedaço faltando)
+        raise ResaleError("KEYS_INVALID", "RESALE_PII_KEY inválida: gere uma nova com Fernet.generate_key() e use o valor inteiro, sem aspas.", 503) from exc
 
 
 def encrypt(value: str) -> str:
