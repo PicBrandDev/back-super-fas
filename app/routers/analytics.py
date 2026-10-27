@@ -210,13 +210,13 @@ def clubs_highlights(artist: ManagedArtist, db: DB):
 
 
 def _owner_card(db, club: m.FanClub, posts: list[m.Post]) -> OwnerCard | None:
-    from .ranking import _board
+    from .ranking import _board, home_members
 
     st = next((st for st in club.staff if st.role == m.STAFF_OWNER), None)
     if not st:
         return None
     u = st.user
-    people = {mb.user_id for mb in club.members} | {x.user_id for x in club.staff}
+    people = home_members(club.artist).get(club.id, set())
     rows = [r for r in _board(db, club.artist) if r[0] in people]
     idx = next((i for i, r in enumerate(rows) if r[0] == u.id), None)
     return OwnerCard(

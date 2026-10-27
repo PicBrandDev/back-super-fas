@@ -110,6 +110,29 @@ def _board(db, artist: m.Artist) -> list[tuple[str, int, object, float]]:
     return rows
 
 
+def _naive(d):
+    return d.replace(tzinfo=None) if d is not None and d.tzinfo else d
+
+
+def home_members(artist: m.Artist) -> dict[str, set[str]]:
+    """Quem conta no ranking de cada fã clube. Cada fã conta em UM clube só: o da equipe dele (se for dono ou ajudante)
+    ou, senão, o primeiro em que entrou. Assim o mesmo fã não lidera vários clubes ao mesmo tempo; ele continua seguindo
+    os outros, mas só pontua no principal. O ranking geral não muda."""
+    best: dict[str, tuple] = {}
+    for c in artist.clubs:
+        if c.status != "active":
+            continue
+        entries = [(0, _naive(st.created_at), c.position, c.id, st.user_id) for st in c.staff] + [(1, _naive(mb.created_at), c.position, c.id, mb.user_id) for mb in c.members]
+        for kind, at, pos, cid, uid in entries:
+            key = (kind, at or 0, pos, cid)
+            if uid not in best or key < best[uid]:
+                best[uid] = key
+    out: dict[str, set[str]] = {c.id: set() for c in artist.clubs}
+    for uid, key in best.items():
+        out[key[3]].add(uid)
+    return out
+
+
 def _pins(db, artist: m.Artist) -> dict[str | None, str]:
     """{club_id (None = geral): user_id} do fã que a administração fixou em 1º."""
     return {p.club_id: p.user_id for p in db.scalars(select(m.RankingPin).where(m.RankingPin.artist_id == artist.id))}
@@ -212,13 +235,14 @@ def ranking(artist: FanArtist, user: CurrentUser, db: DB):
     )
     my_me = MyRank(position=mine[0] if mine else None, shares=mine[1] if mine else 0, points=mine[2] if mine else 0.0, pending=pending or 0)
 
-    # Ranking de cada fã clube: o mesmo placar, só com os membros dele.
+    # Ranking de cada fã clube: o mesmo placar, só com quem tem esse clube como principal.
+    homes = home_members(artist)
     clubs = []
     for c in sorted(artist.clubs, key=lambda c: (not c.is_master, c.position, c.created_at)):
         if c.status != "active":
             continue
         # Dono e equipe do fã clube também contam como parte dele (aparecem e pontuam no ranking do fã clube).
-        member_ids = {mb.user_id for mb in c.members} | {st.user_id for st in c.staff}
+        member_ids = homes.get(c.id, set())
         rows = _with_leader([r for r in board if r[0] in member_ids], pins.get(c.id) if pins.get(c.id) in member_ids else None)
         names = {u.id: u for u in db.scalars(select(m.User).where(m.User.id.in_([r[0] for r in rows[:10]])))} if rows else {}
         mine_c = next(((i + 1, n, pts) for i, (uid, n, _, pts) in enumerate(rows) if uid == user.id), None)
@@ -296,7 +320,7 @@ def _leader_out(u: m.User | None) -> LeaderOut | None:
 
 
 def _club_member_ids(c: m.FanClub) -> set[str]:
-    return {mb.user_id for mb in c.members} | {st.user_id for st in c.staff}
+    return home_members(c.artist).get(c.id, set())
 
 
 @router.get("/artists/{slug}/manage/ranking", response_model=list[LeaderScope])
@@ -304,7 +328,8 @@ def manage_ranking(artist: ManagedArtist, db: DB):
     """Quem lidera o ranking geral e o de cada fã clube, e quem lideraria pelo placar."""
     pins, board = _pins(db, artist), _board(db, artist)
     scopes: list[tuple[m.FanClub | None, set[str] | None]] = [(None, None)]
-    scopes += [(c, _club_member_ids(c)) for c in sorted(artist.clubs, key=lambda c: (not c.is_master, c.position, c.created_at)) if c.status == "active"]
+    homes = home_members(artist)
+    scopes += [(c, homes.get(c.id, set())) for c in sorted(artist.clubs, key=lambda c: (not c.is_master, c.position, c.created_at)) if c.status == "active"]
     pin_of = {None: pins.get(None), **{c.id: pins.get(c.id) for c, _ in scopes if c}}
     boards = []
     for c, members in scopes:

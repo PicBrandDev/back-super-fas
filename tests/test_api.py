@@ -1159,3 +1159,9 @@ def test_ranking_do_fa_traz_o_id_de_cada_pessoa(client, fan):
     rk = client.get("/artists/vintage-culture/ranking", headers=fan).json()
     assert all(r["userId"] for r in rk["top"])
     assert all(r["userId"] for c in rk["clubs"] for r in c["top"])
+
+
+def test_cada_fa_conta_no_ranking_de_um_clube_so(client, fan):
+    rk = client.get("/artists/vintage-culture/ranking", headers=fan).json()
+    ids = [r["userId"] for c in rk["clubs"] for r in c["top"]]
+    assert len(ids) == len(set(ids))  # ninguém aparece no ranking de dois fã clubes
