@@ -25,6 +25,7 @@ class ShareOut(Camel):
 
 class RankRow(Camel):
     position: int
+    user_id: str | None = None  # abre o perfil público do fã e o chat
     name: str
     handle: str
     avatar: str | None = None  # foto de perfil do fã
@@ -193,6 +194,7 @@ def ranking(artist: FanArtist, user: CurrentUser, db: DB):
     top = [
         RankRow(
             position=i + 1,
+            user_id=uid,
             name=users[uid].name if uid in users else "Fã",
             handle=(users[uid].handle or "") if uid in users else "",
             avatar=(users[uid].avatar_path or None) if uid in users else None,
@@ -230,6 +232,7 @@ def ranking(artist: FanArtist, user: CurrentUser, db: DB):
                 top=[
                     RankRow(
                         position=i + 1,
+                        user_id=uid,
                         name=names[uid].name if uid in names else "Fã",
                         handle=(names[uid].handle or "") if uid in names else "",
                         avatar=(names[uid].avatar_path or None) if uid in names else None,

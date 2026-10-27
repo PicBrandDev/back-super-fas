@@ -148,7 +148,7 @@ def test_perfil_publico_e_autor_do_post(client, trio):
     perfil = perfil.json()
     assert perfil["id"] == ia and perfil["name"] == "Ana Chat" and perfil["handle"] == "@ana.chat" and perfil["isMe"] is False
     assert perfil["club"] is not None and perfil["club"]["slug"]  # entrou no fã clube master no cadastro
-    assert isinstance(perfil["points"], int) and perfil["rank"] is None
+    assert isinstance(perfil["points"], (int, float)) and perfil["rank"] is None
     assert [x["id"] for x in perfil["posts"]] == [p.json()["id"]]
     assert client.get(f"{VC}/fans/{ia}", headers=ha).json()["isMe"] is True
     assert client.get(f"{VC}/fans/naoexiste00", headers=ha).status_code == 404

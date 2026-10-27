@@ -1153,3 +1153,9 @@ def test_anuncios_do_feed(client, fan):
     assert client.get(f"{VC}/ads/home", headers=fan).status_code == 200
     assert client.get(f"{VC}/ads/in-app", headers=fan).status_code == 200
     assert client.get(f"{SP}/ads/home", headers=fan).status_code == 200
+
+
+def test_ranking_do_fa_traz_o_id_de_cada_pessoa(client, fan):
+    rk = client.get("/artists/vintage-culture/ranking", headers=fan).json()
+    assert all(r["userId"] for r in rk["top"])
+    assert all(r["userId"] for c in rk["clubs"] for r in c["top"])

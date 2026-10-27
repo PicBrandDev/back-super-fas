@@ -73,7 +73,7 @@ class PublicProfileOut(Camel):
     handle: str | None = None
     avatar: str | None = None
     club: ClubRef | None = None  # fã clube dele neste ambiente
-    points: int | None = None  # pontos de sorte neste ambiente
+    points: float | None = None  # pontos do ranking Fã Super (os mesmos do ranking, com casas decimais)
     rank: int | None = None  # posição no ranking Fã Super
     is_me: bool
     posts: list[PostOut] = []
@@ -293,7 +293,7 @@ def public_profile(user_id: str, artist: FanArtist, user: CurrentUser, db: DB):
         handle=u.handle or None,
         avatar=u.avatar_path or None,
         club=ClubRef(slug=club.slug, name=club.name, avatar=club.avatar_path or None) if club else None,
-        points=fandom.luck_points if fandom else None,
+        points=next((row[3] for row in board if row[0] == u.id), 0.0),
         rank=rank,
         is_me=u.id == user.id,
         posts=[post_out(p, artist) for p in posts],
