@@ -21,10 +21,10 @@ SLUG = os.environ.get("ARTIST", "vintage-culture")
 PASSWORD = os.environ.get("CONTAS_SENHA", "senha123")
 FAN = "juliacristinalopes2607@gmail.com"
 DRIVERS = [
-    ("lucas.carona@teste.com", "Lucas Ferreira", "@lucas.f", "Goiânia", "Posto Shell da BR-153", "Onix prata", 3, 4500, "Volto logo depois do show."),
-    ("camila.carona@teste.com", "Camila Duarte", "@cami.d", "Brasília", "Estacionamento do Park Shopping", "HB20 branco", 2, 6000, "Aceito malas pequenas."),
-    ("thiago.carona@teste.com", "Thiago Barros", "@thiago.b", "Campinas", "Terminal Rodoviário", "Corolla preto", 4, 3500, "Ar-condicionado e som bom."),
-    ("renata.carona@teste.com", "Renata Lima", "@re.lima", "Belo Horizonte", "Posto Ipiranga da Via Expressa", "Kwid vermelho", 3, 5000, "Saída pontual."),
+    ("lucas.carona@teste.com", "Lucas Ferreira", "@lucas.f", "Goiânia", "Posto Shell, BR-153 km 4, Setor Pedro Ludovico, Goiânia - GO", "Onix prata", 3, 4500, "Volto logo depois do show."),
+    ("camila.carona@teste.com", "Camila Duarte", "@cami.d", "Brasília", "Park Shopping, Área Especial 2, Setor Industrial Sul, Brasília - DF", "HB20 branco", 2, 6000, "Aceito malas pequenas."),
+    ("thiago.carona@teste.com", "Thiago Barros", "@thiago.b", "Campinas", "Terminal Rodoviário de Campinas, Rua Mogi Mirim 1000, Centro, Campinas - SP", "Corolla preto", 4, 3500, "Ar-condicionado e som bom."),
+    ("renata.carona@teste.com", "Renata Lima", "@re.lima", "Belo Horizonte", "Posto Ipiranga, Av. Cristiano Machado 4000, Belo Horizonte - MG", "Kwid vermelho", 3, 5000, "Saída pontual."),
 ]
 
 

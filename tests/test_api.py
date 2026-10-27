@@ -1188,7 +1188,7 @@ def test_caronas_por_show_com_valor_retido(client, club_admin, fan):
     # validações da oferta
     ruim = {"originCity": "Anápolis", "departAt": depart, "seats": 0, "priceCents": 5000}
     assert client.post(url, headers=motorista, json=ruim).status_code == 422
-    passado = {"originCity": "Anápolis", "departAt": (datetime.now(timezone.utc) - timedelta(days=1)).isoformat(), "seats": 3, "priceCents": 5000}
+    passado = {"originCity": "Anápolis", "meetingPoint": "Rua 1, 100, Anápolis - GO", "departAt": (datetime.now(timezone.utc) - timedelta(days=1)).isoformat(), "seats": 3, "priceCents": 5000}
     assert client.post(url, headers=motorista, json=passado).status_code == 400
     r = client.post(url, headers=motorista, json={"originCity": "Anápolis", "meetingPoint": "Posto Shell", "departAt": depart, "seats": 3, "priceCents": 5000, "car": "Gol branco"})
     assert r.status_code == 201, r.text
@@ -1229,7 +1229,7 @@ def test_caronas_por_show_com_valor_retido(client, club_admin, fan):
     assert client.get(f"{base}/carpool/events/nao-existe/rides", headers=fan).status_code == 404
 
     # o motorista cancela uma viagem com passageiro pago: devolve o valor
-    r2 = client.post(url, headers=motorista, json={"originCity": "Trindade", "departAt": depart, "seats": 2, "priceCents": 3000}).json()
+    r2 = client.post(url, headers=motorista, json={"originCity": "Trindade", "departAt": depart, "meetingPoint": "Rua 1, 100, Trindade - GO", "seats": 2, "priceCents": 3000}).json()
     b3 = client.post(f"{base}/carpool/rides/{r2['id']}/bookings", headers=passageiro, json={"seats": 1}).json()
     client.post(f"{base}/carpool/bookings/{b3['id']}/pay", headers=passageiro)
     assert client.post(f"{base}/carpool/rides/{r2['id']}/cancel", headers=passageiro).status_code == 404  # só o motorista

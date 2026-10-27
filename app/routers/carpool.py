@@ -35,7 +35,7 @@ class Who(Camel):
 
 class RideIn(Camel):
     origin_city: str = Field(min_length=2, max_length=80)
-    meeting_point: str = Field(default="", max_length=160)
+    meeting_point: str = Field(min_length=5, max_length=160)  # endereço completo da saída
     depart_at: datetime
     seats: int = Field(ge=1, le=8)
     price_cents: int = Field(ge=0, le=100_000)  # até R$ 1.000 por vaga
@@ -60,6 +60,8 @@ class RideOut(Camel):
     id: str
     event_id: str
     city: str  # cidade do show
+    venue: str = ""  # local e endereço do show (chegada)
+    address: str = ""
     origin_city: str
     meeting_point: str
     depart_at: datetime
@@ -152,7 +154,7 @@ def _ride_out(db, r: Ride, me: m.User, event: m.Event | None = None) -> RideOut:
     mine = r.driver_id == me.id
     mb = next((b for b in bookings if b.passenger_id == me.id and b.status in (B_RESERVED, B_PAID, B_COMPLETED)), None)
     return RideOut(
-        id=r.id, event_id=r.event_id, city=event.city if event else "", origin_city=r.origin_city, meeting_point=r.meeting_point,
+        id=r.id, event_id=r.event_id, city=event.city if event else "", venue=event.venue if event else "", address=event.address if event else "", origin_city=r.origin_city, meeting_point=r.meeting_point,
         depart_at=_aware(r.depart_at), seats_total=r.seats_total, seats_left=_left(db, r), price_cents=r.price_cents, car=r.car, notes=r.notes,
         status=r.status, driver=_who(users.get(r.driver_id)), mine=mine,
         my_booking=_booking_out(mb, users, False) if mb else None,
