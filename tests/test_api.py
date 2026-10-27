@@ -823,6 +823,37 @@ def test_dono_do_fa_clube_aparece_no_proprio_ranking(client, club_admin):
     assert oficial["me"] is not None  # o dono é parte do fã clube, mesmo sem entrar como membro
 
 
+def test_admin_define_quem_lidera_o_ranking(client, club_admin, fan):
+    base = "/artists/vintage-culture"
+    eu = client.get("/auth/me", headers=fan).json()
+    antes = client.get(f"{base}/ranking", headers=fan).json()["me"]["position"]
+    scopes = client.get(f"{base}/manage/ranking", headers=club_admin).json()
+    assert scopes[0]["clubSlug"] is None and scopes[0]["leader"] is None
+    assert client.get(f"{base}/manage/ranking", headers=fan).status_code == 403  # só a administração
+
+    # o fã de teste não tem compartilhamento, mas a administração o coloca em 1º no geral
+    achados = client.get(f"{base}/manage/ranking/fans", params={"q": eu["name"][:4]}, headers=club_admin).json()
+    alvo = next(f for f in achados if f["userId"] == eu["id"])
+    r = client.put(f"{base}/manage/ranking/leader", json={"userId": alvo["userId"]}, headers=club_admin)
+    assert r.status_code == 200 and r.json()["leader"]["userId"] == eu["id"]
+    rk = client.get(f"{base}/ranking", headers=fan).json()
+    assert rk["top"][0]["me"] is True and rk["me"]["position"] == 1
+
+    # fã de fora do fã clube não pode ser fixado nele; desfazer volta ao placar
+    assert client.put(f"{base}/manage/ranking/leader", json={"userId": "nao-existe"}, headers=club_admin).status_code == 404
+    assert client.put(f"{base}/manage/ranking/leader", json={"clubSlug": "nao-existe", "userId": eu["id"]}, headers=club_admin).status_code == 404
+    assert client.put(f"{base}/manage/ranking/leader", json={}, headers=club_admin).json()["leader"] is None
+    assert client.get(f"{base}/ranking", headers=fan).json()["me"]["position"] == antes
+
+
+def test_destaques_dos_fa_clubes(client, club_admin, fan):
+    base = "/artists/vintage-culture"
+    rows = client.get(f"{base}/clubs-highlights", headers=club_admin).json()
+    assert rows and {"content", "buzz", "members", "activeMembers", "activeRate"} <= set(rows[0])
+    assert all(0 <= r["activeRate"] <= 100 and r["content"] == r["posts"] + r["prizes"] for r in rows)
+    assert client.get(f"{base}/clubs-highlights", headers=fan).status_code == 403
+
+
 def test_vitrines_alugadas(client, club_admin, sponsor, fan):
     from datetime import date, timedelta
 

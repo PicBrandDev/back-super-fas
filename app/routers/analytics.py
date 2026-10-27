@@ -36,6 +36,34 @@ class ClubOverview(Camel):
     staff: int
 
 
+class ClubHighlight(Camel):
+    """Os números que comparam os fã clubes entre si (últimos 30 dias, quando não diz o contrário)."""
+
+    slug: str
+    name: str
+    city: str
+    is_master: bool
+    avatar: str | None = None
+    # conteúdo: o que o fã clube já publicou
+    posts: int
+    posts_with_photo: int
+    prizes: int
+    content: int  # posts + fatias da roleta
+    # feed: o que bombou nos posts dos últimos 30 dias
+    posts_month: int
+    likes: int
+    comments: int
+    reposts: int
+    views: int
+    buzz: int  # curtidas + 2 x comentários + 3 x republicações
+    # gente
+    members: int  # inscritos (total)
+    new_members_month: int
+    subscribers: int  # assinantes pagantes entre os inscritos
+    active_members: int  # inscritos que postaram, comentaram ou compartilharam nos últimos 30 dias
+    active_rate: int  # % dos inscritos que estiveram ativos
+
+
 class DayPoint(Camel):
     day: str  # AAAA-MM-DD
     new_members: int
@@ -102,6 +130,60 @@ def clubs_overview(artist: ManagedArtist, db: DB):
     since = _today() - timedelta(days=DAYS - 1)
     clubs = sorted(artist.clubs, key=lambda c: (not c.is_master, c.position, c.created_at))
     return [_overview(db, c, since) for c in clubs]
+
+
+def _highlight(db, club: m.FanClub, since: date, paying: set[str]) -> ClubHighlight:
+    posts = db.scalars(select(m.Post).where(m.Post.club_id == club.id)).all()
+    recent = [p for p in posts if p.created_at.date() >= since]
+    people = {mb.user_id for mb in club.members} | {st.user_id for st in club.staff}
+    active = {p.author_id for p in recent if p.author_id in people}
+    post_ids = [p.id for p in posts]
+    if post_ids:
+        active |= {
+            c.author_id
+            for c in db.scalars(select(m.PostComment).where(m.PostComment.post_id.in_(post_ids)))
+            if c.author_id in people and c.created_at.date() >= since
+        }
+    active |= {
+        sh.user_id
+        for sh in db.scalars(select(m.InstagramShare).where(m.InstagramShare.artist_id == club.artist_id, m.InstagramShare.user_id.in_(people)))
+        if sh.created_at.date() >= since
+    } if people else set()
+    members = len(club.members)
+    n_active = len(active & {mb.user_id for mb in club.members}) if members else 0
+    prizes = len(db.scalars(select(m.Prize.id).where(m.Prize.club_id == club.id)).all())
+    likes, comments, reposts = (sum(getattr(p, f) for p in recent) for f in ("likes", "comments", "reposts"))
+    return ClubHighlight(
+        slug=club.slug,
+        name=club.name,
+        city=club.city,
+        is_master=club.is_master,
+        avatar=club.avatar_path or None,
+        posts=len(posts),
+        posts_with_photo=sum(1 for p in posts if p.image_path),
+        prizes=prizes,
+        content=len(posts) + prizes,
+        posts_month=len(recent),
+        likes=likes,
+        comments=comments,
+        reposts=reposts,
+        views=sum(p.views for p in recent),
+        buzz=likes + 2 * comments + 3 * reposts,
+        members=members,
+        new_members_month=sum(1 for mb in club.members if mb.created_at.date() >= since),
+        subscribers=sum(1 for mb in club.members if mb.user_id in paying),
+        active_members=n_active,
+        active_rate=round(100 * n_active / members) if members else 0,
+    )
+
+
+@router.get("/artists/{slug}/clubs-highlights", response_model=list[ClubHighlight])
+def clubs_highlights(artist: ManagedArtist, db: DB):
+    """Compara os fã clubes ativos: quem tem mais conteúdo, quem bomba no feed, mais membros ativos e mais inscritos."""
+    since = _today() - timedelta(days=DAYS - 1)
+    paying = {f.user_id for f in db.scalars(select(m.Fandom).where(m.Fandom.artist_id == artist.id, m.Fandom.member_status == "active"))}
+    clubs = sorted((c for c in artist.clubs if c.status == "active"), key=lambda c: (not c.is_master, c.position, c.created_at))
+    return [_highlight(db, c, since, paying) for c in clubs]
 
 
 @router.get("/artists/{slug}/clubs/{club}/analytics", response_model=ClubAnalytics)

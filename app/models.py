@@ -196,6 +196,18 @@ class InstagramShare(Base):
     verified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
+class RankingPin(Base):
+    """Fã que a administração coloca em 1º lugar no ranking Fã Super: do geral (club_id vazio) ou de um fã clube."""
+
+    __tablename__ = "ranking_pins"
+
+    id: Mapped[str] = mapped_column(String(20), primary_key=True, default=new_id)
+    artist_id: Mapped[str] = mapped_column(ForeignKey("artists.id", ondelete="CASCADE"), index=True)
+    club_id: Mapped[str | None] = mapped_column(ForeignKey("fan_clubs.id", ondelete="CASCADE"), nullable=True)
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+
+
 class EventPhoto(Base):
     """Foto oficial de um show. Os rostos dela ficam indexados no AWS Rekognition para o Photo Finder."""
 
