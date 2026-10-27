@@ -53,10 +53,11 @@ ENV_PLAN = [
     ("mural", "Spotify", None),  # 1ª posição do feed: o primeiro anúncio que o fã vê
     ("feed_2", "Nike", None),
     ("feed_3", None, "Adidas"),
-    ("home", "Coca-Cola", None),
+    ("home", "Spotify", None),  # card do Início
 ]
 # (sufixo da vitrine do clube, marcas por clube na ordem dos clubes)
 CLUB_BRANDS = ["Spotify", "Sprite", "Coca-Cola", "Nike", "Red Bull", "Heineken"]
+FAKE_BRANDS = ["Marca Teste", "Marca Aurora", "Beats Sul", "Festa Zero", "Ótica Lume", "Café Nobre", "Tênis Pulse"]
 ROLETA_KEYS = {"pickup_video", "pickup_resgate", "pickup"}
 PRICE = {"entrada": 150000, "pickup_video": 220000, "pickup_resgate": 120000, "pickup": 90000, "mural": 80000, "feed_2": 70000, "feed_3": 60000, "feed_4": 50000, "home": 100000}
 
@@ -114,9 +115,12 @@ def main() -> None:
             slot = slots.get(key)
             if not slot:
                 continue
-            for c in db.scalars(select(m.Campaign).where(m.Campaign.slot_id == slot.id, m.Campaign.sponsor_id.in_(mine))):
-                if c.brand not in (live, nxt):
+            for c in db.scalars(select(m.Campaign).where(m.Campaign.slot_id == slot.id)):
+                if (c.sponsor_id in mine or c.brand in BRANDS) and c.brand not in (live, nxt):
                     db.delete(c)
+            # Marcas inventadas dos mocks antigos (card azul sem arte) tiravam o lugar das marcas de exemplo.
+            for c in db.scalars(select(m.Campaign).where(m.Campaign.slot_id == slot.id, m.Campaign.brand.in_(FAKE_BRANDS))):
+                db.delete(c)
         db.flush()
         for key, live, nxt in ENV_PLAN:
             if live:
