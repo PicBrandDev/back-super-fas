@@ -50,8 +50,8 @@ COPY = {
 # (chave da vitrine do ambiente, marca no ar, marca agendada)
 ENV_PLAN = [
     ("entrada", "Coca-Cola", "Nike"),
-    ("mural", "Nike", None),
-    ("feed_2", "Spotify", None),
+    ("mural", "Spotify", None),  # 1ª posição do feed: o primeiro anúncio que o fã vê
+    ("feed_2", "Nike", None),
     ("feed_3", None, "Adidas"),
     ("home", "Coca-Cola", None),
 ]
@@ -109,6 +109,15 @@ def main() -> None:
             )
             added += 1
 
+        # Marca trocada de lugar no plano: tira as reservas antigas das marcas de exemplo que não são mais as do plano.
+        for key, live, nxt in ENV_PLAN:
+            slot = slots.get(key)
+            if not slot:
+                continue
+            for c in db.scalars(select(m.Campaign).where(m.Campaign.slot_id == slot.id, m.Campaign.sponsor_id.in_(mine))):
+                if c.brand not in (live, nxt):
+                    db.delete(c)
+        db.flush()
         for key, live, nxt in ENV_PLAN:
             if live:
                 book(key, live, False)
