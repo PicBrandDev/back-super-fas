@@ -59,7 +59,8 @@ run mock_compradores_experiencias.py
 # Comentários, compartilhamentos e visualizações do Drop News e do Drops Hits (depois de todos os posts oficiais).
 run mock_conteudo.py
 # Caronas por show (chama a API de dentro do container); os motoristas ganham foto no fotos_perfil.py.
-run mock_caronas.py
+# Cada rodada cria caronas novas: num servidor que já tem caronas, rode com PULAR_CARONAS=1.
+if [ -n "${PULAR_CARONAS:-}" ]; then echo; echo "==> mock_caronas.py pulado (PULAR_CARONAS)"; else run mock_caronas.py; fi
 
 if [ -f "$DIR/mock_chat.py" ]; then
   run mock_chat.py
@@ -75,7 +76,8 @@ run demo_segue_clubes.py
 # Fotos por último, para nenhum mock gravar foto de mentira por cima. Primeiro o randomuser.me para quem ainda não tem
 # (motoristas e quem sobrar; precisa de internet no servidor e, sem ela, a cadeia segue), depois as de verdade por cima.
 run fotos_perfil.py || echo "!! fotos_perfil.py não rodou (sem internet no servidor?): quem sobrar fica sem foto"
-run fotos_reais.py -e FOTOS_DIR=/tmp/fotos
+# POSTS_SOBRANDO=manter: posts que ficam sem foto nova mantêm a imagem atual em vez de virar só texto.
+run fotos_reais.py -e FOTOS_DIR=/tmp/fotos -e POSTS_SOBRANDO="${POSTS_SOBRANDO:-texto}"
 run relatorio_fotos.py
 
 echo

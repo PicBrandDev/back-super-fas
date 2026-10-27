@@ -5,8 +5,9 @@ Lê as fotos de FOTOS_DIR (padrão /tmp/fotos), em três subpastas, sempre em or
              juliacristinalopes2607@gmail.com). As outras vão para quem aparece nas telas, nesta ordem: contas de teste,
              donos e equipe dos fã clubes, fãs do ranking do Instagram e, por fim, os demais autores de post e comentário;
   - posts/   fotos dos posts que têm imagem (mural oficial e fã clubes), por ordem de criação do post. Se faltar foto,
-             os posts que sobram viram post só de texto (nenhuma foto se repete); sem nenhuma foto de post, os posts
-             ficam como estão;
+             os posts que sobram viram post só de texto (nenhuma foto se repete); com POSTS_SOBRANDO=manter eles
+             ficam com a imagem que já tinham (ex.: servidor que já tem fotos de palco). Sem nenhuma foto de post, os
+             posts ficam como estão;
   - clubes/  foto de perfil dos fã clubes, por ordem do slug.
 Sem Pillow no requirements: só aceita JPG, PNG ou WebP de até 5 MB (o mesmo limite do upload do admin) e copia o
 arquivo como está para UPLOAD_DIR, com os nomes real-user-{id}.ext, real-post-{id}.ext e real-clube-{slug}.ext.
@@ -36,6 +37,8 @@ from app.db import SessionLocal
 ARTIST = os.environ.get("ARTIST", "vintage-culture")
 FOTOS_DIR = Path(os.environ.get("FOTOS_DIR", "/tmp/fotos"))
 DEMO_EMAIL = os.environ.get("DEMO_EMAIL", "")
+# Posts com imagem que ficam sem foto nova: "texto" (padrão) vira post só de texto; "manter" fica com a imagem atual.
+POSTS_SOBRANDO = os.environ.get("POSTS_SOBRANDO", "texto").strip().lower()
 DEMO_FALLBACK = ("juliacristinalopes2607@gmail.com", "fa@superfas.dev")
 MAX_BYTES = 5 * 1024 * 1024
 EXTS = {".jpg": ".jpg", ".jpeg": ".jpg", ".png": ".png", ".webp": ".webp"}
@@ -157,7 +160,10 @@ def main() -> None:
         com_imagem = [p for p in posts if p.image_path or p.has_image]
         for p, foto in zip(com_imagem, fotos_posts):
             p.image_path, p.has_image = copy(*foto, f"real-post-{p.id}", uploads), True
-        viraram_texto = com_imagem[len(fotos_posts):] if fotos_posts else []
+        sobrando = com_imagem[len(fotos_posts):] if fotos_posts else []
+        viraram_texto = [] if POSTS_SOBRANDO == "manter" else sobrando
+        if sobrando and not viraram_texto:
+            print(f"+ {len(sobrando)} posts sem foto nova mantiveram a imagem que já tinham (POSTS_SOBRANDO=manter)")
         for p in viraram_texto:
             p.image_path, p.has_image = "", False
         print(f"+ {min(len(com_imagem), len(fotos_posts))} de {len(com_imagem)} posts com imagem ganharam foto de verdade")
@@ -182,6 +188,8 @@ def main() -> None:
             print(f"  -> sobraram {len(fotos_posts) - len(com_imagem)} fotos")
         elif viraram_texto:
             print(f"  -> faltaram {len(viraram_texto)} fotos: esses posts viraram só texto")
+        elif sobrando:
+            print(f"  -> faltaram {len(sobrando)} fotos: esses posts mantiveram a imagem que já tinham")
         elif not fotos_posts and com_imagem:
             print(f"  -> faltaram {len(com_imagem)} fotos (sem nenhuma, os posts ficam com a foto de mock)")
         else:
