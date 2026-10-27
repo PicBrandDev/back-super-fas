@@ -28,7 +28,8 @@ run() {
 if [ -n "$FOTOS" ]; then
   [ -d "$FOTOS" ] || { echo "Pasta de fotos não encontrada: $FOTOS" >&2; exit 1; }
   echo "==> copiando $FOTOS para /tmp/fotos do container"
-  sudo docker compose exec -T api rm -rf /tmp/fotos
+  # Como root: o docker compose cp grava as fotos como root e o usuário do container não consegue apagar.
+  sudo docker compose exec -T -u root api rm -rf /tmp/fotos
   sudo docker compose cp "$FOTOS" api:/tmp/fotos
 fi
 
