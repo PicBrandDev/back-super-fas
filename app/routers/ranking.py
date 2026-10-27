@@ -1,6 +1,6 @@
 """Ranking "Fã Super": o fã compartilha um post oficial no Instagram e pontua quando a legenda leva a hashtag."""
 
-from datetime import datetime
+from datetime import datetime, timezone
 
 from sqlalchemy import func, select
 
@@ -28,7 +28,8 @@ class RankRow(Camel):
     name: str
     handle: str
     avatar: str | None = None  # foto de perfil do fã
-    shares: int
+    shares: int  # compartilhamentos confirmados
+    points: float = 0.0  # pontos do ranking (com casas decimais)
     me: bool = False
 
 
@@ -40,6 +41,7 @@ class ClaimOut(Camel):
 class MyRank(Camel):
     position: int | None  # None = ainda sem compartilhamento confirmado
     shares: int  # confirmados
+    points: float = 0.0
     pending: int  # compartilhamentos iniciados, ainda sem confirmação
 
 
@@ -68,15 +70,42 @@ class SyncOut(Camel):
     error: str | None = None
 
 
-def _board(db, artist: m.Artist) -> list[tuple[str, int, object]]:
-    """[(user_id, compartilhamentos confirmados, primeira confirmação)], do primeiro para o último."""
-    q = (
-        select(m.InstagramShare.user_id, func.count(m.InstagramShare.id), func.min(m.InstagramShare.verified_at))
-        .where(m.InstagramShare.artist_id == artist.id, m.InstagramShare.status == "verified")
-        .group_by(m.InstagramShare.user_id)
-    )
-    rows = list(db.execute(q))
-    rows.sort(key=lambda r: (-r[1], r[2] or 0))
+def share_quality(post: m.Post | None, verified_at: datetime | None) -> float:
+    """Qualidade de 1 compartilhamento confirmado: o que o post bombou (curtidas + 2 x comentários + 3 x republicações,
+    / 1000) + o quanto ele é recente (vale 1 hoje e cai pela metade a cada 30 dias)."""
+    bonus = (post.likes + 2 * post.comments + 3 * post.reposts) / 1000 if post else 0.0
+    age = max(0.0, (datetime.now(timezone.utc) - verified_at.astimezone(timezone.utc)).total_seconds() / 86400) if verified_at else 365.0
+    return bonus + 0.5 ** (age / 30)
+
+
+def score(count: int, quality: float) -> float:
+    """Pontos do ranking: o nº de compartilhamentos confirmados + uma fração (sempre < 1) da qualidade deles.
+    Quem compartilhou mais continua na frente; as casas decimais desempatam."""
+    return round(count + quality / (1 + quality), 4)
+
+
+def _board(db, artist: m.Artist) -> list[tuple[str, int, object, float]]:
+    """[(user_id, compartilhamentos confirmados, primeira confirmação, pontos)], do primeiro para o último (por pontos)."""
+    shares = db.scalars(
+        select(m.InstagramShare).where(m.InstagramShare.artist_id == artist.id, m.InstagramShare.status == "verified")
+    ).all()
+    posts = {p.id: p for p in db.scalars(select(m.Post).where(m.Post.id.in_({s.post_id for s in shares if s.post_id})))} if shares else {}
+    by: dict[str, list] = {}
+    for sh in shares:
+        row = by.setdefault(sh.user_id, [0, None, 0.0])
+        row[0] += 1
+        row[1] = min(filter(None, (row[1], sh.verified_at)), default=None)
+        row[2] += share_quality(posts.get(sh.post_id or ""), sh.verified_at)
+    # O que os posts do próprio fã bombaram também entra na parte decimal (desempata quem tem compartilhamentos parecidos).
+    own = db.execute(
+        select(m.Post.author_id, func.sum(m.Post.likes + 2 * m.Post.comments + 3 * m.Post.reposts))
+        .where(m.Post.artist_id == artist.id, m.Post.author_id.in_(list(by)))
+        .group_by(m.Post.author_id)
+    ) if by else []
+    for uid, eng in own:
+        by[uid][2] += (eng or 0) / 10000
+    rows = [(uid, n, first, score(n, q)) for uid, (n, first, q) in by.items()]
+    rows.sort(key=lambda r: (-r[3], r[2] or 0))
     return rows
 
 
@@ -89,7 +118,7 @@ def _with_leader(rows: list, leader: str | None) -> list:
     """Põe o fã fixado pela administração em 1º (mesmo sem compartilhamentos); os demais seguem a ordem do placar."""
     if not leader:
         return rows
-    mine = next((r for r in rows if r[0] == leader), None) or (leader, 0, None)
+    mine = next((r for r in rows if r[0] == leader), None) or (leader, 0, None, 0.0)
     return [mine] + [r for r in rows if r[0] != leader]
 
 
@@ -168,17 +197,18 @@ def ranking(artist: FanArtist, user: CurrentUser, db: DB):
             handle=(users[uid].handle or "") if uid in users else "",
             avatar=(users[uid].avatar_path or None) if uid in users else None,
             shares=n,
+            points=pts,
             me=uid == user.id,
         )
-        for i, (uid, n, _) in enumerate(board[:30])
+        for i, (uid, n, _, pts) in enumerate(board[:30])
     ]
-    mine = next(((i + 1, n) for i, (uid, n, _) in enumerate(board) if uid == user.id), None)
+    mine = next(((i + 1, n, pts) for i, (uid, n, _, pts) in enumerate(board) if uid == user.id), None)
     pending = db.scalar(
         select(func.count(m.InstagramShare.id)).where(
             m.InstagramShare.artist_id == artist.id, m.InstagramShare.user_id == user.id, m.InstagramShare.status.in_(("started", "claimed"))
         )
     )
-    my_me = MyRank(position=mine[0] if mine else None, shares=mine[1] if mine else 0, pending=pending or 0)
+    my_me = MyRank(position=mine[0] if mine else None, shares=mine[1] if mine else 0, points=mine[2] if mine else 0.0, pending=pending or 0)
 
     # Ranking de cada fã clube: o mesmo placar, só com os membros dele.
     clubs = []
@@ -189,14 +219,14 @@ def ranking(artist: FanArtist, user: CurrentUser, db: DB):
         member_ids = {mb.user_id for mb in c.members} | {st.user_id for st in c.staff}
         rows = _with_leader([r for r in board if r[0] in member_ids], pins.get(c.id) if pins.get(c.id) in member_ids else None)
         names = {u.id: u for u in db.scalars(select(m.User).where(m.User.id.in_([r[0] for r in rows[:10]])))} if rows else {}
-        mine_c = next(((i + 1, n) for i, (uid, n, _) in enumerate(rows) if uid == user.id), None)
+        mine_c = next(((i + 1, n, pts) for i, (uid, n, _, pts) in enumerate(rows) if uid == user.id), None)
         clubs.append(
             ClubBoard(
                 slug=c.slug,
                 name=c.name,
                 avatar=c.avatar_path or None,
                 ranked=len(rows),
-                me=MyRank(position=mine_c[0] if mine_c else None, shares=mine_c[1] if mine_c else 0, pending=pending or 0) if user.id in member_ids else None,
+                me=MyRank(position=mine_c[0] if mine_c else None, shares=mine_c[1] if mine_c else 0, points=mine_c[2] if mine_c else 0.0, pending=pending or 0) if user.id in member_ids else None,
                 top=[
                     RankRow(
                         position=i + 1,
@@ -204,9 +234,10 @@ def ranking(artist: FanArtist, user: CurrentUser, db: DB):
                         handle=(names[uid].handle or "") if uid in names else "",
                         avatar=(names[uid].avatar_path or None) if uid in names else None,
                         shares=n,
+                        points=pts,
                         me=uid == user.id,
                     )
-                    for i, (uid, n, _) in enumerate(rows[:10])
+                    for i, (uid, n, _, pts) in enumerate(rows[:10])
                 ],
             )
         )
@@ -297,8 +328,9 @@ def manage_ranking(artist: ManagedArtist, db: DB):
                         handle=(users[uid].handle or "") if uid in users else "",
                         avatar=(users[uid].avatar_path or None) if uid in users else None,
                         shares=n,
+                        points=pts,
                     )
-                    for i, (uid, n, _) in enumerate(shown[:10])
+                    for i, (uid, n, _, pts) in enumerate(shown[:10])
                 ],
             )
         )
@@ -358,9 +390,9 @@ class PersonShare(Camel):
     started_at: datetime
     verified_at: datetime | None = None  # quando a hashtag foi conferida no Instagram
     permalink: str = ""
-    ranking_points: int  # 1 quando confirmado no Instagram, 0 enquanto não
+    ranking_points: float  # pontos quando confirmado no Instagram (1 + parte decimal que sobe com a qualidade), 0 enquanto não
     spins: int  # 1 giro da roleta quando o fã diz que postou
-    total_points: int  # pontos do ranking acumulados até este compartilhamento
+    total_points: float  # pontos do ranking acumulados até este compartilhamento
 
 
 class PersonPost(Camel):
@@ -382,7 +414,8 @@ class PersonHistory(Camel):
     handle: str = ""
     avatar: str | None = None
     position: int | None = None  # no ranking geral
-    points: int  # compartilhamentos confirmados
+    points: float  # pontos do ranking (soma dos compartilhamentos confirmados)
+    shares_confirmed: int
     pending: int
     shares: list[PersonShare]
     posts: list[PersonPost]
@@ -399,12 +432,18 @@ def person_history(user_id: str, artist: ManagedArtist, db: DB):
     )
     post_ids = {s.post_id for s in shares if s.post_id}
     track_ids = {s.track_id for s in shares if s.track_id}
-    texts = {p.id: p.text for p in db.scalars(select(m.Post).where(m.Post.id.in_(post_ids)))} if post_ids else {}
+    shared_posts = {p.id: p for p in db.scalars(select(m.Post).where(m.Post.id.in_(post_ids)))} if post_ids else {}
+    texts = {pid: p.text for pid, p in shared_posts.items()}
     titles = {t.id: t.title for t in db.scalars(select(m.Track).where(m.Track.id.in_(track_ids)))} if track_ids else {}
-    out, total = [], 0
+    out, total, confirmed, quality = [], 0.0, 0, 0.0
+    own_eng = (db.scalar(select(func.sum(m.Post.likes + 2 * m.Post.comments + 3 * m.Post.reposts)).where(m.Post.artist_id == artist.id, m.Post.author_id == user.id)) or 0) / 10000
     for s in shares:
-        point = 1 if s.status == "verified" else 0
-        total += point
+        point = 0.0
+        if s.status == "verified":
+            confirmed += 1
+            quality += share_quality(shared_posts.get(s.post_id or ""), s.verified_at) + (own_eng if confirmed == 1 else 0.0)
+            novo = score(confirmed, quality)
+            point, total = round(novo - total, 4), novo
         what = texts.get(s.post_id or "") or titles.get(s.track_id or "") or "Post"
         out.append(
             PersonShare(
@@ -437,6 +476,7 @@ def person_history(user_id: str, artist: ManagedArtist, db: DB):
         avatar=user.avatar_path or None,
         position=pos,
         points=total,
+        shares_confirmed=confirmed,
         pending=pending,
         shares=list(reversed(out)),
         posts=[

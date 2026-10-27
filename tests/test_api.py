@@ -841,7 +841,8 @@ def test_admin_define_quem_lidera_o_ranking(client, club_admin, fan):
     geral = client.get(f"{base}/manage/ranking", headers=club_admin).json()[0]
     hist = client.get(f"{base}/manage/ranking/people/{eu['id']}", headers=club_admin).json()
     assert hist["name"] == eu["name"] and hist["position"] == 1 and isinstance(hist["posts"], list)
-    assert all(sh["rankingPoints"] in (0, 1) for sh in hist["shares"]) and hist["points"] == sum(sh["rankingPoints"] for sh in hist["shares"])
+    assert all(sh["rankingPoints"] == 0 or sh["rankingPoints"] >= 1 for sh in hist["shares"])
+    assert abs(hist["points"] - sum(sh["rankingPoints"] for sh in hist["shares"])) < 0.01 and hist["sharesConfirmed"] == sum(1 for sh in hist["shares"] if sh["rankingPoints"])
     assert client.get(f"{base}/manage/ranking/people/{eu['id']}", headers=fan).status_code == 403
     assert client.get(f"{base}/manage/ranking/people/nao-existe", headers=club_admin).status_code == 404
     assert geral["people"][0]["name"] == eu["name"] and geral["people"][0]["position"] == 1 and len(geral["people"]) <= 10
@@ -851,6 +852,14 @@ def test_admin_define_quem_lidera_o_ranking(client, club_admin, fan):
     assert client.put(f"{base}/manage/ranking/leader", json={"clubSlug": "nao-existe", "userId": eu["id"]}, headers=club_admin).status_code == 404
     assert client.put(f"{base}/manage/ranking/leader", json={}, headers=club_admin).json()["leader"] is None
     assert client.get(f"{base}/ranking", headers=fan).json()["me"]["position"] == antes
+
+
+def test_analytics_do_clube_traz_o_card_do_dono(client, club_admin):
+    base = "/artists/vintage-culture"
+    r = client.get(f"{base}/clubs/oficial/analytics", headers=club_admin).json()
+    assert r["owner"]["email"] and r["owner"]["name"] and r["owner"]["points"] >= 0 and "avatar" in r["owner"]
+    assert "ownerAvatar" in r["club"]
+    assert "ownerAvatar" in client.get(f"{base}/clubs-overview", headers=club_admin).json()[0]
 
 
 def test_destaques_dos_fa_clubes(client, club_admin, fan):

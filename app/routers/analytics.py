@@ -29,6 +29,7 @@ class ClubOverview(Camel):
     avatar: str | None = None
     owner_name: str | None = None
     owner_email: str | None = None
+    owner_avatar: str | None = None
     members: int
     new_members_month: int
     posts: int
@@ -79,13 +80,34 @@ class TopPost(Camel):
     id: str
     text: str
     author: str
+    image: str | None = None
     likes: int
     comments: int
     reposts: int
 
 
+class OwnerCard(Camel):
+    """Perfil do dono do fã clube (card da página de analytics)."""
+
+    user_id: str
+    name: str
+    handle: str = ""
+    email: str
+    avatar: str | None = None
+    city: str = ""
+    state: str = ""
+    role_label: str = ""
+    since: date  # dono desde
+    posts: int  # posts dele no fã clube
+    shares: int  # compartilhamentos confirmados no Instagram
+    points: float  # pontos no ranking
+    position: int | None = None  # posição no ranking do fã clube
+    ranked: int = 0  # quantas pessoas pontuam neste fã clube
+
+
 class ClubAnalytics(Camel):
     club: ClubOverview
+    owner: OwnerCard | None = None
     subscribers: int
     likes: int
     comments: int
@@ -116,6 +138,7 @@ def _overview(db, club: m.FanClub, since: date) -> ClubOverview:
         avatar=club.avatar_path or None,
         owner_name=owner.name if owner else None,
         owner_email=owner.email if owner else None,
+        owner_avatar=(owner.avatar_path or None) if owner else None,
         members=len(club.members),
         new_members_month=sum(1 for mb in club.members if mb.created_at.date() >= since),
         posts=len(posts),
@@ -186,6 +209,34 @@ def clubs_highlights(artist: ManagedArtist, db: DB):
     return [_highlight(db, c, since, paying) for c in clubs]
 
 
+def _owner_card(db, club: m.FanClub, posts: list[m.Post]) -> OwnerCard | None:
+    from .ranking import _board
+
+    st = next((st for st in club.staff if st.role == m.STAFF_OWNER), None)
+    if not st:
+        return None
+    u = st.user
+    people = {mb.user_id for mb in club.members} | {x.user_id for x in club.staff}
+    rows = [r for r in _board(db, club.artist) if r[0] in people]
+    idx = next((i for i, r in enumerate(rows) if r[0] == u.id), None)
+    return OwnerCard(
+        user_id=u.id,
+        name=u.name,
+        handle=u.handle or "",
+        email=u.email,
+        avatar=u.avatar_path or None,
+        city=u.city,
+        state=u.state,
+        role_label=st.role_label,
+        since=st.created_at.date(),
+        posts=sum(1 for p in posts if p.author_id == u.id),
+        shares=rows[idx][1] if idx is not None else 0,
+        points=rows[idx][3] if idx is not None else 0.0,
+        position=idx + 1 if idx is not None else None,
+        ranked=len(rows),
+    )
+
+
 @router.get("/artists/{slug}/clubs/{club}/analytics", response_model=ClubAnalytics)
 def club_analytics(club: ManagedClub, db: DB):
     today = _today()
@@ -217,6 +268,7 @@ def club_analytics(club: ManagedClub, db: DB):
 
     return ClubAnalytics(
         club=_overview(db, club, since),
+        owner=_owner_card(db, club, posts),
         subscribers=sum(1 for mb in club.members if mb.user_id in subscribers),
         likes=sum(p.likes for p in posts),
         comments=sum(p.comments for p in posts),
@@ -231,6 +283,7 @@ def club_analytics(club: ManagedClub, db: DB):
                 id=p.id,
                 text=p.text[:140],
                 author=p.author.name if p.author else ("Oficial" if p.official else "—"),
+                image=p.image_path or None,
                 likes=p.likes,
                 comments=p.comments,
                 reposts=p.reposts,
