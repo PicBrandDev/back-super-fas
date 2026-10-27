@@ -5,10 +5,10 @@ o analytics de um fã clube também abre para a equipe daquele fã clube.
 """
 
 from collections import Counter
-from datetime import date, timedelta
+from datetime import date, datetime, time, timedelta, timezone
 
-from fastapi import APIRouter
-from sqlalchemy import select
+from fastapi import APIRouter, HTTPException, status
+from sqlalchemy import func, select
 
 from .. import models as m
 from ..schemas import Camel
@@ -342,6 +342,232 @@ def subscribers_analytics(artist: ManagedArtist, db: DB):
         ],
         by_state=[PlaceCount(place=k, subscribers=n) for k, n in by_state.most_common()],
         by_city=[PlaceCount(place=k, subscribers=n) for k, n in by_city.most_common(10)],
+    )
+
+
+# ---------------------------------------------------------------- lista de assinantes
+
+PAGE_SIZE = 10
+
+
+class SubscriberRow(Camel):
+    user_id: str
+    name: str
+    handle: str = ""
+    email: str
+    avatar: str | None = None
+    city: str = ""
+    state: str = ""
+    status: str  # active | pending | canceled
+    since: date | None = None  # assinou em
+    payment: str = ""
+    luck_points: int = 0
+    spins_left: int = 0
+
+
+class SubscriberPage(Camel):
+    total: int
+    page: int
+    pages: int
+    page_size: int = PAGE_SIZE
+    items: list[SubscriberRow]
+
+
+def _spins_left(db, artist: m.Artist, user_ids: list[str]) -> dict[str, int]:
+    rows = db.execute(
+        select(m.SpinCredit.user_id, func.count(m.SpinCredit.id))
+        .where(m.SpinCredit.artist_id == artist.id, m.SpinCredit.user_id.in_(user_ids), m.SpinCredit.used_at.is_(None))
+        .group_by(m.SpinCredit.user_id)
+    )
+    return dict(rows.all())
+
+
+@router.get("/artists/{slug}/subscribers", response_model=SubscriberPage)
+def subscribers_list(artist: ManagedArtist, db: DB, q: str = "", page: int = 1):
+    """Assinantes ativos, do que assinou por último para o mais antigo, de 10 em 10. `q` busca por nome, @ ou e-mail."""
+    base = (
+        select(m.Fandom, m.User)
+        .join(m.User, m.User.id == m.Fandom.user_id)
+        .where(m.Fandom.artist_id == artist.id, m.Fandom.member_status == "active")
+    )
+    term = q.strip().lower()
+    if term:
+        like = f"%{term}%"
+        base = base.where(func.lower(m.User.name).like(like) | func.lower(m.User.handle).like(like) | func.lower(m.User.email).like(like))
+    total = db.scalar(select(func.count()).select_from(base.subquery())) or 0
+    pages = max(1, -(-total // PAGE_SIZE))
+    page = min(max(1, page), pages)
+    rows = db.execute(
+        base.order_by(m.Fandom.member_since.desc().nulls_last(), m.Fandom.created_at.desc()).limit(PAGE_SIZE).offset((page - 1) * PAGE_SIZE)
+    ).all()
+    left = _spins_left(db, artist, [u.id for _, u in rows]) if rows else {}
+    return SubscriberPage(
+        total=total,
+        page=page,
+        pages=pages,
+        items=[
+            SubscriberRow(
+                user_id=u.id,
+                name=u.name,
+                handle=u.handle or "",
+                email=u.email,
+                avatar=u.avatar_path or None,
+                city=u.city,
+                state=u.state,
+                status=f.member_status or "",
+                since=f.member_since,
+                payment=f.payment,
+                luck_points=f.luck_points,
+                spins_left=left.get(u.id, 0),
+            )
+            for f, u in rows
+        ],
+    )
+
+
+class ActivityCoupon(Camel):
+    code: str
+    source: str
+    kind: str  # percent | fixed
+    value: int
+    used: bool
+    expires_on: date | None = None
+
+
+class ActivityEvent(Camel):
+    at: datetime
+    kind: str  # assinou | giro | giro_ganho | brinde | retirada | cupom | ingresso | loja | share | confirmado | post | comentario
+    title: str
+    detail: str = ""
+
+
+class ActivitySummary(Camel):
+    spins_used: int
+    spins_left: int
+    luck_points: int
+    rewards: int
+    rewards_redeemed: int
+    coupons: int
+    coupons_used: int
+    purchases: int
+    spent_cents: int
+    shares_confirmed: int
+    posts: int
+    comments: int
+
+
+class SubscriberActivity(Camel):
+    profile: SubscriberRow
+    summary: ActivitySummary
+    coupons: list[ActivityCoupon]
+    events: list[ActivityEvent]  # as 80 ações mais recentes
+
+
+def _at(d: date | datetime | None) -> datetime | None:
+    if d is None:
+        return None
+    if isinstance(d, datetime):
+        return d if d.tzinfo else d.replace(tzinfo=timezone.utc)
+    return datetime.combine(d, time(12, 0), tzinfo=timezone.utc)
+
+
+def _brl(cents: int) -> str:
+    return f"R$ {cents / 100:.2f}".replace(".", ",")
+
+
+@router.get("/artists/{slug}/subscribers/{user_id}/activity", response_model=SubscriberActivity)
+def subscriber_activity(user_id: str, artist: ManagedArtist, db: DB):
+    """Ações de um assinante: roleta, brindes, cupons, compras, compartilhamentos, posts e comentários."""
+    fandom = db.scalar(select(m.Fandom).where(m.Fandom.artist_id == artist.id, m.Fandom.user_id == user_id))
+    if not fandom or fandom.member_status is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Assinante não encontrado.")
+    u = fandom.user
+    ev: list[ActivityEvent] = []
+
+    def add(at, kind: str, title: str, detail: str = "") -> None:
+        when = _at(at)
+        if when:
+            ev.append(ActivityEvent(at=when, kind=kind, title=title, detail=detail))
+
+    add(fandom.member_since, "assinou", "Virou assinante", f"Pagamento: {fandom.payment}")
+    credits = db.scalars(select(m.SpinCredit).where(m.SpinCredit.artist_id == artist.id, m.SpinCredit.user_id == u.id)).all()
+    for c in credits:
+        add(c.created_at, "giro_ganho", "Ganhou um giro da roleta", c.reason)
+        if c.used_at:
+            add(c.used_at, "giro", "Girou a roleta", f"Saiu: {c.prize_label}" if c.prize_label else "")
+    rewards = db.scalars(select(m.Reward).where(m.Reward.artist_id == artist.id, m.Reward.user_id == u.id)).all()
+    for r in rewards:
+        add(r.created_at, "brinde", f"Ganhou o brinde {r.label}", f"Código {r.code}")
+        if r.redeemed_at:
+            add(r.redeemed_at, "retirada", f"Retirou o brinde {r.label}", f"Código {r.code}")
+    tickets = db.scalars(select(m.TicketPurchase).where(m.TicketPurchase.artist_id == artist.id, m.TicketPurchase.user_id == u.id)).all()
+    for t in tickets:
+        add(t.created_at, "ingresso", f"Comprou {t.label}", _brl(t.price_cents))
+        if t.coupon_code:
+            add(t.created_at, "cupom", f"Usou o cupom {t.coupon_code}", f"Desconto de {_brl(t.discount_cents)}")
+    products = db.scalars(select(m.ProductPurchase).where(m.ProductPurchase.artist_id == artist.id, m.ProductPurchase.user_id == u.id)).all()
+    for p in products:
+        add(p.created_at, "loja", f"Comprou na loja: {p.name}" + (f" x{p.qty}" if p.qty > 1 else ""), _brl(p.price_cents * p.qty))
+    shares = db.scalars(select(m.InstagramShare).where(m.InstagramShare.artist_id == artist.id, m.InstagramShare.user_id == u.id)).all()
+    for sh in shares:
+        add(sh.created_at, "share", "Compartilhou com a hashtag", "" if sh.status == "verified" else "Aguardando conferência")
+        if sh.verified_at:
+            add(sh.verified_at, "confirmado", "Hashtag confirmada no Instagram", "+1 compartilhamento no ranking")
+    club_ids = [c.id for c in artist.clubs]
+    posts = db.scalars(select(m.Post).where(m.Post.author_id == u.id, (m.Post.artist_id == artist.id) | (m.Post.club_id.in_(club_ids)))).all()
+    for p in posts:
+        add(p.created_at, "post", "Publicou um post", p.text[:120])
+    comments = db.scalars(
+        select(m.PostComment).join(m.Post, m.Post.id == m.PostComment.post_id).where(m.PostComment.author_id == u.id, m.Post.artist_id == artist.id)
+    ).all()
+    for c in comments:
+        add(c.created_at, "comentario", "Comentou num post", c.text[:120])
+
+    coupon_rows = [
+        ActivityCoupon(
+            code=c.code,
+            source=c.source,
+            kind=c.kind,
+            value=c.value,
+            used=c.used > 0 or any(t.coupon_code == c.code for t in tickets),
+            expires_on=c.expires_on,
+        )
+        for c in db.scalars(select(m.Coupon).where(m.Coupon.artist_id == artist.id, m.Coupon.user_id == u.id))
+    ]
+    ev.sort(key=lambda e: e.at, reverse=True)
+    spins_left = sum(1 for c in credits if c.used_at is None)
+    profile = SubscriberRow(
+        user_id=u.id,
+        name=u.name,
+        handle=u.handle or "",
+        email=u.email,
+        avatar=u.avatar_path or None,
+        city=u.city,
+        state=u.state,
+        status=fandom.member_status or "",
+        since=fandom.member_since,
+        payment=fandom.payment,
+        luck_points=fandom.luck_points,
+        spins_left=spins_left,
+    )
+    return SubscriberActivity(
+        profile=profile,
+        summary=ActivitySummary(
+            spins_used=sum(1 for c in credits if c.used_at),
+            spins_left=spins_left,
+            luck_points=fandom.luck_points,
+            rewards=len(rewards),
+            rewards_redeemed=sum(1 for r in rewards if r.redeemed_at),
+            coupons=len(coupon_rows),
+            coupons_used=sum(1 for c in coupon_rows if c.used),
+            purchases=len(tickets) + len(products),
+            spent_cents=sum(t.price_cents for t in tickets) + sum(p.price_cents * p.qty for p in products),
+            shares_confirmed=sum(1 for sh in shares if sh.status == "verified"),
+            posts=len(posts),
+            comments=len(comments),
+        ),
+        coupons=coupon_rows,
+        events=ev[:80],
     )
 
 

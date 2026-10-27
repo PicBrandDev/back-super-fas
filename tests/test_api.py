@@ -988,3 +988,22 @@ def test_anuncios_dentro_do_app(client, master, sponsor, fan):
         assert client.get(f"{VC}/ads/in-app", headers=fan).json() == empty
     finally:
         client.patch("/admin/fan-clubs/vintage-culture", headers=master, json={"modules": {"ads": True}})
+
+
+def test_lista_de_assinantes_pagina_busca_e_acoes(client, club_admin, fan):
+    base = "/artists/vintage-culture"
+    pg = client.get(f"{base}/subscribers", headers=club_admin).json()
+    assert pg["pageSize"] == 10 and len(pg["items"]) <= 10 and pg["page"] == 1 and pg["total"] >= len(pg["items"])
+    assert client.get(f"{base}/subscribers", headers=fan).status_code == 403
+    since = [i["since"] for i in pg["items"] if i["since"]]
+    assert since == sorted(since, reverse=True)  # do que assinou por último para o primeiro
+    if pg["items"]:
+        first = pg["items"][0]
+        achado = client.get(f"{base}/subscribers", params={"q": first["name"][:3].upper()}, headers=club_admin).json()
+        assert any(i["userId"] == first["userId"] for i in achado["items"])
+        assert client.get(f"{base}/subscribers", params={"q": "zzzzzzzzzz"}, headers=club_admin).json()["total"] == 0
+        act = client.get(f"{base}/subscribers/{first['userId']}/activity", headers=club_admin).json()
+        assert act["profile"]["userId"] == first["userId"] and {"spinsUsed", "couponsUsed", "purchases"} <= set(act["summary"])
+        ats = [e["at"] for e in act["events"]]
+        assert ats == sorted(ats, reverse=True)
+    assert client.get(f"{base}/subscribers/nao-existe/activity", headers=club_admin).status_code == 404
