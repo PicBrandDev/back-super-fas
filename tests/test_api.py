@@ -1082,12 +1082,12 @@ def test_mapa_das_vitrines_admin_e_patrocinador(client, club_admin, sponsor, fan
     base = "/artists/vintage-culture"
     mp = client.get(f"{base}/vitrines-map", headers=club_admin).json()
     groups = {c["group"] for c in mp["cards"]}
-    assert {"entrada", "roleta", "feed"} <= groups
+    assert groups == {"entrada", "feed"}  # sem roleta nem as outras telas
     keys = {c["key"] for c in mp["cards"]}
-    assert {"entrada", "pickup_video", "pickup_resgate", "mural", "feed_2", "feed_3", "feed_4"} <= keys
-    assert any(c["clubSlug"] and c["group"] == "feed" for c in mp["cards"])  # feeds dos fã clubes
+    assert {"entrada", "mural", "feed_2", "feed_3", "feed_4"} <= keys
+    assert not any(c["clubSlug"] for c in mp["cards"])  # o feed é um só, o do ambiente (sem o de cada fã clube)
     order = [c["group"] for c in mp["cards"]]
-    assert order == sorted(order, key=lambda g: {"entrada": 0, "roleta": 1, "feed": 2, "outras": 3}[g])
+    assert order == sorted(order, key=lambda g: {"entrada": 0, "feed": 1}[g])
     assert client.get(f"{base}/vitrines-map", headers=fan).status_code == 403
     sp = client.get("/sponsor/vitrines-map", params={"artist": "vintage-culture"}, headers=sponsor).json()
     assert len(sp["cards"]) == len(mp["cards"])
