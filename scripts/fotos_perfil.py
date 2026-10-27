@@ -15,6 +15,7 @@ Só para ver quem seria trocado (não grava nada), acrescente DRY=1:
 import os
 import unicodedata
 import urllib.request
+import zlib
 from pathlib import Path
 
 from sqlalchemy import select
@@ -77,9 +78,13 @@ def main() -> None:
             except OSError as e:
                 print(f"  falhou para {u.name}: {e}")
                 continue
-            name = f"perfil-{u.id}.jpg"
+            # O nome leva um código da foto: trocar a foto muda o endereço e o navegador não usa a antiga do cache.
+            name = f"perfil-{u.id}-{zlib.crc32(data):08x}.jpg"
             (folder / name).write_bytes(data)
+            antiga = Path(u.avatar_path).name if u.avatar_path else ""
             u.avatar_path = f"/uploads/{name}"
+            if antiga.startswith("perfil-") and antiga != name:
+                (folder / antiga).unlink(missing_ok=True)
             feitas += 1
         if not DRY:
             db.commit()

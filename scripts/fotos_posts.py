@@ -20,6 +20,7 @@ Para outro endereço do front (teste local): FRONT_URL=http://localhost:3000. Pa
 import os
 import re
 import urllib.request
+import zlib
 from pathlib import Path
 
 from sqlalchemy import select
@@ -95,7 +96,7 @@ def main() -> None:
                 print(f"  falhou no post {p.id}: {e}")
                 continue
             antiga = Path(p.image_path).name if p.image_path else ""
-            name = f"vc-{p.id}{ext}"
+            name = f"vc-{p.id}-{zlib.crc32(data):08x}{ext}"  # o código muda o endereço: o navegador não usa a foto antiga do cache
             (folder / name).write_bytes(data)
             p.image_path = f"/uploads/{name}"
             p.has_image = True
