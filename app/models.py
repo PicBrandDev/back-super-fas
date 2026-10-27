@@ -4,7 +4,7 @@ import datetime as dt
 import secrets
 from datetime import date, datetime, timezone
 
-from sqlalchemy import JSON, Boolean, Date, DateTime, ForeignKey, Integer, String, Text, UniqueConstraint
+from sqlalchemy import JSON, Boolean, Date, DateTime, ForeignKey, Index, Integer, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from .db import Base
@@ -223,7 +223,8 @@ class EventPhoto(Base):
 
 
 class TicketPurchase(Base):
-    """Ingresso que o fã comprou (hoje simulado: o pagamento acontece fora do app)."""
+    """Compra do fã para um show (hoje simulada: o pagamento acontece fora do app). O app não vende mais ingresso:
+    as compras novas são só de experiências extras (kind "experience"); as antigas e as da demonstração ficam como estão."""
 
     __tablename__ = "ticket_purchases"
 
@@ -239,6 +240,8 @@ class TicketPurchase(Base):
     price_cents: Mapped[int] = mapped_column(Integer, default=0)  # valor pago, já com o desconto do cupom
     coupon_code: Mapped[str] = mapped_column(String(30), default="")
     discount_cents: Mapped[int] = mapped_column(Integer, default=0)
+    # Quando o fã confirmou que o ingresso é comprado na Ingresse (compra de experiências extras; vazio nas antigas)
+    ticket_optin_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
 
     event: Mapped["Event"] = relationship()
@@ -621,3 +624,38 @@ class Campaign(Base):
 
     sponsor: Mapped[Sponsor] = relationship(back_populates="campaigns")
     slot: Mapped[AdSlot] = relationship()
+
+
+class Conversation(Base):
+    """Chat privado entre dois fãs do mesmo ambiente. O par fica em ordem (user_a_id < user_b_id), então há uma só
+    conversa por par em cada ambiente."""
+
+    __tablename__ = "conversations"
+    __table_args__ = (
+        UniqueConstraint("artist_id", "user_a_id", "user_b_id"),
+        Index("ix_conversations_artist_user_b", "artist_id", "user_b_id"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    artist_id: Mapped[str] = mapped_column(ForeignKey("artists.id", ondelete="CASCADE"))
+    user_a_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
+    user_b_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+    last_message_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    user_a: Mapped[User] = relationship(foreign_keys=[user_a_id])
+    user_b: Mapped[User] = relationship(foreign_keys=[user_b_id])
+
+
+class Message(Base):
+    """Mensagem de texto de uma conversa (o chat não aceita mídia)."""
+
+    __tablename__ = "messages"
+    __table_args__ = (Index("ix_messages_conversation_id_id", "conversation_id", "id"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    conversation_id: Mapped[int] = mapped_column(ForeignKey("conversations.id", ondelete="CASCADE"))
+    sender_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    body: Mapped[str] = mapped_column(String(1000))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+    read_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)  # quando o outro leu

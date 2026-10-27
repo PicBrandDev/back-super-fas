@@ -13,7 +13,7 @@ from sqlalchemy.orm import Session
 
 from . import models as m
 from .config import get_settings
-from .defaults import MODULES, VINTAGE_THEME
+from .defaults import DEFAULT_MODULES, VINTAGE_THEME
 from .routers.clubs import create_club
 from .routers.master import add_default_slots
 from .security import hash_password
@@ -46,7 +46,7 @@ def seed(db: Session) -> None:
             theme=copy.deepcopy(VINTAGE_THEME),
             member_price_cents=1690,
             brand_color="#B8461A",
-            modules={k: True for k in MODULES},
+            modules=dict(DEFAULT_MODULES),
         )
         db.add(vc)
         db.flush()

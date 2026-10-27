@@ -64,8 +64,16 @@ def as_seller(client, tag: str = "seller") -> dict:
     return h
 
 
+@pytest.fixture(scope="module", autouse=True)
+def resale_on(client, master):
+    """A revenda nasce desligada (módulo "resale"); estes testes ligam no Vintage Culture e desligam no fim."""
+    client.patch("/admin/fan-clubs/vintage-culture", headers=master, json={"modules": {"resale": True}})
+    yield
+    client.patch("/admin/fan-clubs/vintage-culture", headers=master, json={"modules": {"resale": False}})
+
+
 @pytest.fixture(scope="module")
-def world(client, club_admin):
+def world(client, club_admin, resale_on):
     """Um show futuro (22h) com ingresso Pista de R$ 200, ticketeira esgotada e revenda liberada pelo admin."""
     ev = client.post(f"{ART}/manage/events", headers=club_admin, json={"date": "2031-09-12", "city": "Revenda City", "venue": "Arena", "time": "22h"}).json()
     t = client.post(f"{ART}/manage/tickets", headers=club_admin, json={"eventId": ev["id"], "label": "Pista", "priceCents": 20000}).json()

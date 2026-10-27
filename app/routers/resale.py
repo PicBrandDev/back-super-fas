@@ -4,7 +4,7 @@ Contrato completo para o front em docs/revenda-ingressos-frontend.md."""
 from datetime import date
 from typing import Annotated
 
-from fastapi import APIRouter, File, Form, Header, Request, UploadFile
+from fastapi import APIRouter, Depends, File, Form, Header, Request, UploadFile
 from sqlalchemy import func, select
 
 from .. import models as m
@@ -75,8 +75,19 @@ def verify_email_confirm(user: CurrentUser, db: DB):
 base = "/artists/{slug}/resale"
 
 
+def resale_artist(artist: FanArtist) -> m.Artist:
+    """A revenda só responde com o módulo "resale" ligado no fã clube (desligado por padrão: saiu do app e fica escondida).
+    Desligado, tudo de /artists/{slug}/resale devolve 404 para o fã; a área de admin da revenda continua acessível."""
+    if not (artist.modules or {}).get("resale", False):
+        raise not_found("Revenda não encontrada.")
+    return artist
+
+
+ResaleArtist = Annotated[m.Artist, Depends(resale_artist)]
+
+
 @router.get(f"{base}/me/eligibility", response_model=EligibilityOut)
-def my_eligibility(artist: FanArtist, user: CurrentUser, db: DB):
+def my_eligibility(artist: ResaleArtist, user: CurrentUser, db: DB):
     can_buy, can_sell, missing = identity.eligibility(db, artist, user)
     return EligibilityOut(can_buy=can_buy, can_sell=can_sell, missing=missing)
 
@@ -89,7 +100,7 @@ def _event_out(db, e: m.Event) -> ResaleEventOut:
 
 
 @router.get(f"{base}/events", response_model=list[ResaleEventOut])
-def hub_events(artist: FanArtist, db: DB):
+def hub_events(artist: ResaleArtist, db: DB):
     """Shows com a revenda liberada pelo admin (ticketeira esgotada + revenda aberta), futuros, do mais próximo ao mais distante."""
     q = select(m.Event).join(ResaleEvent, ResaleEvent.event_id == m.Event.id).where(
         m.Event.artist_id == artist.id, ResaleEvent.ticketing_sold_out.is_(True), ResaleEvent.resale_open.is_(True), m.Event.date >= date.today()
@@ -98,7 +109,7 @@ def hub_events(artist: FanArtist, db: DB):
 
 
 @router.get(f"{base}/events/{{event_id}}", response_model=EventDetailOut)
-def hub_event(event_id: str, artist: FanArtist, db: DB):
+def hub_event(event_id: str, artist: ResaleArtist, db: DB):
     e = access.get_event(db, artist, event_id)
     access.ensure_open(db, e)
     counts = dict(db.execute(select(Listing.event_ticket_id, func.count(Listing.id)).where(Listing.event_id == e.id, Listing.status == L_LIVE, Listing.qty_available > 0).group_by(Listing.event_ticket_id)).all())
@@ -107,7 +118,7 @@ def hub_event(event_id: str, artist: FanArtist, db: DB):
 
 
 @router.get(f"{base}/events/{{event_id}}/listings", response_model=ListingsPageOut)
-def event_listings(event_id: str, artist: FanArtist, db: DB, ticketId: str | None = None, sort: str = "price", page: int = 1):
+def event_listings(event_id: str, artist: ResaleArtist, db: DB, ticketId: str | None = None, sort: str = "price", page: int = 1):
     """Anúncios no ar do show (com saldo), com o resumo de confiança de cada vendedor."""
     e = access.get_event(db, artist, event_id)
     access.ensure_open(db, e)
@@ -123,7 +134,7 @@ def event_listings(event_id: str, artist: FanArtist, db: DB, ticketId: str | Non
 
 
 @router.get(f"{base}/listings/{{listing_id}}", response_model=ListingOut)
-def listing_detail(listing_id: str, artist: FanArtist, db: DB):
+def listing_detail(listing_id: str, artist: ResaleArtist, db: DB):
     li = listings.get_listing(db, artist, listing_id)
     orders.sweep(db, listing_id=li.id)
     db.refresh(li)
@@ -136,7 +147,7 @@ def listing_detail(listing_id: str, artist: FanArtist, db: DB):
 @router.post(f"{base}/events/{{event_id}}/listings", response_model=MyListingOut, status_code=201)
 async def create_listing(
     event_id: str,
-    artist: FanArtist,
+    artist: ResaleArtist,
     user: CurrentUser,
     db: DB,
     ticket_id: Annotated[str, Form(alias="ticketId")],
@@ -153,7 +164,7 @@ async def create_listing(
 
 
 @router.get(f"{base}/me/listings", response_model=list[MyListingOut])
-def my_listings(artist: FanArtist, user: CurrentUser, db: DB):
+def my_listings(artist: ResaleArtist, user: CurrentUser, db: DB):
     orders.sweep(db, user_id=user.id)
     orders.sweep(db, seller_id=user.id)
     q = select(Listing).where(Listing.artist_id == artist.id, Listing.seller_id == user.id).order_by(Listing.created_at.desc())
@@ -161,13 +172,13 @@ def my_listings(artist: FanArtist, user: CurrentUser, db: DB):
 
 
 @router.post(f"{base}/listings/{{listing_id}}/cancel", response_model=MyListingOut)
-def cancel_listing(listing_id: str, artist: FanArtist, user: CurrentUser, db: DB):
+def cancel_listing(listing_id: str, artist: ResaleArtist, user: CurrentUser, db: DB):
     return views.my_listing_out(db, listings.cancel(db, user, listings.get_listing(db, artist, listing_id)))
 
 
 @router.post(f"{base}/listings/{{listing_id}}/resubmit", response_model=MyListingOut)
 async def resubmit_listing(
-    listing_id: str, artist: FanArtist, user: CurrentUser, db: DB, codes: Annotated[list[str], Form()], proof: Annotated[UploadFile | None, File()] = None
+    listing_id: str, artist: ResaleArtist, user: CurrentUser, db: DB, codes: Annotated[list[str], Form()], proof: Annotated[UploadFile | None, File()] = None
 ):
     li = await listings.resubmit(db, artist, user, listings.get_listing(db, artist, listing_id), codes, proof)
     return views.my_listing_out(db, li)
@@ -177,7 +188,7 @@ async def resubmit_listing(
 
 
 @router.post(f"{base}/listings/{{listing_id}}/orders", response_model=OrderOut, status_code=201)
-def reserve(listing_id: str, body: OrderIn, artist: FanArtist, user: CurrentUser, db: DB, idempotency_key: Annotated[str | None, Header()] = None):
+def reserve(listing_id: str, body: OrderIn, artist: ResaleArtist, user: CurrentUser, db: DB, idempotency_key: Annotated[str | None, Header()] = None):
     """Reserva a quantidade por 15 minutos. O header Idempotency-Key evita pedido em dobro se a requisição se repetir."""
     if idempotency_key is not None and not 8 <= len(idempotency_key) <= 80:
         raise ResaleError("IDEMPOTENCY_KEY", "A Idempotency-Key precisa ter de 8 a 80 caracteres.")
@@ -186,7 +197,7 @@ def reserve(listing_id: str, body: OrderIn, artist: FanArtist, user: CurrentUser
 
 
 @router.get(f"{base}/me/orders", response_model=list[OrderOut])
-def my_orders(artist: FanArtist, user: CurrentUser, db: DB, role: str = "all"):
+def my_orders(artist: ResaleArtist, user: CurrentUser, db: DB, role: str = "all"):
     orders.sweep(db, user_id=user.id)
     q = select(Order).where(Order.artist_id == artist.id)
     q = q.where(Order.buyer_id == user.id) if role == "buyer" else q.where(Order.seller_id == user.id) if role == "seller" else q.where((Order.buyer_id == user.id) | (Order.seller_id == user.id))
@@ -201,7 +212,7 @@ def _mine(db, artist: m.Artist, user: m.User, order_id: str) -> Order:
 
 
 @router.get(f"{base}/orders/{{order_id}}", response_model=OrderOut)
-def order_detail(order_id: str, artist: FanArtist, user: CurrentUser, db: DB):
+def order_detail(order_id: str, artist: ResaleArtist, user: CurrentUser, db: DB):
     o = _mine(db, artist, user, order_id)
     orders.sweep(db, order_id=o.id)
     db.refresh(o)
@@ -209,41 +220,41 @@ def order_detail(order_id: str, artist: FanArtist, user: CurrentUser, db: DB):
 
 
 @router.post(f"{base}/orders/{{order_id}}/pay", response_model=OrderOut)
-def pay_order(order_id: str, artist: FanArtist, user: CurrentUser, db: DB):
+def pay_order(order_id: str, artist: ResaleArtist, user: CurrentUser, db: DB):
     """Pagamento SIMULADO (só com o provedor falso): retém o valor e abre o prazo de transferência do vendedor."""
     o = orders.pay_fake(db, user, _mine(db, artist, user, order_id))
     return views.order_out(db, artist, o, user)
 
 
 @router.post(f"{base}/orders/{{order_id}}/cancel", response_model=OrderOut)
-def cancel_order(order_id: str, artist: FanArtist, user: CurrentUser, db: DB):
+def cancel_order(order_id: str, artist: ResaleArtist, user: CurrentUser, db: DB):
     return views.order_out(db, artist, orders.cancel(db, user, _mine(db, artist, user, order_id)), user)
 
 
 @router.post(f"{base}/orders/{{order_id}}/transferred", response_model=OrderOut)
-def order_transferred(order_id: str, artist: FanArtist, user: CurrentUser, db: DB):
+def order_transferred(order_id: str, artist: ResaleArtist, user: CurrentUser, db: DB):
     """O vendedor avisa que transferiu o ingresso pela ticketeira. Abre o prazo de 48h para o comprador confirmar."""
     return views.order_out(db, artist, orders.mark_transferred(db, user, _mine(db, artist, user, order_id)), user)
 
 
 @router.post(f"{base}/orders/{{order_id}}/confirm", response_model=OrderOut)
-def order_confirm(order_id: str, artist: FanArtist, user: CurrentUser, db: DB):
+def order_confirm(order_id: str, artist: ResaleArtist, user: CurrentUser, db: DB):
     """O comprador confirma o recebimento: o valor é liberado ao vendedor (menos a taxa)."""
     return views.order_out(db, artist, orders.confirm(db, user, _mine(db, artist, user, order_id)), user)
 
 
 @router.post(f"{base}/orders/{{order_id}}/dispute", response_model=OrderOut)
-def order_dispute(order_id: str, body: DisputeIn, artist: FanArtist, user: CurrentUser, db: DB):
+def order_dispute(order_id: str, body: DisputeIn, artist: ResaleArtist, user: CurrentUser, db: DB):
     return views.order_out(db, artist, orders.dispute(db, user, _mine(db, artist, user, order_id), body.reason_code, body.description), user)
 
 
 @router.post(f"{base}/orders/{{order_id}}/dispute/reply", response_model=DisputeOut)
-def order_dispute_reply(order_id: str, body: ReplyIn, artist: FanArtist, user: CurrentUser, db: DB):
+def order_dispute_reply(order_id: str, body: ReplyIn, artist: ResaleArtist, user: CurrentUser, db: DB):
     return views.dispute_out(orders.dispute_reply(db, user, _mine(db, artist, user, order_id), body.text))
 
 
 @router.post(f"{base}/orders/{{order_id}}/review", response_model=ReviewOut, status_code=201)
-def order_review(order_id: str, body: ReviewIn, artist: FanArtist, user: CurrentUser, db: DB):
+def order_review(order_id: str, body: ReviewIn, artist: ResaleArtist, user: CurrentUser, db: DB):
     r = orders.review(db, user, _mine(db, artist, user, order_id), body.rating, body.comment)
     return ReviewOut(id=r.id, rating=r.rating, comment=r.comment, created_at=br_date(r.created_at.date()), buyer_name=trust.short_name(user))
 
@@ -260,14 +271,14 @@ def _known_seller(db, artist: m.Artist, user_id: str) -> None:
 
 
 @router.get(f"{base}/sellers/{{user_id}}", response_model=SellerOut)
-def seller_profile(user_id: str, artist: FanArtist, db: DB):
+def seller_profile(user_id: str, artist: ResaleArtist, db: DB):
     """Perfil de confiança do vendedor: vendas concluídas, fã clube, nota, tempo na plataforma. Sem CPF, telefone ou e-mail."""
     _known_seller(db, artist, user_id)
     return trust.sellers(db, artist, [user_id])[user_id]
 
 
 @router.get(f"{base}/sellers/{{user_id}}/reviews", response_model=list[ReviewOut])
-def seller_reviews(user_id: str, artist: FanArtist, db: DB, page: int = 1):
+def seller_reviews(user_id: str, artist: ResaleArtist, db: DB, page: int = 1):
     _known_seller(db, artist, user_id)
     return trust.reviews(db, user_id, page)
 
