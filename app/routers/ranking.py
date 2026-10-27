@@ -1,5 +1,7 @@
 """Ranking "Fã Super": o fã compartilha um post oficial no Instagram e pontua quando a legenda leva a hashtag."""
 
+from datetime import datetime
+
 from sqlalchemy import func, select
 
 from fastapi import APIRouter, HTTPException, status
@@ -229,11 +231,17 @@ class LeaderOut(Camel):
     avatar: str | None = None
 
 
+class AdminRankRow(RankRow):
+    user_id: str
+
+
 class LeaderScope(Camel):
     club_slug: str | None = None  # None = ranking geral
     name: str
     leader: LeaderOut | None = None  # None = ninguém fixado: vale a ordem do placar
     top: LeaderOut | None = None  # quem lidera pelo placar de verdade (sem o ajuste da administração)
+    people: list[AdminRankRow] = []  # os 10 primeiros, já com o ajuste da administração
+    ranked: int = 0  # quantas pessoas já pontuam neste ranking
 
 
 class LeaderIn(Camel):
@@ -262,22 +270,36 @@ def manage_ranking(artist: ManagedArtist, db: DB):
     pins, board = _pins(db, artist), _board(db, artist)
     scopes: list[tuple[m.FanClub | None, set[str] | None]] = [(None, None)]
     scopes += [(c, _club_member_ids(c)) for c in sorted(artist.clubs, key=lambda c: (not c.is_master, c.position, c.created_at)) if c.status == "active"]
-    ids = set(pins.values())
-    tops: list[str | None] = []
+    pin_of = {None: pins.get(None), **{c.id: pins.get(c.id) for c, _ in scopes if c}}
+    boards = []
     for c, members in scopes:
         rows = [r for r in board if members is None or r[0] in members]
-        tops.append(rows[0][0] if rows else None)
-    ids |= {t for t in tops if t}
+        pin = pin_of[c.id if c else None]
+        boards.append((rows, _with_leader(rows, pin if pin and (members is None or pin in members) else None)))
+    ids = {r[0] for _, shown in boards for r in shown[:10]} | {rows[0][0] for rows, _ in boards if rows}
     users = {u.id: u for u in db.scalars(select(m.User).where(m.User.id.in_(ids)))} if ids else {}
     out = []
-    for (c, members), top in zip(scopes, tops):
-        pin = pins.get(c.id if c else None)
+    for (c, members), (rows, shown) in zip(scopes, boards):
+        pin = pin_of[c.id if c else None]
+        pinned = bool(pin and (members is None or pin in members))
         out.append(
             LeaderScope(
                 club_slug=c.slug if c else None,
                 name=c.name if c else "Ranking geral",
-                leader=_leader_out(users.get(pin)) if pin and (members is None or pin in members) else None,
-                top=_leader_out(users.get(top)) if top else None,
+                leader=_leader_out(users.get(pin)) if pinned else None,
+                top=_leader_out(users.get(rows[0][0])) if rows else None,
+                ranked=len(shown),
+                people=[
+                    AdminRankRow(
+                        user_id=uid,
+                        position=i + 1,
+                        name=users[uid].name if uid in users else "Fã",
+                        handle=(users[uid].handle or "") if uid in users else "",
+                        avatar=(users[uid].avatar_path or None) if uid in users else None,
+                        shares=n,
+                    )
+                    for i, (uid, n, _) in enumerate(shown[:10])
+                ],
             )
         )
     return out
@@ -327,3 +349,109 @@ def set_leader(body: LeaderIn, artist: ManagedArtist, db: DB):
         db.add(m.RankingPin(artist_id=artist.id, club_id=club.id if club else None, user_id=user.id))
     db.commit()
     return LeaderScope(club_slug=club.slug if club else None, name=club.name if club else "Ranking geral", leader=_leader_out(user))
+
+
+class PersonShare(Camel):
+    id: str
+    what: str  # o post ou o Drop que ela compartilhou
+    status: str  # started | claimed | verified
+    started_at: datetime
+    verified_at: datetime | None = None  # quando a hashtag foi conferida no Instagram
+    permalink: str = ""
+    ranking_points: int  # 1 quando confirmado no Instagram, 0 enquanto não
+    spins: int  # 1 giro da roleta quando o fã diz que postou
+    total_points: int  # pontos do ranking acumulados até este compartilhamento
+
+
+class PersonPost(Camel):
+    id: str
+    kind: str
+    club: str | None = None
+    text: str
+    has_image: bool
+    image: str | None = None
+    likes: int
+    comments: int
+    reposts: int
+    created_at: datetime
+
+
+class PersonHistory(Camel):
+    user_id: str
+    name: str
+    handle: str = ""
+    avatar: str | None = None
+    position: int | None = None  # no ranking geral
+    points: int  # compartilhamentos confirmados
+    pending: int
+    shares: list[PersonShare]
+    posts: list[PersonPost]
+
+
+@router.get("/artists/{slug}/manage/ranking/people/{user_id}", response_model=PersonHistory)
+def person_history(user_id: str, artist: ManagedArtist, db: DB):
+    """Histórico de um fã: o que ele postou, quando compartilhou a hashtag e quanto cada compartilhamento rendeu."""
+    user = db.get(m.User, user_id)
+    if not user:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Fã não encontrado.")
+    shares = list(
+        db.scalars(select(m.InstagramShare).where(m.InstagramShare.artist_id == artist.id, m.InstagramShare.user_id == user.id).order_by(m.InstagramShare.created_at))
+    )
+    post_ids = {s.post_id for s in shares if s.post_id}
+    track_ids = {s.track_id for s in shares if s.track_id}
+    texts = {p.id: p.text for p in db.scalars(select(m.Post).where(m.Post.id.in_(post_ids)))} if post_ids else {}
+    titles = {t.id: t.title for t in db.scalars(select(m.Track).where(m.Track.id.in_(track_ids)))} if track_ids else {}
+    out, total = [], 0
+    for s in shares:
+        point = 1 if s.status == "verified" else 0
+        total += point
+        what = texts.get(s.post_id or "") or titles.get(s.track_id or "") or "Post"
+        out.append(
+            PersonShare(
+                id=s.id,
+                what=what[:90],
+                status=s.status,
+                started_at=s.created_at,
+                verified_at=s.verified_at,
+                permalink=s.permalink,
+                ranking_points=point,
+                spins=1 if s.status in ("claimed", "verified") else 0,
+                total_points=total,
+            )
+        )
+    club_ids = [c.id for c in artist.clubs]
+    names = {c.id: c.name for c in artist.clubs}
+    posts = db.scalars(
+        select(m.Post)
+        .where(m.Post.author_id == user.id, (m.Post.artist_id == artist.id) | (m.Post.club_id.in_(club_ids)))
+        .order_by(m.Post.created_at.desc())
+        .limit(50)
+    )
+    board = _with_leader(_board(db, artist), _pins(db, artist).get(None))
+    pos = next((i + 1 for i, r in enumerate(board) if r[0] == user.id), None)
+    pending = sum(1 for s in shares if s.status in ("started", "claimed"))
+    return PersonHistory(
+        user_id=user.id,
+        name=user.name,
+        handle=user.handle or "",
+        avatar=user.avatar_path or None,
+        position=pos,
+        points=total,
+        pending=pending,
+        shares=list(reversed(out)),
+        posts=[
+            PersonPost(
+                id=p.id,
+                kind=p.kind,
+                club=names.get(p.club_id or ""),
+                text=p.text[:300],
+                has_image=p.has_image,
+                image=p.image_path or None,
+                likes=p.likes,
+                comments=p.comments,
+                reposts=p.reposts,
+                created_at=p.created_at,
+            )
+            for p in posts
+        ],
+    )

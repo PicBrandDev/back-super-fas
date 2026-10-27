@@ -838,6 +838,13 @@ def test_admin_define_quem_lidera_o_ranking(client, club_admin, fan):
     assert r.status_code == 200 and r.json()["leader"]["userId"] == eu["id"]
     rk = client.get(f"{base}/ranking", headers=fan).json()
     assert rk["top"][0]["me"] is True and rk["me"]["position"] == 1
+    geral = client.get(f"{base}/manage/ranking", headers=club_admin).json()[0]
+    hist = client.get(f"{base}/manage/ranking/people/{eu['id']}", headers=club_admin).json()
+    assert hist["name"] == eu["name"] and hist["position"] == 1 and isinstance(hist["posts"], list)
+    assert all(sh["rankingPoints"] in (0, 1) for sh in hist["shares"]) and hist["points"] == sum(sh["rankingPoints"] for sh in hist["shares"])
+    assert client.get(f"{base}/manage/ranking/people/{eu['id']}", headers=fan).status_code == 403
+    assert client.get(f"{base}/manage/ranking/people/nao-existe", headers=club_admin).status_code == 404
+    assert geral["people"][0]["name"] == eu["name"] and geral["people"][0]["position"] == 1 and len(geral["people"]) <= 10
 
     # fã de fora do fã clube não pode ser fixado nele; desfazer volta ao placar
     assert client.put(f"{base}/manage/ranking/leader", json={"userId": "nao-existe"}, headers=club_admin).status_code == 404
