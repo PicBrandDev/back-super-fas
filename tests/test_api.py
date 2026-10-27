@@ -146,7 +146,7 @@ def test_master_cria_fa_clube_com_convites(client, master, fan):
     assert r.status_code == 201, r.text
     body = r.json()
     assert body["artist"]["slug"] == "alok" and body["artist"]["status"] == "setup"
-    assert body["artist"]["adSlotsSummary"] == "0 de 9 ocupadas"
+    assert body["artist"]["adSlotsSummary"] == "0 de 12 ocupadas"
     invite = body["invites"][0]
     assert invite["tempPassword"]
 
@@ -275,7 +275,7 @@ def test_fa_clubes_do_ambiente(client, club_admin, fan, sponsor, master):
     assert other["invite"]["emailSent"] is False  # sem SMTP nos testes: a senha provisória é mostrada na tela
     rio = login(client, "dono-rio@exemplo.com", other["invite"]["tempPassword"])
     slots = client.get(f"{SP}/ad-slots", headers=sponsor).json()
-    assert [s["id"] for s in slots] == ["fa-clube-sp.home", "fa-clube-sp.mural", "fa-clube-sp.pickup"]
+    assert [s["id"] for s in slots] == ["fa-clube-sp.home", "fa-clube-sp.mural", "fa-clube-sp.pickup", "fa-clube-sp.feed_2", "fa-clube-sp.feed_3"]
     today = date.today()
     camp = client.post(
         "/sponsor/campaigns",
@@ -404,10 +404,10 @@ def test_agencias_pacotes_e_ticketeira(client, club_admin, fan):
         headers=club_admin,
         json={
             "eventId": event["id"], "agencyId": ag["id"], "name": "Caravana Curitiba", "transferDetails": "Saída 14h, volta após o show",
-            "items": [
-                {"kind": "ticket", "label": "Pista", "priceCents": 18000},
-                {"kind": "ticket", "label": "Camarote", "priceCents": 32000, "soldOut": True},
-                {"kind": "transfer", "label": "Ônibus ida e volta", "priceCents": 9000},
+            "addons": [
+                {"key": "transfer", "priceCents": 9000},
+                {"key": "jantar", "priceCents": 45000},
+                {"key": "hotel", "priceCents": 38000, "soldOut": True},
             ],
         },
     )
@@ -425,7 +425,7 @@ def test_agencias_pacotes_e_ticketeira(client, club_admin, fan):
 
     pk = client.get(f"{base}/events/{event['id']}/packages", headers=fan).json()
     assert len(pk) == 1 and pk[0]["agencyName"] == "Caravana Sul" and pk[0]["hasTransfer"] is True
-    assert pk[0]["fromPriceCents"] == 9000 and len(pk[0]["items"]) == 3
+    assert pk[0]["fromPriceCents"] == 9000 and pk[0]["items"] == [] and [a["key"] for a in pk[0]["addons"]] == ["transfer", "jantar", "hotel"]
     assert client.get(f"{base}/events/{event['id']}", headers=fan).json()["ticketingName"] == "Ticketeira Teste"
 
 
@@ -447,21 +447,23 @@ def test_giros_com_motivo_e_compra_de_experiencias(client, club_admin, fan):
     pkg = client.post(
         f"{base}/manage/packages",
         headers=club_admin,
-        json={"eventId": ev["id"], "agencyId": ag["id"], "name": "Caravana Natal", "items": [], "addons": [
-            {"key": "jantar", "priceCents": 29000},
-            {"key": "camarim", "priceCents": 50000, "soldOut": True},
+        json={"eventId": ev["id"], "agencyId": ag["id"], "name": "Caravana Natal", "addons": [
+            {"key": "transfer", "priceCents": 9000},
+            {"key": "after", "priceCents": 50000, "soldOut": True},
         ]},
     ).json()
 
     antes = client.get(f"{base}/pickup/spins", headers=fan).json()
     livres_antes = sum(1 for g in antes if not g["used"])
     url = f"{base}/events/{ev['id']}/purchases"
-    assert client.post(url, headers=fan, json={"packageId": pkg["id"], "addons": ["camarim"], "ticketOptin": True}).status_code == 400  # esgotado
-    assert client.post(url, headers=fan, json={"packageId": pkg["id"], "addons": ["pre"], "ticketOptin": True}).status_code == 400  # fora do pacote
-    compra = client.post(url, headers=fan, json={"packageId": pkg["id"], "addons": ["jantar"], "ticketOptin": True})
+    assert client.post(url, headers=fan, json={"packageId": pkg["id"], "addons": ["after"], "ticketOptin": True}).status_code == 400  # esgotada
+    assert client.post(url, headers=fan, json={"packageId": pkg["id"], "addons": [], "ticketOptin": True}).status_code == 400  # sem ingresso: precisa de uma experiência
+    compra = client.post(url, headers=fan, json={"packageId": pkg["id"], "addons": ["transfer"], "ticketOptin": True})
     assert compra.status_code == 201, compra.text
     c = compra.json()
-    assert c["includesPhotoFinder"] and c["kind"] == "extras" and c["event"]["city"] == "Natal"
+    assert c["includesPhotoFinder"] and c["includesTransfer"] and not c["includesSeal"] and c["event"]["city"] == "Natal"
+    assert c["label"] == "Transfer ida e volta" and c["priceCents"] == 9000
+    assert c["kind"] == "experience"
 
     meus = client.get(f"{base}/me/tickets", headers=fan).json()
     assert any(t["id"] == c["id"] for t in meus)
@@ -492,7 +494,7 @@ def test_photo_finder_com_rekognition_simulado(client, club_admin, fan, monkeypa
     ag = client.post(f"{base}/manage/agencies", headers=club_admin, json={"name": "Agência Passado"}).json()
     pkg = client.post(
         f"{base}/manage/packages", headers=club_admin,
-        json={"eventId": ev["id"], "agencyId": ag["id"], "name": "Caravana", "items": [], "addons": [{"key": "jantar", "priceCents": 29000}]},
+        json={"eventId": ev["id"], "agencyId": ag["id"], "name": "Caravana", "addons": [{"key": "camarim", "priceCents": 29000}]},
     ).json()
 
     up = client.post(
@@ -508,9 +510,8 @@ def test_photo_finder_com_rekognition_simulado(client, club_admin, fan, monkeypa
     assert not st["eligible"] and "precisa de um ingresso" in st["reason"]
     assert client.post(f"{base}/events/{ev['id']}/photo-finder/search", headers=fan, files=selfie, data={"consent": "true"}).status_code == 403
 
-    # compra uma experiência extra, confirmando o ingresso da Ingresse (o Photo Finder vem em toda compra), e busca
-    extras = {"packageId": pkg["id"], "addons": ["jantar"], "ticketOptin": True}
-    assert client.post(f"{base}/events/{ev['id']}/purchases", headers=fan, json=extras).status_code == 201
+    # compra a experiência (o Photo Finder vem em todos os pacotes) e busca
+    assert client.post(f"{base}/events/{ev['id']}/purchases", headers=fan, json={"packageId": pkg["id"], "addons": ["camarim"], "ticketOptin": True}).status_code == 201
     assert client.get(f"{base}/events/{ev['id']}/photo-finder", headers=fan).json()["eligible"] is True
     assert client.post(f"{base}/events/{ev['id']}/photo-finder/search", headers=fan, files=selfie, data={"consent": "false"}).status_code == 400
     res = client.post(f"{base}/events/{ev['id']}/photo-finder/search", headers=fan, files=selfie, data={"consent": "true"})
@@ -542,10 +543,9 @@ def test_photo_finder_com_colecao_e_bucket_configurados(client, club_admin, fan,
     ag = client.post(f"{base}/manage/agencies", headers=club_admin, json={"name": "Agência Passado 2"}).json()
     pkg = client.post(
         f"{base}/manage/packages", headers=club_admin,
-        json={"eventId": ev["id"], "agencyId": ag["id"], "name": "Caravana", "items": [], "addons": [{"key": "jantar", "priceCents": 29000}]},
+        json={"eventId": ev["id"], "agencyId": ag["id"], "name": "Caravana", "addons": [{"key": "camarim", "priceCents": 29000}]},
     ).json()
-    extras = {"packageId": pkg["id"], "addons": ["jantar"], "ticketOptin": True}
-    assert client.post(f"{base}/events/{ev['id']}/purchases", headers=fan, json=extras).status_code == 201
+    assert client.post(f"{base}/events/{ev['id']}/purchases", headers=fan, json={"packageId": pkg["id"], "addons": ["camarim"], "ticketOptin": True}).status_code == 201
     st = client.get(f"{base}/events/{ev['id']}/photo-finder", headers=fan).json()
     assert st["eligible"] is True and st["photos"] == 0  # não precisa de fotos enviadas ao show
     res = client.post(f"{base}/events/{ev['id']}/photo-finder/search", headers=fan, files={"selfie": ("eu.png", png, "image/png")}, data={"consent": "true"})
@@ -575,8 +575,7 @@ def test_experiencias_extras_com_optin_e_photo_finder_em_todas(client, club_admi
     addons = [{"key": "jantar", "priceCents": 45000}, {"key": "hotel", "priceCents": 38000}, {"key": "after", "priceCents": 18000, "soldOut": True}]
     pkg = client.post(
         f"{base}/manage/packages", headers=club_admin,
-        json={"eventId": ev["id"], "agencyId": ag["id"], "name": "Caravana", "addons": addons,
-              "items": [{"kind": "ticket", "label": "Pista", "priceCents": 15000}]},
+        json={"eventId": ev["id"], "agencyId": ag["id"], "name": "Caravana", "addons": addons},
     )
     assert pkg.status_code == 201 and [a["key"] for a in pkg.json()["addons"]] == ["jantar", "hotel", "after"]
     assert client.post(f"{base}/manage/packages", headers=club_admin, json={"eventId": ev["id"], "agencyId": ag["id"], "name": "X", "addons": [{"key": "spa", "priceCents": 1}], "items": []}).status_code == 422
@@ -594,7 +593,7 @@ def test_experiencias_extras_com_optin_e_photo_finder_em_todas(client, club_admi
     c = compra.json()
     # só as experiências: o ingresso (Pista) é da Ingresse e não entra no valor nem no rótulo
     assert c["priceCents"] == 45000 + 38000 and c["label"] == "Jantar com o Vintage + Hotel com hospedagem"
-    assert c["kind"] == "extras" and c["includesPhotoFinder"] is True
+    assert c["kind"] == "experience" and c["includesPhotoFinder"] is True
 
 
 def test_compra_de_experiencias_exige_optin_da_ingresse(client, club_admin, fan):
@@ -624,24 +623,6 @@ def test_compra_de_experiencias_exige_optin_da_ingresse(client, club_admin, fan)
         assert db.get(m.TicketPurchase, compra.json()["id"]).ticket_optin_at is not None
 
 
-def test_compra_de_ingresso_no_app_e_recusada(client, club_admin, fan):
-    base = "/artists/vintage-culture"
-    ev = client.post(f"{base}/manage/events", headers=club_admin, json={"date": "2031-08-10", "city": "João Pessoa"}).json()
-    ag = client.post(f"{base}/manage/agencies", headers=club_admin, json={"name": "Agência João Pessoa"}).json()
-    pkg = client.post(
-        f"{base}/manage/packages", headers=club_admin,
-        json={"eventId": ev["id"], "agencyId": ag["id"], "name": "Caravana", "addons": [{"key": "after", "priceCents": 9000}],
-              "items": [{"kind": "ticket", "label": "Pista", "priceCents": 15000}]},
-    ).json()
-    url = f"{base}/events/{ev['id']}/purchases"
-    for body in ({"packageId": pkg["id"], "item": 0}, {"packageId": pkg["id"], "item": 0, "addons": ["after"]}):
-        r = client.post(url, headers=fan, json={**body, "ticketOptin": True})
-        assert r.status_code == 400 and "Ingresse" in r.json()["detail"]
-        assert client.post(f"{base}/events/{ev['id']}/quote", headers=fan, json=body).status_code == 400
-    # sem experiência nenhuma também não há o que comprar
-    assert client.post(url, headers=fan, json={"packageId": pkg["id"], "ticketOptin": True}).status_code == 400
-
-
 def test_cupom_de_desconto_na_compra(client, club_admin, fan, monkeypatch):
     from app.config import get_settings
 
@@ -650,19 +631,18 @@ def test_cupom_de_desconto_na_compra(client, club_admin, fan, monkeypatch):
     ag = client.post(f"{base}/manage/agencies", headers=club_admin, json={"name": "Agência Salvador"}).json()
     pkg = client.post(
         f"{base}/manage/packages", headers=club_admin,
-        json={"eventId": ev["id"], "agencyId": ag["id"], "name": "Caravana", "addons": [{"key": "jantar", "priceCents": 50000}],
-              "items": [{"kind": "ticket", "label": "Pista", "priceCents": 50000}]},
+        json={"eventId": ev["id"], "agencyId": ag["id"], "name": "Caravana", "addons": [{"key": "jantar", "priceCents": 100000}]},
     ).json()
     body = {"packageId": pkg["id"], "addons": ["jantar"], "ticketOptin": True}
     q = f"{base}/events/{ev['id']}/quote"
-    assert client.post(q, headers=fan, json=body).json()["totalCents"] == 50000
+    assert client.post(q, headers=fan, json=body).json()["totalCents"] == 100000
 
     # cupom geral criado pela administração (código em maiúsculas), 20%
     cp = client.post(f"{base}/manage/coupons", headers=club_admin, json={"code": "vintage20", "kind": "percent", "value": 20, "maxUses": 1})
     assert cp.status_code == 201 and cp.json()["code"] == "VINTAGE20"
     assert client.post(f"{base}/manage/coupons", headers=club_admin, json={"code": "ZERO", "kind": "percent", "value": 150}).status_code == 400
     r = client.post(q, headers=fan, json={**body, "coupon": " vintage20 "}).json()
-    assert (r["subtotalCents"], r["discountCents"], r["totalCents"], r["coupon"], r["couponLabel"]) == (50000, 10000, 40000, "VINTAGE20", "20% de desconto")
+    assert (r["subtotalCents"], r["discountCents"], r["totalCents"], r["coupon"], r["couponLabel"]) == (100000, 20000, 80000, "VINTAGE20", "20% de desconto")
     assert client.post(q, headers=fan, json={**body, "coupon": "NAOEXISTE"}).status_code == 400
 
     # cupom pessoal da roleta (demonstração): aparece em "meus cupons" e vale só uma vez
@@ -671,11 +651,11 @@ def test_cupom_de_desconto_na_compra(client, club_admin, fan, monkeypatch):
     meus = client.get(f"{base}/me/coupons", headers=fan).json()
     assert [c["code"] for c in meus] == ["ROLETA10"] and meus[0]["label"] == "10% de desconto" and meus[0]["source"].startswith("Prêmio da roleta")
     compra = client.post(f"{base}/events/{ev['id']}/purchases", headers=fan, json={**body, "coupon": "ROLETA10"})
-    assert compra.status_code == 201 and compra.json()["priceCents"] == 45000
+    assert compra.status_code == 201 and compra.json()["priceCents"] == 90000
     assert client.get(f"{base}/me/coupons", headers=fan).json() == []
     assert client.post(q, headers=fan, json={**body, "coupon": "ROLETA10"}).status_code == 400  # uso único
     # o cupom geral de uso único também esgota depois de usado
-    assert client.post(f"{base}/events/{ev['id']}/purchases", headers=fan, json={**body, "coupon": "VINTAGE20"}).json()["priceCents"] == 40000
+    assert client.post(f"{base}/events/{ev['id']}/purchases", headers=fan, json={**body, "coupon": "VINTAGE20"}).json()["priceCents"] == 80000
     assert client.post(q, headers=fan, json={**body, "coupon": "VINTAGE20"}).status_code == 400
 
 
@@ -872,6 +852,53 @@ def test_dono_do_fa_clube_aparece_no_proprio_ranking(client, club_admin):
     assert oficial["me"] is not None  # o dono é parte do fã clube, mesmo sem entrar como membro
 
 
+def test_admin_define_quem_lidera_o_ranking(client, club_admin, fan):
+    base = "/artists/vintage-culture"
+    eu = client.get("/auth/me", headers=fan).json()
+    antes = client.get(f"{base}/ranking", headers=fan).json()["me"]["position"]
+    scopes = client.get(f"{base}/manage/ranking", headers=club_admin).json()
+    assert scopes[0]["clubSlug"] is None and scopes[0]["leader"] is None
+    assert client.get(f"{base}/manage/ranking", headers=fan).status_code == 403  # só a administração
+
+    # o fã de teste não tem compartilhamento, mas a administração o coloca em 1º no geral
+    achados = client.get(f"{base}/manage/ranking/fans", params={"q": eu["name"][:4]}, headers=club_admin).json()
+    alvo = next(f for f in achados if f["userId"] == eu["id"])
+    r = client.put(f"{base}/manage/ranking/leader", json={"userId": alvo["userId"]}, headers=club_admin)
+    assert r.status_code == 200 and r.json()["leader"]["userId"] == eu["id"]
+    rk = client.get(f"{base}/ranking", headers=fan).json()
+    assert rk["top"][0]["me"] is True and rk["me"]["position"] == 1
+    geral = client.get(f"{base}/manage/ranking", headers=club_admin).json()[0]
+    hist = client.get(f"{base}/manage/ranking/people/{eu['id']}", headers=club_admin).json()
+    assert hist["name"] == eu["name"] and hist["position"] == 1 and isinstance(hist["posts"], list)
+    assert all(sh["rankingPoints"] == 0 or sh["rankingPoints"] >= 1 for sh in hist["shares"])
+    assert abs(hist["points"] - sum(sh["rankingPoints"] for sh in hist["shares"])) < 0.01 and hist["sharesConfirmed"] == sum(1 for sh in hist["shares"] if sh["rankingPoints"])
+    assert client.get(f"{base}/manage/ranking/people/{eu['id']}", headers=fan).status_code == 403
+    assert client.get(f"{base}/manage/ranking/people/nao-existe", headers=club_admin).status_code == 404
+    assert geral["people"][0]["name"] == eu["name"] and geral["people"][0]["position"] == 1 and len(geral["people"]) <= 10
+
+    # fã de fora do fã clube não pode ser fixado nele; desfazer volta ao placar
+    assert client.put(f"{base}/manage/ranking/leader", json={"userId": "nao-existe"}, headers=club_admin).status_code == 404
+    assert client.put(f"{base}/manage/ranking/leader", json={"clubSlug": "nao-existe", "userId": eu["id"]}, headers=club_admin).status_code == 404
+    assert client.put(f"{base}/manage/ranking/leader", json={}, headers=club_admin).json()["leader"] is None
+    assert client.get(f"{base}/ranking", headers=fan).json()["me"]["position"] == antes
+
+
+def test_analytics_do_clube_traz_o_card_do_dono(client, club_admin):
+    base = "/artists/vintage-culture"
+    r = client.get(f"{base}/clubs/oficial/analytics", headers=club_admin).json()
+    assert r["owner"]["email"] and r["owner"]["name"] and r["owner"]["points"] >= 0 and "avatar" in r["owner"]
+    assert "ownerAvatar" in r["club"]
+    assert "ownerAvatar" in client.get(f"{base}/clubs-overview", headers=club_admin).json()[0]
+
+
+def test_destaques_dos_fa_clubes(client, club_admin, fan):
+    base = "/artists/vintage-culture"
+    rows = client.get(f"{base}/clubs-highlights", headers=club_admin).json()
+    assert rows and {"content", "buzz", "members", "activeMembers", "activeRate"} <= set(rows[0])
+    assert all(0 <= r["activeRate"] <= 100 and r["content"] == r["posts"] + r["prizes"] for r in rows)
+    assert client.get(f"{base}/clubs-highlights", headers=fan).status_code == 403
+
+
 def test_vitrines_alugadas(client, club_admin, sponsor, fan):
     from datetime import date, timedelta
 
@@ -990,3 +1017,139 @@ def test_anuncios_dentro_do_app(client, master, sponsor, fan):
         assert client.get(f"{VC}/ads/in-app", headers=fan).json() == empty
     finally:
         client.patch("/admin/fan-clubs/vintage-culture", headers=master, json={"modules": {"ads": True}})
+
+
+def test_lista_de_assinantes_pagina_busca_e_acoes(client, club_admin, fan):
+    base = "/artists/vintage-culture"
+    pg = client.get(f"{base}/subscribers", headers=club_admin).json()
+    assert pg["pageSize"] == 10 and len(pg["items"]) <= 10 and pg["page"] == 1 and pg["total"] >= len(pg["items"])
+    assert client.get(f"{base}/subscribers", headers=fan).status_code == 403
+    since = [i["since"] for i in pg["items"] if i["since"]]
+    assert since == sorted(since, reverse=True)  # do que assinou por último para o primeiro
+    if pg["items"]:
+        first = pg["items"][0]
+        achado = client.get(f"{base}/subscribers", params={"q": first["name"][:3].upper()}, headers=club_admin).json()
+        assert any(i["userId"] == first["userId"] for i in achado["items"])
+        assert client.get(f"{base}/subscribers", params={"q": "zzzzzzzzzz"}, headers=club_admin).json()["total"] == 0
+        act = client.get(f"{base}/subscribers/{first['userId']}/activity", headers=club_admin).json()
+        assert act["profile"]["userId"] == first["userId"] and {"spinsUsed", "couponsUsed", "purchases"} <= set(act["summary"])
+        ats = [e["at"] for e in act["events"]]
+        assert ats == sorted(ats, reverse=True)
+    assert client.get(f"{base}/subscribers/nao-existe/activity", headers=club_admin).status_code == 404
+
+
+def test_pickup_admin_roleta_historico_estoque_e_ganhadores(client, club_admin, fan):
+    base = "/artists/vintage-culture"
+    ov = client.get(f"{base}/manage/pickup", headers=club_admin).json()
+    assert ov["wheel"]["isMaster"] is True and ov["prizes"] and {"spins", "spinners", "spinsLeft", "rewards"} <= set(ov["summary"])
+    assert client.get(f"{base}/manage/pickup", headers=fan).status_code == 403
+    assert client.get(f"{base}/manage/pickup", params={"club": "nao-existe"}, headers=club_admin).status_code == 404
+
+    # estoque: só a fatia que tem unidades sobrando pode sair
+    slug = ov["wheel"]["slug"]
+    prizes = client.get(f"{base}/clubs/{slug}/manage/prizes", headers=club_admin).json()
+    assert all("stock" in p for p in prizes)
+    for p in prizes:  # zera o estoque de todas, menos de uma fatia comum
+        keep = p["id"] == prizes[0]["id"]
+        client.patch(f"{base}/clubs/{slug}/manage/prizes/{p['id']}", json={"stock": 5 if keep else 0}, headers=club_admin)
+    out = client.post(f"{base}/pickup/spin", headers=fan)
+    if out.status_code == 200:  # o fã de teste pode estar sem giros
+        assert out.json()["prize"]["id"] == prizes[0]["id"]
+        hist = client.get(f"{base}/manage/pickup/history", headers=club_admin).json()
+        assert hist["pageSize"] == 10 and hist["total"] >= 1 and hist["items"][0]["prize"]
+        assert hist["items"][0]["at"] >= hist["items"][-1]["at"]
+        w = client.get(f"{base}/manage/pickup/prizes/{prizes[0]['id']}/winners", headers=club_admin).json()
+        assert w["total"] >= 1 and w["pageSize"] == 10
+    assert client.get(f"{base}/manage/pickup/prizes/nao-existe/winners", headers=club_admin).status_code == 404
+    for p in prizes:  # volta ao ilimitado
+        client.patch(f"{base}/clubs/{slug}/manage/prizes/{p['id']}", json={"stock": None}, headers=club_admin)
+
+
+def test_detalhes_de_post_e_de_hit_no_admin(client, club_admin, fan):
+    base = "/artists/vintage-culture"
+    drop = client.get(f"{base}/posts?kind=drop", headers=fan).json()[0]
+    d = client.get(f"{base}/manage/posts/{drop['id']}/detail", headers=club_admin).json()
+    assert d["id"] == drop["id"] and {"likes", "comments", "views", "sharesTotal", "commentList", "shares"} <= set(d)
+    assert client.get(f"{base}/manage/posts/{drop['id']}/detail", headers=fan).status_code == 403
+    assert client.get(f"{base}/manage/posts/nao-existe/detail", headers=club_admin).status_code == 404
+    track = client.get(f"{base}/tracks", headers=fan).json()[0]
+    t = client.get(f"{base}/manage/tracks/{track['id']}/detail", headers=club_admin).json()
+    assert t["id"] == track["id"] and {"likes", "views", "sharesTotal", "shares"} <= set(t)
+    assert client.get(f"{base}/manage/tracks/nao-existe/detail", headers=club_admin).status_code == 404
+
+
+def test_mapa_das_vitrines_admin_e_patrocinador(client, club_admin, sponsor, fan):
+    base = "/artists/vintage-culture"
+    mp = client.get(f"{base}/vitrines-map", headers=club_admin).json()
+    groups = {c["group"] for c in mp["cards"]}
+    assert {"entrada", "roleta", "feed"} <= groups
+    keys = {c["key"] for c in mp["cards"]}
+    assert {"entrada", "pickup_video", "pickup_resgate", "mural", "feed_2", "feed_3", "feed_4"} <= keys
+    assert any(c["clubSlug"] and c["group"] == "feed" for c in mp["cards"])  # feeds dos fã clubes
+    order = [c["group"] for c in mp["cards"]]
+    assert order == sorted(order, key=lambda g: {"entrada": 0, "roleta": 1, "feed": 2, "outras": 3}[g])
+    assert client.get(f"{base}/vitrines-map", headers=fan).status_code == 403
+    sp = client.get("/sponsor/vitrines-map", params={"artist": "vintage-culture"}, headers=sponsor).json()
+    assert len(sp["cards"]) == len(mp["cards"])
+    assert client.get("/sponsor/vitrines-map", params={"artist": "vintage-culture"}, headers=fan).status_code == 403
+
+
+def test_lista_de_compradores_das_experiencias(client, club_admin, fan):
+    base = "/artists/vintage-culture"
+    ev = client.post(f"{base}/manage/events", headers=club_admin, json={"date": "2032-03-10", "city": "Maceió"}).json()
+    ag = client.post(f"{base}/manage/agencies", headers=club_admin, json={"name": "Agência Maceió"}).json()
+    pkg = client.post(
+        f"{base}/manage/packages", headers=club_admin,
+        json={"eventId": ev["id"], "agencyId": ag["id"], "name": "Experiências Maceió", "addons": [{"key": "jantar", "priceCents": 45000}, {"key": "hotel", "priceCents": 38000}]},
+    ).json()
+    assert client.post(f"{base}/events/{ev['id']}/purchases", headers=fan, json={"packageId": pkg["id"], "addons": ["jantar", "hotel"], "ticketOptin": True}).status_code == 201
+    ov = client.get(f"{base}/manage/events/{ev['id']}/experiences", headers=club_admin).json()
+    por = {x["key"]: x for x in ov["experiences"]}
+    assert ov["purchases"] == 1 and ov["people"] == 1 and ov["revenueCents"] == 83000
+    assert por["jantar"]["purchases"] == 1 and por["jantar"]["offeredIn"] == ["Experiências Maceió"] and por["hotel"]["people"] == 1
+    b = client.get(f"{base}/manage/events/{ev['id']}/experiences/jantar/buyers", headers=club_admin).json()
+    assert b["total"] == 1 and b["pageSize"] == 10 and b["label"] == "Jantar com o Vintage"
+    assert b["items"][0]["experiences"] == ["Jantar com o Vintage", "Hotel com hospedagem"] and b["items"][0]["paidCents"] == 83000
+    assert client.get(f"{base}/manage/events/{ev['id']}/experiences/jantar/buyers", params={"q": "zzzzzz"}, headers=club_admin).json()["total"] == 0
+    assert client.get(f"{base}/manage/events/{ev['id']}/experiences/camarim/buyers", headers=club_admin).json()["total"] == 0
+    assert client.get(f"{base}/manage/events/{ev['id']}/experiences", headers=fan).status_code == 403
+    assert client.get(f"{base}/manage/events/nao-existe/experiences", headers=club_admin).status_code == 404
+
+
+def test_anuncios_do_feed(client, fan):
+    SP = f"{VC}/clubs/fa-clube-sp"
+    from sqlalchemy import select
+
+    from app import models as m
+    from app.db import SessionLocal
+
+    today = date.today()
+    with SessionLocal() as db:
+        artist = db.scalar(select(m.Artist).where(m.Artist.slug == "vintage-culture"))
+        sp = db.scalar(select(m.Sponsor).where(m.Sponsor.email == "marca@superfas.dev"))
+        env = {s.key: s for s in artist.ad_slots if s.club_id is None}
+        club = next(c for c in artist.clubs if c.slug == "fa-clube-sp")
+        cl = {s.key: s for s in artist.ad_slots if s.club_id == club.id}
+        assert {"feed_2", "feed_3", "feed_4"} <= set(env) and {"fa-clube-sp.mural", "fa-clube-sp.feed_2", "fa-clube-sp.feed_3"} <= set(cl)
+        for slot, title, start, end, status in [
+            (env["feed_2"], "Feed8 no ar", today - timedelta(days=1), today + timedelta(days=5), "approved"),
+            (env["feed_3"], "Feed12 agendado", today + timedelta(days=3), today + timedelta(days=9), "approved"),
+            (env["feed_4"], "Feed16 pendente", today - timedelta(days=1), today + timedelta(days=5), "pending"),
+            (cl["fa-clube-sp.mural"], "Clube4 no ar", today - timedelta(days=1), today + timedelta(days=5), "approved"),
+            (cl["fa-clube-sp.feed_3"], "Clube12 encerrado", today - timedelta(days=9), today - timedelta(days=2), "approved"),
+        ]:
+            db.add(m.Campaign(sponsor_id=sp.id, slot_id=slot.id, brand="Marca Feed", title=title, text="t", cta="Ver", url="https://x.com",
+                              art_path="/ads/x.png", start=start, end=end, status=status))
+        db.commit()
+
+    env_ads = {a["title"]: a for a in client.get(f"{VC}/ads/feed", headers=fan).json() if a["sponsor"] == "Marca Feed"}
+    assert set(env_ads) == {"Feed8 no ar"}
+    ad = env_ads["Feed8 no ar"]
+    assert ad["position"] == 8 and ad["cta"] == "Ver" and ad["url"] == "https://x.com" and ad["artUrl"] == "/ads/x.png"
+
+    club_ads = {a["title"]: a for a in client.get(f"{SP}/ads/feed", headers=fan).json() if a["sponsor"] == "Marca Feed"}
+    assert set(club_ads) == {"Clube4 no ar"} and club_ads["Clube4 no ar"]["position"] == 4
+    # as rotas vizinhas continuam respondendo
+    assert client.get(f"{VC}/ads/home", headers=fan).status_code == 200
+    assert client.get(f"{VC}/ads/in-app", headers=fan).status_code == 200
+    assert client.get(f"{SP}/ads/home", headers=fan).status_code == 200

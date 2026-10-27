@@ -76,7 +76,7 @@ class PackageItemIn(Camel):
 
 
 class AddonIn(Camel):
-    key: Literal["jantar", "camarim", "pre", "after", "hotel"]
+    key: Literal["jantar", "camarim", "pre", "after", "hotel", "transfer"]
     price_cents: int = Field(default=0, ge=0)
     sold_out: bool = False
 
@@ -131,6 +131,7 @@ class PrizeIn(Camel):
     kind: Literal["", "none", "retry", "coupon", "ticket", "pickup"] = ""
     percent: int = Field(default=0, ge=0, le=100)
     instructions: str = Field(default="", max_length=200)
+    stock: int | None = Field(default=None, ge=0)  # unidades para dar (vazio = ilimitado)
 
 
 class ProductIn(Camel):
@@ -147,6 +148,7 @@ class TrackIn(Camel):
     release_label: str = ""
     duration_sec: int = Field(default=30, ge=1, le=600)
     votes: int = Field(default=0, ge=0)
+    views: int = Field(default=0, ge=0)
     position: int = 0
 
 

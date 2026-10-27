@@ -1,4 +1,4 @@
-"""Cria agências parceiras, pacotes (ingressos de vários tipos e transfer) e o link da ticketeira
+"""Cria agências parceiras, pacotes de experiências (transfer, jantar, camarim, pré, after e hotel) e o link da ticketeira
 nos shows do Vintage Culture, para ver as telas do admin e do fã com dados.
 
     PYTHONPATH=. .venv/Scripts/python scripts/mock_agencias.py      # Windows
@@ -56,25 +56,15 @@ def main() -> None:
                 print(f"- {ev.city}: já tem pacotes, pulei")
                 continue
             agency = rnd.choice(agencies)  # cada show tem uma única agência
-            # Três pacotes por show: só ingresso, ingresso + transfer e ingresso + transfer + selo no app (todos com Photo Finder).
-            fee = rnd.choice([70, 90, 110])  # transfer
-            seal = 40  # selo exclusivo no app do Vintage
-            types = [("Pista", base), ("Pista Premium", int(base * 1.6)), ("Camarote", int(base * 2.4))]
-
-            def sold_out(label: str) -> bool:
-                return label == "Camarote" and rnd.random() < 0.25
-
+            # Não se vende ingresso pelo app (a ticketeira faz isso): três pacotes de experiências por show.
+            fee = rnd.choice([70, 90, 110]) * 100  # transfer
+            extras = [("jantar", 45000), ("camarim", 60000), ("pre", 12000), ("after", 18000), ("hotel", 38000)]
             variants = [
-                ("Somente ingresso", "Ingresso do show, sem transporte.", "ticket", lambda label, price: (label, price)),
-                ("Ingresso + transfer", "Ingresso com ônibus em grupo, ida e volta.", "transfer", lambda label, price: (f"{label} + transfer", price + fee)),
-                (
-                    "Ingresso + transfer + selo",
-                    "Ingresso, ônibus ida e volta e o selo exclusivo do show no app do Vintage.",
-                    "seal",
-                    lambda label, price: (f"{label} + transfer + selo", price + fee + seal),
-                ),
+                ("Transfer ida e volta", "Ônibus em grupo, ida e volta.", [("transfer", fee)]),
+                ("Experiências do show", "Jantar, camarim, pré-esquenta, after e hotel: escolha as que quiser.", extras),
+                ("Transfer + experiências", "Tudo do pacote de experiências mais o ônibus em grupo.", [("transfer", fee), *extras]),
             ]
-            for pos, (name, desc, kind, build) in enumerate(variants):
+            for pos, (name, desc, offers) in enumerate(variants):
                 db.add(
                     m.EventPackage(
                         artist_id=artist.id,
@@ -82,12 +72,10 @@ def main() -> None:
                         agency_id=agency.id,
                         name=f"{name} · {ev.city}",
                         description=desc,
-                        transfer_details="" if kind == "ticket" else f"Saída 4h antes do show, retorno 1h após o encerramento ({ev.city}).",
+                        transfer_details=f"Saída 4h antes do show, retorno 1h após o encerramento ({ev.city})." if any(k == "transfer" for k, _ in offers) else "",
                         url=f"{agency.url}/vintage-culture/{slug(ev.city)}",
-                        items=[
-                            {"kind": kind, "label": build(label, price)[0], "price_cents": build(label, price)[1] * 100, "sold_out": sold_out(label)}
-                            for label, price in types
-                        ],
+                        items=[],
+                        addons=[{"key": k, "price_cents": cents, "sold_out": False} for k, cents in offers],
                         position=pos,
                     )
                 )

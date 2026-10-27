@@ -196,6 +196,18 @@ class InstagramShare(Base):
     verified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
+class RankingPin(Base):
+    """Fã que a administração coloca em 1º lugar no ranking Fã Super: do geral (club_id vazio) ou de um fã clube."""
+
+    __tablename__ = "ranking_pins"
+
+    id: Mapped[str] = mapped_column(String(20), primary_key=True, default=new_id)
+    artist_id: Mapped[str] = mapped_column(ForeignKey("artists.id", ondelete="CASCADE"), index=True)
+    club_id: Mapped[str | None] = mapped_column(ForeignKey("fan_clubs.id", ondelete="CASCADE"), nullable=True)
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+
+
 class EventPhoto(Base):
     """Foto oficial de um show. Os rostos dela ficam indexados no AWS Rekognition para o Photo Finder."""
 
@@ -212,7 +224,7 @@ class EventPhoto(Base):
 
 class TicketPurchase(Base):
     """Compra do fã para um show (hoje simulada: o pagamento acontece fora do app). O app não vende mais ingresso:
-    as compras novas são só de experiências extras (kind "extras"); as antigas e as da demonstração ficam como estão."""
+    as compras novas são só de experiências extras (kind "experience"); as antigas e as da demonstração ficam como estão."""
 
     __tablename__ = "ticket_purchases"
 
@@ -223,7 +235,8 @@ class TicketPurchase(Base):
     package_name: Mapped[str] = mapped_column(String(120), default="")
     agency_name: Mapped[str] = mapped_column(String(120), default="")
     label: Mapped[str] = mapped_column(String(160))  # ex.: "Pista + transfer + selo"
-    kind: Mapped[str] = mapped_column(String(10), default="ticket")  # extras | ticket | transfer | seal | photo
+    kind: Mapped[str] = mapped_column(String(10), default="ticket")  # experience (atual) | ticket | transfer | seal | photo (antigos)
+    addons: Mapped[list] = mapped_column(JSON, default=list)  # chaves das experiências compradas (jantar, camarim, pre, after, hotel, transfer)
     price_cents: Mapped[int] = mapped_column(Integer, default=0)  # valor pago, já com o desconto do cupom
     coupon_code: Mapped[str] = mapped_column(String(30), default="")
     discount_cents: Mapped[int] = mapped_column(Integer, default=0)
@@ -265,6 +278,8 @@ class SpinCredit(Base):
     reason: Mapped[str] = mapped_column(String(200))
     used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     prize_label: Mapped[str] = mapped_column(String(80), default="")  # o que saiu quando foi usado
+    club_id: Mapped[str | None] = mapped_column(String(20), nullable=True, index=True)  # roleta (fã clube) em que foi usado
+    prize_id: Mapped[str | None] = mapped_column(String(20), nullable=True)  # fatia que saiu
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
 
 
@@ -448,6 +463,8 @@ class Prize(Base):
     kind: Mapped[str] = mapped_column(String(12), default="")
     percent: Mapped[int] = mapped_column(Integer, default=0)  # desconto do cupom (kind="coupon")
     instructions: Mapped[str] = mapped_column(String(200), default="")  # como retirar (se vazio, usa o texto padrão do tipo)
+    # Quantas unidades existem para dar (ex.: 100 cupons). Vazio = ilimitado. O que sobra = estoque - brindes já ganhos.
+    stock: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
 
 class Reward(Base):
@@ -464,6 +481,7 @@ class Reward(Base):
     code: Mapped[str] = mapped_column(String(12), index=True)  # código para retirar (ex.: BR-7K2M9)
     instructions: Mapped[str] = mapped_column(String(300), default="")
     coupon_code: Mapped[str] = mapped_column(String(30), default="")  # cupom gerado (kind="coupon")
+    prize_id: Mapped[str | None] = mapped_column(String(20), nullable=True)  # fatia da roleta que deu o brinde
     expires_on: Mapped[date | None] = mapped_column(Date, nullable=True)
     redeemed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
@@ -530,6 +548,7 @@ class Track(Base):
     release_label: Mapped[str] = mapped_column(String(60), default="")
     duration_sec: Mapped[int] = mapped_column(Integer, default=30)
     votes: Mapped[int] = mapped_column(Integer, default=0)
+    views: Mapped[int] = mapped_column(Integer, default=0)  # vezes que a prévia foi aberta
     position: Mapped[int] = mapped_column(Integer, default=0)
 
 

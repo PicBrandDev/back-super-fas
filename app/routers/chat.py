@@ -245,7 +245,7 @@ def unread_count(artist: FanArtist, user: CurrentUser, db: DB):
 @router.get("/artists/{slug}/fans/{user_id}", response_model=PublicProfileOut)
 def public_profile(user_id: str, artist: FanArtist, user: CurrentUser, db: DB):
     """Perfil público de um fã neste ambiente: fã clube, pontos, posição no ranking e os posts mais recentes."""
-    from .ranking import _board
+    from .ranking import _board, _pins, _with_leader
 
     u = db.get(m.User, user_id)
     if not u:
@@ -259,7 +259,9 @@ def public_profile(user_id: str, artist: FanArtist, user: CurrentUser, db: DB):
         .order_by(m.FanClub.is_master, m.FanClub.position, m.FanClub.created_at)
     ).all()
     club = clubs[0] if clubs else None
-    rank = next((i + 1 for i, (uid, _n, _t) in enumerate(_board(db, artist)) if uid == u.id), None)
+    # Mesma ordem do ranking geral que o fã vê (com o líder escolhido pela administração, se houver).
+    board = _with_leader(_board(db, artist), _pins(db, artist).get(None))
+    rank = next((i + 1 for i, row in enumerate(board) if row[0] == u.id), None)
     posts = db.scalars(
         select(m.Post).where(m.Post.artist_id == artist.id, m.Post.author_id == u.id).order_by(m.Post.created_at.desc()).limit(10)
     ).all()

@@ -279,6 +279,7 @@ class ViewerOut(Camel):
     pending_gifts: int
     is_member: bool
     clubs: list[str] = []  # fã clubes (slugs) em que o fã entrou neste cantor
+    avatar: str | None = None  # foto de perfil
 
 
 class AuthorOut(Camel):
@@ -288,7 +289,7 @@ class AuthorOut(Camel):
     official: bool | None = None
     badge: str | None = None  # selo do autor neste fã clube (ex.: "Dono do fã clube")
     id: str | None = None  # id do fã autor (abre o perfil público e o chat); vazio no post oficial
-    avatar: str | None = None  # foto de perfil do fã autor
+    avatar: str | None = None  # foto de perfil do autor (vazio para o artista)
 
 
 class PostOut(Camel):
@@ -488,6 +489,13 @@ class HomeAdOut(Camel):
     text: str
     cta: str
     url: str
+    art_url: str | None = None
+
+
+class FeedAdOut(HomeAdOut):
+    """Post patrocinado do feed: depois do 4º, 8º, 12º ou 16º post."""
+
+    position: int
 
 
 class InAppAdOut(Camel):
@@ -596,7 +604,7 @@ class PurchaseIn(Camel):
     """Compra de experiências extras do show. O ingresso é comprado na Ingresse, fora do app."""
 
     package_id: str
-    item: int | None = Field(default=None, ge=0)  # antigo: opção de ingresso do pacote. Com valor, a compra é recusada
+    item: int | None = Field(default=None, ge=0)  # antigo (ingresso do pacote): não é mais usado; o ingresso é da Ingresse
     addons: list[str] = Field(default_factory=list, max_length=10)  # experiências escolhidas (chaves do pacote)
     coupon: str = Field(default="", max_length=30)  # cupom de desconto (opcional)
     # "Confirmo que já comprei ou vou comprar meu ingresso na Ingresse": obrigatório na compra (422 sem ele); a cotação não exige

@@ -52,6 +52,10 @@ DEFAULT_AD_SLOTS = [
     ("entrada", "Anúncio de entrada", "Ao abrir o app · modal logo após o login", "Arte + título + texto + link", 22, 52),
     ("pickup_video", "Vídeo antes do giro", "Roleta · vídeo de 30 s obrigatório antes de girar", "Vídeo até 60 s (MP4) + título + link", 10, 76),
     ("pickup_resgate", "Anúncio no resgate do prêmio", "Roleta · modal quando o fã ganha um prêmio", "Arte + título + texto + link", 26, 44),
+    # Mais posições entre os posts do feed do cantor (a "mural" é a 1ª, a cada 4 posts)
+    ("feed_2", "Feed do Vintage · posição 2", "Feed · entre os posts, depois do 8º", "Post com imagem + link", 44, 24),
+    ("feed_3", "Feed do Vintage · posição 3", "Feed · entre os posts, depois do 12º", "Post com imagem + link", 60, 24),
+    ("feed_4", "Feed do Vintage · posição 4", "Feed · entre os posts, depois do 16º", "Post com imagem + link", 76, 20),
 ]
 
 NEW_CLUB_COLORS = ["#2F5BD3", "#1F7A4D", "#7A3FB8", "#14171C"]
@@ -61,6 +65,8 @@ CLUB_AD_SLOTS = [
     ("home", "Card do fã clube", "Página do fã clube · topo", "Arte + título + texto + link", 20, 16),
     ("mural", "Post patrocinado no mural do clube", "Mural do fã clube · entre os posts da galera", "Post com imagem + link", 28, 24),
     ("pickup", "Fatia patrocinada no PicKup do clube", "Roleta do fã clube · uma fatia com a marca", "Logo + prêmio ou cupom", 18, 44),
+    ("feed_2", "Feed do clube · posição 2", "Feed do fã clube · entre os posts, depois do 8º", "Post com imagem + link", 44, 24),
+    ("feed_3", "Feed do clube · posição 3", "Feed do fã clube · entre os posts, depois do 12º", "Post com imagem + link", 60, 24),
 ]
 
 MAX_CLUB_STAFF = 10  # por fã clube: 1 dono + ajudantes
@@ -74,4 +80,5 @@ ADDON_LABELS = {
     "pre": "Pré-esquenta",
     "after": "After",
     "hotel": "Hotel com hospedagem",
+    "transfer": "Transfer ida e volta",
 }

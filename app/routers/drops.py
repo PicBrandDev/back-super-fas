@@ -31,6 +31,7 @@ class FeedItem(Camel):
     image: str | None = None  # caminho relativo à API (ex.: /uploads/abc.jpg)
     author: str
     handle: str = ""  # @ do autor (vazio para o artista)
+    author_avatar: str | None = None  # foto de perfil do autor (vazio para o artista)
     club_name: str | None = None
     time_label: str
     date: str
@@ -50,6 +51,7 @@ def feed_item(p: m.Post, artist: m.Artist) -> FeedItem:
         image=p.image_path or None,
         author=author,
         handle="" if p.official or not p.author else (p.author.handle or ""),
+        author_avatar=None if p.official or not p.author else (p.author.avatar_path or None),
         club_name=p.club.name if p.club else None,
         time_label=time_label(p.created_at),
         date=br_date(p.created_at.date()),

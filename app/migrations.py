@@ -41,7 +41,7 @@ NEW_COLUMNS = {
     "campaigns": [("target_city", "VARCHAR(80) DEFAULT ''"), ("target_radius_km", "INTEGER DEFAULT 0"),
         ("goal_views", "INTEGER DEFAULT 0"), ("goal_clicks", "INTEGER DEFAULT 0"), ("budget_cents", "INTEGER DEFAULT 0"),
         ("video_url", "VARCHAR(500) DEFAULT ''")],
-    "ticket_purchases": [("coupon_code", "VARCHAR(30) DEFAULT ''"), ("discount_cents", "INTEGER DEFAULT 0"),
+    "ticket_purchases": [("coupon_code", "VARCHAR(30) DEFAULT ''"), ("discount_cents", "INTEGER DEFAULT 0"), ("addons", "JSON DEFAULT '[]'"),
         ("ticket_optin_at", "TIMESTAMP WITH TIME ZONE")],
     "product_purchases": [("qty", "INTEGER DEFAULT 1"), ("size", "VARCHAR(4) DEFAULT ''"), ("order_id", "VARCHAR(20)")],
     "event_packages": [("addons", "JSON DEFAULT '[]'")],
@@ -49,7 +49,10 @@ NEW_COLUMNS = {
     "events": [("ticketing_name", "VARCHAR(60) DEFAULT ''"), ("ticketing_url", "VARCHAR(500) DEFAULT ''")],
     "fan_clubs": [("avatar_path", "VARCHAR(255) DEFAULT ''")],
     "posts": [("club_id", "VARCHAR(20)"), ("views", "INTEGER DEFAULT 0"), ("image_path", "VARCHAR(255) DEFAULT ''")],
-    "prizes": [("club_id", "VARCHAR(20)"), ("kind", "VARCHAR(12) DEFAULT ''"), ("percent", "INTEGER DEFAULT 0"), ("instructions", "VARCHAR(200) DEFAULT ''")],
+    "tracks": [("views", "INTEGER DEFAULT 0")],
+    "spin_credits": [("club_id", "VARCHAR(20)"), ("prize_id", "VARCHAR(20)")],
+    "rewards": [("prize_id", "VARCHAR(20)")],
+    "prizes": [("stock", "INTEGER"), ("club_id", "VARCHAR(20)"), ("kind", "VARCHAR(12) DEFAULT ''"), ("percent", "INTEGER DEFAULT 0"), ("instructions", "VARCHAR(200) DEFAULT ''")],
     "ad_slots": [("club_id", "VARCHAR(20)")],
     "resale_orders": [("transfer_to_enc", "VARCHAR(600) DEFAULT ''")],
 }
@@ -113,6 +116,10 @@ def _pickap_to_pickup(db: Session) -> None:
         if "PicKap" in (p.text or "") or "pickap" in (p.url or ""):
             p.text, p.url = fix(p.text), fix(p.url)
             changed = True
+    for perk in db.scalars(select(m.MemberPerk)):
+        if "PicKap" in (perk.title or "") or "PicKap" in (perk.sub or ""):
+            perk.title, perk.sub = fix(perk.title), fix(perk.sub)
+            changed = True
     if changed:
         db.commit()
         log.warning("PicKap renomeado para PicKup nos dados gravados")
@@ -153,7 +160,7 @@ def _packages_without_photo_option(db: Session) -> None:
 
 def _default_ad_slots(db: Session) -> None:
     """Cantores antigos ganham as vitrines padrão que faltam (no fim da lista), sem mexer nas que já existem."""
-    from .defaults import DEFAULT_AD_SLOTS, MURAL_WHERE, OLD_MURAL_WHERE
+    from .defaults import CLUB_AD_SLOTS, DEFAULT_AD_SLOTS, MURAL_WHERE, OLD_MURAL_WHERE
 
     for artist in db.scalars(select(m.Artist)):
         env = [s for s in artist.ad_slots if s.club_id is None]
@@ -173,6 +180,21 @@ def _default_ad_slots(db: Session) -> None:
         for s in env:
             if s.key == "mural" and s.where == OLD_MURAL_WHERE:
                 s.where = MURAL_WHERE
+        # Fã clubes antigos ganham as vitrines de clube que faltam.
+        for club in artist.clubs:
+            have = {s.key for s in artist.ad_slots if s.club_id == club.id}
+            cpos = max((s.position for s in artist.ad_slots if s.club_id == club.id), default=-1) + 1
+            for key, name, where, fmt, top, height in CLUB_AD_SLOTS:
+                if f"{club.slug}.{key}" in have:
+                    continue
+                db.add(
+                    m.AdSlot(
+                        artist_id=artist.id, club_id=club.id, key=f"{club.slug}.{key}", name=name, where=where, format=fmt,
+                        diagram_top=top, diagram_height=height, position=cpos,
+                    )
+                )
+                cpos += 1
+                log.warning("Vitrine de clube criada: %s.%s.%s", artist.slug, club.slug, key)
     db.commit()
 
 

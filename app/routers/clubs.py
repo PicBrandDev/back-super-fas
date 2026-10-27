@@ -30,6 +30,7 @@ from ..schemas import (
     ClubPatch,
     ClubPostIn,
     FanClubOut,
+    FeedAdOut,
     HomeAdOut,
     InviteOut,
     PostOut,
@@ -383,11 +384,15 @@ def spin_wheel(db: Session, club: m.FanClub, user: m.User, credit_id: str | None
     prizes = club_prizes(db, club)
     if not prizes:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "A roleta deste fã clube ainda não tem prêmios.")
+    # Fatia com estoque acabado não sai mais (sem estoque definido = ilimitada).
+    drawable = [p for p in prizes if p.stock is None or rewards.remaining(db, club, p) > 0]
+    if not drawable:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Todos os prêmios da roleta deste fã clube acabaram.")
     f = get_fandom(db, club.artist, user)
     assert f is not None
     credit = spins.take(db, f, credit_id)
-    prize = random.choice(prizes)
-    spins.use(credit, prize.label)
+    prize = random.choice(drawable)
+    spins.use(credit, prize.label, club.id, prize.id)
     if prize.is_retry:
         spins.grant(db, f, spins.RETRY)
     f.luck_points += prize.points
@@ -428,7 +433,9 @@ def live_ad(db: Session, slot: m.AdSlot | None) -> HomeAdOut | None:
     q = select(m.Campaign).where(m.Campaign.slot_id == slot.id, m.Campaign.status == "approved")
     for c in db.scalars(q.order_by(m.Campaign.created_at)):
         if campaign_status(c) == "live":
-            return HomeAdOut(sponsor=c.brand or c.sponsor.brand, title=c.title, text=c.text, cta=c.cta or "Saiba mais", url=c.url or "#")
+            from .fan import home_ad_out
+
+            return home_ad_out(c)
     return None
 
 
@@ -436,6 +443,14 @@ def live_ad(db: Session, slot: m.AdSlot | None) -> HomeAdOut | None:
 def club_home_ad(club: FanClubDep, db: DB):
     slot = db.scalar(select(m.AdSlot).where(m.AdSlot.club_id == club.id, m.AdSlot.key == f"{club.slug}.home"))
     return live_ad(db, slot)
+
+
+@router.get("/artists/{slug}/clubs/{club}/ads/feed", response_model=list[FeedAdOut])
+def club_feed_ads(club: FanClubDep, db: DB):
+    """Posts patrocinados do feed do fã clube: `{slug}.mural` (depois do 4º post), `.feed_2` (8º) e `.feed_3` (12º)."""
+    from .fan import feed_ads
+
+    return [a for a in feed_ads(db, club.artist, club) if a.position <= 12]
 
 
 @router.get("/artists/{slug}/clubs/{club}/campaigns", response_model=list[CampaignOut])
