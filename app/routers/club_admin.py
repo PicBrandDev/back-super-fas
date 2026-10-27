@@ -76,7 +76,7 @@ class PackageItemIn(Camel):
 
 
 class AddonIn(Camel):
-    key: Literal["jantar", "camarim", "pre", "after", "hotel"]
+    key: Literal["jantar", "camarim", "pre", "after", "hotel", "transfer"]
     price_cents: int = Field(default=0, ge=0)
     sold_out: bool = False
 

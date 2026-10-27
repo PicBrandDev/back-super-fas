@@ -23,6 +23,7 @@ from ..schemas import (
     EventOut,
     FanPostIn,
     GiftOut,
+    FeedAdOut,
     HomeAdOut,
     InAppAdOut,
     InAppAdsOut,
@@ -93,7 +94,7 @@ def ticket_out(t: m.TicketPurchase) -> MyTicketOut:
         label=t.label,
         kind=t.kind,
         price_cents=t.price_cents,
-        includes_transfer=t.kind in ("transfer", "seal", "photo"),
+        includes_transfer=t.kind in ("transfer", "seal", "photo") or "transfer" in (t.addons or []),
         includes_seal=t.kind in ("seal", "photo"),
         includes_photo_finder=True,  # o Photo Finder vem em todo ingresso
         bought=br_date(t.created_at.date()),
@@ -107,6 +108,7 @@ def viewer_out(user: m.User, f: m.Fandom | None, artist: m.Artist | None = None)
         name=user.name,
         handle=user.handle or user.email.split("@")[0],
         initial=initial_of(user.name),
+        avatar=user.avatar_path or None,
         luck_points=f.luck_points if f else 0,
         spins=f.spins if f else 0,
         pending_gifts=0,
@@ -226,14 +228,14 @@ def list_tickets(event_id: str, artist: FanArtist, db: DB):
 
 @router.get("/artists/{slug}/events/{event_id}/packages", response_model=list[PackageOut])
 def list_packages(event_id: str, artist: FanArtist, db: DB):
-    """Pacotes das agências parceiras do show (ingressos de vários tipos e transfer)."""
+    """Pacotes das agências parceiras do show: só experiências (jantar, camarim, pré, after, hotel, transfer)."""
     e = _event(db, artist, event_id)
     out = []
     for p in e.packages:
-        if not p.active or not p.agency.active:
-            continue
-        items = [PackageItemOut(kind=i["kind"], label=i["label"], price_cents=i["price_cents"], sold_out=i.get("sold_out", False)) for i in (p.items or [])]
-        prices = [i.price_cents for i in items if not i.sold_out]
+        if not p.active or not p.agency.active or not (p.addons or []):
+            continue  # pacote antigo, só de ingresso, não tem o que vender
+        # Sem ingressos: o pacote só vende experiências (os itens antigos ficam gravados, mas não aparecem).
+        prices = [a["price_cents"] for a in (p.addons or []) if not a.get("sold_out")]
         out.append(
             PackageOut(
                 id=p.id,
@@ -244,13 +246,13 @@ def list_packages(event_id: str, artist: FanArtist, db: DB):
                 agency_url=p.agency.url,
                 url=p.url or p.agency.url,
                 transfer_details=p.transfer_details,
-                has_transfer=any(i.kind in ("transfer", "seal", "photo") for i in items),
+                has_transfer=any(a["key"] == "transfer" for a in (p.addons or [])),
                 addons=[
                     AddonOut(key=a["key"], label=ADDON_LABELS.get(a["key"], a["key"]), price_cents=a["price_cents"], sold_out=a.get("sold_out", False))
                     for a in (p.addons or [])
                 ],
                 from_price_cents=min(prices) if prices else None,
-                items=items,
+                items=[],
             )
         )
     return out
@@ -398,27 +400,25 @@ def my_orders(artist: FanArtist, user: CurrentUser, db: DB):
 
 
 def _price(db, artist: m.Artist, user: m.User, event: m.Event, body: PurchaseIn):
-    """Confere a opção, as experiências e o cupom; devolve (pacote, opção com rótulo e subtotal, cupom, desconto, total)."""
+    """Confere as experiências e o cupom; devolve (pacote, item com rótulo e subtotal, cupom, desconto, total).
+    Não se vende mais ingresso pelo app (a ticketeira faz isso): o pacote só vende experiências."""
     pkg = db.get(m.EventPackage, body.package_id)
     if not pkg or pkg.event_id != event.id or not pkg.active:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Pacote não encontrado.")
-    items = pkg.items or []
-    if body.item >= len(items):
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Opção inválida.")
-    item = items[body.item]
-    if item.get("sold_out"):
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Essa opção está esgotada.")
     offered = {a["key"]: a for a in (pkg.addons or [])}
     chosen = list(dict.fromkeys(body.addons))
+    if not chosen:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Escolha pelo menos uma experiência.")
     for key in chosen:
         if key not in offered:
             raise HTTPException(status.HTTP_400_BAD_REQUEST, "Essa experiência não faz parte do pacote.")
         if offered[key].get("sold_out"):
-            raise HTTPException(status.HTTP_400_BAD_REQUEST, f"{ADDON_LABELS.get(key, key)} está esgotado.")
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, f"{ADDON_LABELS.get(key, key)} está esgotada.")
     item = {
-        **item,
-        "label": " + ".join([item["label"], *(ADDON_LABELS.get(k, k) for k in chosen)]),
-        "price_cents": item["price_cents"] + sum(offered[k]["price_cents"] for k in chosen),
+        "kind": "experience",
+        "label": " + ".join(ADDON_LABELS.get(k, k) for k in chosen),
+        "price_cents": sum(offered[k]["price_cents"] for k in chosen),
+        "addons": chosen,
     }
     coupon = coupon_lib.find(db, artist, user, body.coupon) if body.coupon.strip() else None
     off = coupon_lib.discount(coupon, item["price_cents"]) if coupon else 0
@@ -466,6 +466,7 @@ def buy_ticket(event_id: str, body: PurchaseIn, artist: FanArtist, user: Current
         agency_name=pkg.agency.name,
         label=item["label"],
         kind=item["kind"],
+        addons=item["addons"],
         price_cents=total,
         coupon_code=coupon.code if coupon else "",
         discount_cents=off,
@@ -533,7 +534,42 @@ def home_ad(artist: FanArtist, db: DB):
     c = live_campaign(db, artist, "home")
     if not c:
         return None
-    return HomeAdOut(sponsor=c.brand or c.sponsor.brand, title=c.title, text=c.text, cta=c.cta or "Saiba mais", url=c.url or "#")
+    return home_ad_out(c)
+
+
+def home_ad_out(c: m.Campaign) -> HomeAdOut:
+    return HomeAdOut(sponsor=c.brand or c.sponsor.brand, title=c.title, text=c.text, cta=c.cta or "Saiba mais", url=c.url or "#", art_url=c.art_path or None)
+
+
+# posição no feed (depois de quantos posts) -> sufixo da vitrine
+FEED_POSITIONS = {4: "mural", 8: "feed_2", 12: "feed_3", 16: "feed_4"}
+
+
+def feed_ads(db: Session, artist: m.Artist, club: m.FanClub | None = None) -> list[FeedAdOut]:
+    """As campanhas no ar das posições do feed (do ambiente ou de um fã clube); posição sem campanha no ar fica de fora."""
+    out = []
+    for pos, suffix in FEED_POSITIONS.items():
+        q = select(m.AdSlot).where(m.AdSlot.artist_id == artist.id)
+        if club is None:
+            q = q.where(m.AdSlot.club_id.is_(None), m.AdSlot.key == suffix)
+        else:
+            q = q.where(m.AdSlot.club_id == club.id, m.AdSlot.key == f"{club.slug}.{suffix}")
+        slot = db.scalar(q)
+        if not slot or not slot.active:
+            continue
+        cq = select(m.Campaign).where(m.Campaign.slot_id == slot.id, m.Campaign.status == "approved").order_by(m.Campaign.created_at)
+        c = next((c for c in db.scalars(cq) if campaign_status(c) == "live"), None)
+        if c:
+            out.append(FeedAdOut(position=pos, **home_ad_out(c).model_dump()))
+    return out
+
+
+@router.get("/artists/{slug}/ads/feed", response_model=list[FeedAdOut])
+def feed_ads_env(artist: FanArtist, db: DB):
+    """Posts patrocinados do feed do cantor: depois do 4º (mural), 8º, 12º e 16º post."""
+    if (artist.modules or {}).get("ads", True) is False:
+        return []
+    return feed_ads(db, artist)
 
 
 def live_campaign(db: Session, artist: m.Artist, key: str) -> m.Campaign | None:

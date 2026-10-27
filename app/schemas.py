@@ -279,6 +279,7 @@ class ViewerOut(Camel):
     pending_gifts: int
     is_member: bool
     clubs: list[str] = []  # fã clubes (slugs) em que o fã entrou neste cantor
+    avatar: str | None = None  # foto de perfil
 
 
 class AuthorOut(Camel):
@@ -287,6 +288,7 @@ class AuthorOut(Camel):
     initial: str
     official: bool | None = None
     badge: str | None = None  # selo do autor neste fã clube (ex.: "Dono do fã clube")
+    avatar: str | None = None  # foto de perfil do autor (vazio para o artista)
 
 
 class PostOut(Camel):
@@ -318,6 +320,7 @@ def post_out(p: m.Post, artist: m.Artist) -> PostOut:
             handle=p.author.handle or "",
             initial=initial_of(p.author.name),
             badge="Dono do fã clube" if owner else None,
+            avatar=p.author.avatar_path or None,
         )
     return PostOut(
         id=p.id,
@@ -484,6 +487,13 @@ class HomeAdOut(Camel):
     text: str
     cta: str
     url: str
+    art_url: str | None = None
+
+
+class FeedAdOut(HomeAdOut):
+    """Post patrocinado do feed: depois do 4º, 8º, 12º ou 16º post."""
+
+    position: int
 
 
 class InAppAdOut(Camel):
@@ -589,7 +599,7 @@ class StoreOrderOut(Camel):
 
 class PurchaseIn(Camel):
     package_id: str
-    item: int = Field(ge=0)  # posição da opção dentro do pacote
+    item: int = Field(default=0, ge=0)  # antigo (ingresso do pacote): não é mais usado
     addons: list[str] = Field(default_factory=list, max_length=10)  # experiências escolhidas (chaves do pacote)
     coupon: str = Field(default="", max_length=30)  # cupom de desconto (opcional)
 

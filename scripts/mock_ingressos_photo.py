@@ -17,9 +17,10 @@ from sqlalchemy import select
 
 from app import models as m
 from app.db import SessionLocal
+from app.defaults import ADDON_LABELS
 
 ARTIST = "vintage-culture"
-FALLBACK = ("Pista + transfer + selo", "Caravana Vintage", 26000)
+FALLBACK = ("Transfer ida e volta", "Caravana Vintage", 9000)
 
 
 def main() -> None:
@@ -44,18 +45,20 @@ def main() -> None:
             label, agency, price = FALLBACK
             pkg_name = "Pacote com Photo Finder"
             for pkg in db.scalars(select(m.EventPackage).where(m.EventPackage.event_id == ev.id)):
-                item = next((i for i in (pkg.items or []) if i.get("kind") == "seal"), None)
-                if item:
-                    label, price = item["label"], int(item.get("price_cents", price))
-                    agency, pkg_name = pkg.agency.name, pkg.name
+                offer = next(iter(pkg.addons or []), None)
+                if offer:
+                    label, price = ADDON_LABELS.get(offer["key"], offer["key"]), int(offer.get("price_cents", price))
+                    agency, pkg_name, addons = pkg.agency.name, pkg.name, [offer["key"]]
                     break
+            else:
+                addons = ["transfer"]
             for u in users:
                 if db.scalar(select(m.TicketPurchase).where(m.TicketPurchase.user_id == u.id, m.TicketPurchase.event_id == ev.id)):
                     continue
                 db.add(
                     m.TicketPurchase(
                         artist_id=artist.id, user_id=u.id, event_id=ev.id, package_name=pkg_name, agency_name=agency,
-                        label=label, kind="seal", price_cents=price,
+                        label=label, kind="experience", addons=addons, price_cents=price,
                     )
                 )
                 added += 1

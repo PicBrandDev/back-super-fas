@@ -78,4 +78,5 @@ ADDON_LABELS = {
     "pre": "Pré-esquenta",
     "after": "After",
     "hotel": "Hotel com hospedagem",
+    "transfer": "Transfer ida e volta",
 }

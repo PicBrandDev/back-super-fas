@@ -234,7 +234,8 @@ class TicketPurchase(Base):
     package_name: Mapped[str] = mapped_column(String(120), default="")
     agency_name: Mapped[str] = mapped_column(String(120), default="")
     label: Mapped[str] = mapped_column(String(160))  # ex.: "Pista + transfer + selo"
-    kind: Mapped[str] = mapped_column(String(10), default="ticket")  # ticket | transfer | seal | photo
+    kind: Mapped[str] = mapped_column(String(10), default="ticket")  # experience (atual) | ticket | transfer | seal | photo (antigos)
+    addons: Mapped[list] = mapped_column(JSON, default=list)  # chaves das experiências compradas (jantar, camarim, pre, after, hotel, transfer)
     price_cents: Mapped[int] = mapped_column(Integer, default=0)  # valor pago, já com o desconto do cupom
     coupon_code: Mapped[str] = mapped_column(String(30), default="")
     discount_cents: Mapped[int] = mapped_column(Integer, default=0)

@@ -10,8 +10,9 @@ from sqlalchemy.orm import Session
 
 from . import models as m
 from .config import get_settings
+from .defaults import ADDON_LABELS
 
-FALLBACK = ("Pista + transfer + selo", "Caravana Vintage", 26000)
+FALLBACK = ("Transfer ida e volta", "Caravana Vintage", 9000)
 
 
 def _ensure_past_event(db: Session, artist: m.Artist) -> None:
@@ -41,12 +42,19 @@ def ensure_photo_tickets(db: Session, artist: m.Artist, user: m.User) -> None:
         label, agency, price = FALLBACK
         pkg_name = "Pacote com Photo Finder"
         for pkg in db.scalars(select(m.EventPackage).where(m.EventPackage.event_id == ev.id)):
-            item = next((i for i in (pkg.items or []) if i.get("kind") == "seal"), None)
-            if item:
-                label, price = item["label"], int(item.get("price_cents", price))
-                agency, pkg_name = pkg.agency.name, pkg.name
+            offer = next(iter(pkg.addons or []), None)
+            if offer:
+                label, price = ADDON_LABELS.get(offer["key"], offer["key"]), int(offer.get("price_cents", price))
+                agency, pkg_name, addons = pkg.agency.name, pkg.name, [offer["key"]]
                 break
-        db.add(m.TicketPurchase(artist_id=artist.id, user_id=user.id, event_id=ev.id, package_name=pkg_name, agency_name=agency, label=label, kind="seal", price_cents=price))
+        else:
+            addons = ["transfer"]
+        db.add(
+            m.TicketPurchase(
+                artist_id=artist.id, user_id=user.id, event_id=ev.id, package_name=pkg_name, agency_name=agency, label=label,
+                kind="experience", addons=addons, price_cents=price,
+            )
+        )
         created = True
     if created:
         db.commit()

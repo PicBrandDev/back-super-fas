@@ -11,7 +11,7 @@ from .config import DEV_SECRET, get_settings
 from .db import SessionLocal, engine
 from .migrations import upgrade
 from .resale.base import ResaleError
-from .routers import analytics, auth, club_admin, clubs, detail_admin, drops, fan, master, photos, pickup_admin, ranking, resale, resale_admin, sponsor, vitrines_map
+from .routers import analytics, auth, club_admin, clubs, detail_admin, drops, experiences_admin, fan, master, photos, pickup_admin, ranking, resale, resale_admin, sponsor, vitrines_map
 from .seed import seed
 
 logging.basicConfig(level=logging.INFO)
@@ -69,7 +69,7 @@ async def resale_error_handler(request: Request, exc: ResaleError):
     return JSONResponse(status_code=exc.status_code, content={"detail": exc.detail, "code": exc.code})
 
 
-for r in (auth.router, fan.router, clubs.router, club_admin.router, analytics.router, detail_admin.router, drops.router, photos.router, ranking.router, pickup_admin.router, master.router, sponsor.router, resale.router, resale_admin.router, vitrines_map.router):
+for r in (auth.router, fan.router, clubs.router, club_admin.router, analytics.router, detail_admin.router, experiences_admin.router, drops.router, photos.router, ranking.router, pickup_admin.router, master.router, sponsor.router, resale.router, resale_admin.router, vitrines_map.router):
     app.include_router(r)
 
 Path(settings.upload_dir).mkdir(parents=True, exist_ok=True)
