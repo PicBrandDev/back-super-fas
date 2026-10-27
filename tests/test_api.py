@@ -587,6 +587,31 @@ def test_photo_finder_com_colecao_e_bucket_configurados(client, club_admin, fan,
     assert urls == ["https://s3.example/photos/original/abc123.jpg?assinado=1", "https://s3.example/fotos/x/def456.jpg?assinado=1"]
 
 
+def test_links_das_fotos_do_bucket_saem_na_ordem_da_busca(monkeypatch):
+    """As fotos são conferidas no S3 em paralelo, mas voltam na ordem da busca e sem as que não estão no bucket."""
+    import time
+
+    import boto3
+    from botocore.exceptions import ClientError
+
+    from app import rekognition
+
+    class FakeS3:
+        def head_object(self, Bucket, Key):
+            time.sleep(0.05 if "a1" in Key else 0)  # a primeira demora mais e ainda assim vem primeiro
+            if "sumiu" in Key:
+                raise ClientError({"Error": {"Code": "404"}}, "HeadObject")
+
+        def generate_presigned_url(self, op, Params, ExpiresIn):
+            return f"https://s3.example/{Params['Key']}"
+
+    monkeypatch.setattr(boto3, "client", lambda *a, **k: FakeS3())
+    out = rekognition.presigned_photos(["a1", "b2", "sumiu", "c3"])
+    assert [i for i, _ in out] == ["a1", "b2", "c3"]
+    assert out[0][1] == "https://s3.example/photos/original/a1.jpg"
+    assert rekognition.presigned_photos([]) == []
+
+
 def test_ingresso_com_photo_finder_automatico_na_demonstracao(client, club_admin, fan, monkeypatch):
     from app.config import get_settings
 

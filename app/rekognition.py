@@ -151,27 +151,36 @@ def photo_key(external_id: str) -> str:
 
 
 def presigned_photos(external_ids: list[str]) -> list[tuple[str, str]]:
-    """(ExternalImageId, link temporário do S3) de cada foto que existe no bucket."""
+    """(ExternalImageId, link temporário do S3) de cada foto que existe no bucket, na ordem da busca.
+
+    Confere as fotos em paralelo: uma a uma, 100 fotos eram 100 idas ao S3 antes de o fã ver a primeira.
+    """
+    from concurrent.futures import ThreadPoolExecutor
+
     import boto3
     from botocore.exceptions import ClientError
 
     cfg = get_settings()
     s3 = boto3.client("s3", **aws_kwargs())
-    out: list[tuple[str, str]] = []
-    for ext in external_ids:
+
+    def one(ext: str) -> tuple[str, str] | None:
         key = photo_key(ext)
         try:
             s3.head_object(Bucket=cfg.s3_bucket, Key=key)
         except ClientError as exc:
             if exc.response.get("Error", {}).get("Code") in ("404", "NoSuchKey", "NotFound"):
                 log.warning("Foto %s não existe no bucket %s", key, cfg.s3_bucket)
-                continue  # o rosto está na coleção, mas a foto não está nesse caminho
+                return None  # o rosto está na coleção, mas a foto não está nesse caminho
         try:
             url = s3.generate_presigned_url(
                 "get_object", Params={"Bucket": cfg.s3_bucket, "Key": key}, ExpiresIn=cfg.presigned_url_expires_seconds
             )
         except Exception:  # noqa: BLE001
             log.exception("Não foi possível gerar o link da foto %s", key)
-            continue
-        out.append((ext, url))
-    return out
+            return None
+        return ext, url
+
+    if not external_ids:
+        return []
+    with ThreadPoolExecutor(max_workers=min(16, len(external_ids))) as pool:
+        return [r for r in pool.map(one, external_ids) if r]
