@@ -146,7 +146,7 @@ def test_master_cria_fa_clube_com_convites(client, master, fan):
     assert r.status_code == 201, r.text
     body = r.json()
     assert body["artist"]["slug"] == "alok" and body["artist"]["status"] == "setup"
-    assert body["artist"]["adSlotsSummary"] == "0 de 9 ocupadas"
+    assert body["artist"]["adSlotsSummary"] == "0 de 12 ocupadas"
     invite = body["invites"][0]
     assert invite["tempPassword"]
 
@@ -275,7 +275,7 @@ def test_fa_clubes_do_ambiente(client, club_admin, fan, sponsor, master):
     assert other["invite"]["emailSent"] is False  # sem SMTP nos testes: a senha provisória é mostrada na tela
     rio = login(client, "dono-rio@exemplo.com", other["invite"]["tempPassword"])
     slots = client.get(f"{SP}/ad-slots", headers=sponsor).json()
-    assert [s["id"] for s in slots] == ["fa-clube-sp.home", "fa-clube-sp.mural", "fa-clube-sp.pickup"]
+    assert [s["id"] for s in slots] == ["fa-clube-sp.home", "fa-clube-sp.mural", "fa-clube-sp.pickup", "fa-clube-sp.feed_2", "fa-clube-sp.feed_3"]
     today = date.today()
     camp = client.post(
         "/sponsor/campaigns",
@@ -1047,3 +1047,19 @@ def test_detalhes_de_post_e_de_hit_no_admin(client, club_admin, fan):
     t = client.get(f"{base}/manage/tracks/{track['id']}/detail", headers=club_admin).json()
     assert t["id"] == track["id"] and {"likes", "views", "sharesTotal", "shares"} <= set(t)
     assert client.get(f"{base}/manage/tracks/nao-existe/detail", headers=club_admin).status_code == 404
+
+
+def test_mapa_das_vitrines_admin_e_patrocinador(client, club_admin, sponsor, fan):
+    base = "/artists/vintage-culture"
+    mp = client.get(f"{base}/vitrines-map", headers=club_admin).json()
+    groups = {c["group"] for c in mp["cards"]}
+    assert {"entrada", "roleta", "feed"} <= groups
+    keys = {c["key"] for c in mp["cards"]}
+    assert {"entrada", "pickup_video", "pickup_resgate", "mural", "feed_2", "feed_3", "feed_4"} <= keys
+    assert any(c["clubSlug"] and c["group"] == "feed" for c in mp["cards"])  # feeds dos fã clubes
+    order = [c["group"] for c in mp["cards"]]
+    assert order == sorted(order, key=lambda g: {"entrada": 0, "roleta": 1, "feed": 2, "outras": 3}[g])
+    assert client.get(f"{base}/vitrines-map", headers=fan).status_code == 403
+    sp = client.get("/sponsor/vitrines-map", params={"artist": "vintage-culture"}, headers=sponsor).json()
+    assert len(sp["cards"]) == len(mp["cards"])
+    assert client.get("/sponsor/vitrines-map", params={"artist": "vintage-culture"}, headers=fan).status_code == 403

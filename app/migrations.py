@@ -143,7 +143,7 @@ def _packages_without_photo_option(db: Session) -> None:
 
 def _default_ad_slots(db: Session) -> None:
     """Cantores antigos ganham as vitrines padrão que faltam (no fim da lista), sem mexer nas que já existem."""
-    from .defaults import DEFAULT_AD_SLOTS, MURAL_WHERE, OLD_MURAL_WHERE
+    from .defaults import CLUB_AD_SLOTS, DEFAULT_AD_SLOTS, MURAL_WHERE, OLD_MURAL_WHERE
 
     for artist in db.scalars(select(m.Artist)):
         env = [s for s in artist.ad_slots if s.club_id is None]
@@ -163,6 +163,21 @@ def _default_ad_slots(db: Session) -> None:
         for s in env:
             if s.key == "mural" and s.where == OLD_MURAL_WHERE:
                 s.where = MURAL_WHERE
+        # Fã clubes antigos ganham as vitrines de clube que faltam.
+        for club in artist.clubs:
+            have = {s.key for s in artist.ad_slots if s.club_id == club.id}
+            cpos = max((s.position for s in artist.ad_slots if s.club_id == club.id), default=-1) + 1
+            for key, name, where, fmt, top, height in CLUB_AD_SLOTS:
+                if f"{club.slug}.{key}" in have:
+                    continue
+                db.add(
+                    m.AdSlot(
+                        artist_id=artist.id, club_id=club.id, key=f"{club.slug}.{key}", name=name, where=where, format=fmt,
+                        diagram_top=top, diagram_height=height, position=cpos,
+                    )
+                )
+                cpos += 1
+                log.warning("Vitrine de clube criada: %s.%s.%s", artist.slug, club.slug, key)
     db.commit()
 
 
