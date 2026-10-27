@@ -3,7 +3,7 @@ saldo do anúncio aberto, cancelamento de reserva vencida e anúncios do vendedo
 
 from datetime import datetime, timezone
 
-from tests.test_resale import ADM, ART, R, advance, as_seller, new_listing, real_clock, register, reserve, world  # noqa: F401
+from tests.test_resale import ADM, ART, R, advance, as_seller, new_listing, real_clock, register, resale_on, reserve, world  # noqa: F401
 
 
 def test_comprador_informa_para_onde_transferir_e_vendedor_so_ve_depois_de_pagar(client, world, club_admin):
