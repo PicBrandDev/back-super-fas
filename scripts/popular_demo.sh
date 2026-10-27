@@ -28,7 +28,8 @@ run() {
 if [ -n "$FOTOS" ]; then
   [ -d "$FOTOS" ] || { echo "Pasta de fotos não encontrada: $FOTOS" >&2; exit 1; }
   echo "==> copiando $FOTOS para /tmp/fotos do container"
-  sudo docker compose exec -T api rm -rf /tmp/fotos
+  # Como root: o docker compose cp grava as fotos como root e o usuário do container não consegue apagar.
+  sudo docker compose exec -T -u root api rm -rf /tmp/fotos
   sudo docker compose cp "$FOTOS" api:/tmp/fotos
 fi
 
@@ -73,11 +74,12 @@ fi
 # entra a cada 7, nas posições 8 e 16).
 run demo_segue_clubes.py
 
-# Fotos por último, para nenhum mock gravar foto de mentira por cima. Primeiro o randomuser.me para quem ainda não tem
-# (motoristas e quem sobrar; precisa de internet no servidor e, sem ela, a cadeia segue), depois as de verdade por cima.
-run fotos_perfil.py || echo "!! fotos_perfil.py não rodou (sem internet no servidor?): quem sobrar fica sem foto"
+# Fotos por último, para nenhum mock gravar foto de mentira por cima. Primeiro as de verdade (rosto do gênero do nome),
+# depois o randomuser.me para quem sobrou sem foto (motoristas e quem não coube; precisa de internet no servidor e, sem
+# ela, a cadeia segue).
 # POSTS_SOBRANDO=manter: posts que ficam sem foto nova mantêm a imagem atual em vez de virar só texto.
 run fotos_reais.py -e FOTOS_DIR=/tmp/fotos -e POSTS_SOBRANDO="${POSTS_SOBRANDO:-texto}"
+run fotos_perfil.py || echo "!! fotos_perfil.py não rodou (sem internet no servidor?): quem sobrou fica sem foto"
 run relatorio_fotos.py
 
 echo
