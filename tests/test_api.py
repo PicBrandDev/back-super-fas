@@ -202,6 +202,17 @@ def test_campanha_do_patrocinador_ate_ir_ao_ar(client, master, sponsor, fan):
     assert client.post(f"/admin/campaigns/{camp['id']}/approve", headers=master).json()["status"] == "live"
     ad = client.get(f"{VC}/ads/home", headers=fan).json()
     assert ad["title"] == "Promo de verão" and ad["sponsor"] == "Marca Teste"
+    assert ad["id"] == camp["id"]
+    # views e cliques do anúncio: o app registra e o admin do ambiente vê por patrocinador
+    track = f"{VC}/ads/{camp['id']}/track"
+    for kind in ("view", "view", "click"):
+        assert client.post(track, headers=fan, json={"kind": kind}).status_code == 204
+    assert client.post(track, headers=fan, json={"kind": "outro"}).status_code == 422
+    assert client.post(f"{VC}/ads/nao-existe/track", headers=fan, json={"kind": "view"}).status_code == 404
+    st = client.get(f"{VC}/ads-analytics?days=7", headers=master).json()
+    assert (st["views"], st["clicks"], len(st["series"])) == (2, 1, 7) and st["ctr"] == 50.0
+    assert st["sponsors"][0]["name"] == "Marca Teste" and st["sponsors"][0]["campaigns"][0]["id"] == camp["id"]
+    assert client.get(f"{VC}/ads-analytics", headers=fan).status_code == 403
     slots = client.get(f"{VC}/ad-slots", headers=sponsor).json()
     assert next(s for s in slots if s["id"] == "home")["occupied"] is True
     assert client.get("/sponsor/campaigns", headers=sponsor).json()[0]["id"] == camp["id"]

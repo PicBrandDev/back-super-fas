@@ -626,6 +626,17 @@ class Campaign(Base):
     slot: Mapped[AdSlot] = relationship()
 
 
+class AdStat(Base):
+    """Visualizações e cliques de uma campanha, somados por dia."""
+
+    __tablename__ = "ad_stats"
+
+    campaign_id: Mapped[str] = mapped_column(ForeignKey("campaigns.id", ondelete="CASCADE"), primary_key=True)
+    day: Mapped[date] = mapped_column(Date, primary_key=True)
+    views: Mapped[int] = mapped_column(Integer, default=0)
+    clicks: Mapped[int] = mapped_column(Integer, default=0)
+
+
 class Conversation(Base):
     """Chat privado entre dois fãs do mesmo ambiente. O par fica em ordem (user_a_id < user_b_id), então há uma só
     conversa por par em cada ambiente."""

@@ -484,6 +484,7 @@ class TrackOut(Camel):
 
 
 class HomeAdOut(Camel):
+    id: str = ""
     sponsor: str
     title: str
     text: str

@@ -546,7 +546,7 @@ def home_ad(artist: FanArtist, db: DB):
 
 
 def home_ad_out(c: m.Campaign) -> HomeAdOut:
-    return HomeAdOut(sponsor=c.brand or c.sponsor.brand, title=c.title, text=c.text, cta=c.cta or "Saiba mais", url=c.url or "#", art_url=c.art_path or None)
+    return HomeAdOut(id=c.id, sponsor=c.brand or c.sponsor.brand, title=c.title, text=c.text, cta=c.cta or "Saiba mais", url=c.url or "#", art_url=c.art_path or None)
 
 
 # posição no feed (depois de quantos posts) -> sufixo da vitrine
