@@ -401,7 +401,7 @@ def my_orders(artist: FanArtist, user: CurrentUser, db: DB):
 
 def _price(db, artist: m.Artist, user: m.User, event: m.Event, body: PurchaseIn):
     """Confere as experiências e o cupom; devolve (pacote, item com rótulo e subtotal, cupom, desconto, total).
-    Não se vende mais ingresso pelo app (a ticketeira faz isso): o pacote só vende experiências."""
+    Não se vende mais ingresso pelo app (é comprado na Ingresse): o pacote só vende experiências extras."""
     pkg = db.get(m.EventPackage, body.package_id)
     if not pkg or pkg.event_id != event.id or not pkg.active:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Pacote não encontrado.")
@@ -416,7 +416,7 @@ def _price(db, artist: m.Artist, user: m.User, event: m.Event, body: PurchaseIn)
             raise HTTPException(status.HTTP_400_BAD_REQUEST, f"{ADDON_LABELS.get(key, key)} está esgotada.")
     item = {
         "kind": "experience",
-        "label": " + ".join(ADDON_LABELS.get(k, k) for k in chosen),
+        "label": " + ".join(ADDON_LABELS.get(k, k) for k in chosen)[:160],
         "price_cents": sum(offered[k]["price_cents"] for k in chosen),
         "addons": chosen,
     }
@@ -427,7 +427,8 @@ def _price(db, artist: m.Artist, user: m.User, event: m.Event, body: PurchaseIn)
 
 @router.post("/artists/{slug}/events/{event_id}/quote", response_model=QuoteOut)
 def quote_ticket(event_id: str, body: PurchaseIn, artist: FanArtist, user: CurrentUser, db: DB):
-    """Valor do carrinho (ingresso + experiências) com o cupom, sem comprar: usado na tela de pagamento."""
+    """Valor do carrinho (experiências extras) com o cupom, sem comprar: usado na tela de pagamento.
+    Não exige o opt-in da Ingresse, para o fã ver o valor antes de marcar a confirmação."""
     e = _event(db, artist, event_id)
     _, item, coupon, off, total = _price(db, artist, user, e, body)
     return QuoteOut(
@@ -451,10 +452,16 @@ def my_coupons(artist: FanArtist, user: CurrentUser, db: DB):
 
 @router.post("/artists/{slug}/events/{event_id}/purchases", response_model=MyTicketOut, status_code=201)
 def buy_ticket(event_id: str, body: PurchaseIn, artist: FanArtist, user: CurrentUser, db: DB):
-    """Compra de ingresso (simulada): registra o ingresso do fã e dá 1 giro da roleta, com o motivo."""
+    """Compra de experiências extras (simulada): exige a confirmação de que o ingresso é da Ingresse,
+    registra a compra do fã e dá 1 giro da roleta, com o motivo."""
     from .. import spins as spin_lib
 
     e = _event(db, artist, event_id)
+    if not body.ticket_optin:
+        raise HTTPException(
+            422,  # mesmo código da validação do corpo
+            "Confirme que já comprou ou vai comprar seu ingresso na Ingresse para levar as experiências extras.",
+        )
     pkg, item, coupon, off, total = _price(db, artist, user, e, body)
     if coupon:
         coupon.used += 1
@@ -470,11 +477,12 @@ def buy_ticket(event_id: str, body: PurchaseIn, artist: FanArtist, user: Current
         price_cents=total,
         coupon_code=coupon.code if coupon else "",
         discount_cents=off,
+        ticket_optin_at=m.now(),
     )
     db.add(purchase)
     f = get_fandom(db, artist, user)
     assert f is not None
-    spin_lib.grant(db, f, f"Compra de ingresso · {e.city} ({e.date.day:02d}/{e.date.month:02d}) · {item['label']}")
+    spin_lib.grant(db, f, f"Compra de experiências extras · {e.city} ({e.date.day:02d}/{e.date.month:02d}) · {item['label']}")
     db.commit()
     db.refresh(purchase)
     return ticket_out(purchase)
@@ -583,7 +591,6 @@ def live_campaign(db: Session, artist: m.Artist, key: str) -> m.Campaign | None:
 
 # lugar do anúncio no app -> vitrine
 IN_APP_SLOTS = {"entry": "entrada", "pickup_video": "pickup_video", "pickup_claim": "pickup_resgate", "feed": "mural"}
-PICKUP_VIDEO_MIN_SECONDS = 30
 
 
 @router.get("/artists/{slug}/ads/in-app", response_model=InAppAdsOut)
@@ -609,7 +616,8 @@ def in_app_ads(artist: FanArtist, db: DB):
             url=c.url or "#",
             image_url=c.art_path or None,
             video_url=c.video_url or None,
-            min_seconds=PICKUP_VIDEO_MIN_SECONDS if place == "pickup_video" else None,
+            # Sem tempo fixo: no vídeo antes do giro o front libera quando o vídeo termina (duração real).
+            min_seconds=None,
         )
     return InAppAdsOut(**out)
 

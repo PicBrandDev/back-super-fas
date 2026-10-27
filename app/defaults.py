@@ -32,7 +32,9 @@ BLANK_THEME = {
     "fontLabel": "var(--font-plex-mono), ui-monospace, monospace",
 }
 
-MODULES = ("mural", "agenda", "pickup", "loja", "drops", "photo", "ads")
+MODULES = ("mural", "agenda", "pickup", "loja", "drops", "photo", "ads", "resale")
+# Módulos de cada fã clube novo: todos ligados, menos a revenda (saiu do app e fica escondida até segunda ordem).
+DEFAULT_MODULES = {**{k: True for k in MODULES}, "resale": False}
 
 # Texto antigo do "onde" da vitrine do Mural (a subida da API troca pelo novo se ninguém editou).
 OLD_MURAL_WHERE = "Mural · aba Galera, a cada [n] posts"

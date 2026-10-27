@@ -288,6 +288,7 @@ class AuthorOut(Camel):
     initial: str
     official: bool | None = None
     badge: str | None = None  # selo do autor neste fã clube (ex.: "Dono do fã clube")
+    id: str | None = None  # id do fã autor (abre o perfil público e o chat); vazio no post oficial
     avatar: str | None = None  # foto de perfil do autor (vazio para o artista)
 
 
@@ -320,6 +321,7 @@ def post_out(p: m.Post, artist: m.Artist) -> PostOut:
             handle=p.author.handle or "",
             initial=initial_of(p.author.name),
             badge="Dono do fã clube" if owner else None,
+            id=p.author.id,
             avatar=p.author.avatar_path or None,
         )
     return PostOut(
@@ -505,7 +507,8 @@ class InAppAdOut(Camel):
     url: str
     image_url: str | None = None
     video_url: str | None = None
-    min_seconds: int | None = None  # só no vídeo antes do giro
+    # Tempo mínimo antes de liberar. None no vídeo antes do giro: o front usa a duração real do vídeo.
+    min_seconds: int | None = None
 
 
 class InAppAdsOut(Camel):
@@ -598,10 +601,14 @@ class StoreOrderOut(Camel):
 
 
 class PurchaseIn(Camel):
+    """Compra de experiências extras do show. O ingresso é comprado na Ingresse, fora do app."""
+
     package_id: str
-    item: int = Field(default=0, ge=0)  # antigo (ingresso do pacote): não é mais usado
+    item: int | None = Field(default=None, ge=0)  # antigo (ingresso do pacote): não é mais usado; o ingresso é da Ingresse
     addons: list[str] = Field(default_factory=list, max_length=10)  # experiências escolhidas (chaves do pacote)
     coupon: str = Field(default="", max_length=30)  # cupom de desconto (opcional)
+    # "Confirmo que já comprei ou vou comprar meu ingresso na Ingresse": obrigatório na compra (422 sem ele); a cotação não exige
+    ticket_optin: bool = False
 
 
 class MyCouponOut(Camel):
@@ -612,7 +619,7 @@ class MyCouponOut(Camel):
 
 
 class QuoteOut(Camel):
-    subtotal_cents: int  # ingresso + experiências
+    subtotal_cents: int  # soma das experiências extras
     discount_cents: int
     total_cents: int
     coupon: str  # código aplicado ("" sem cupom)
