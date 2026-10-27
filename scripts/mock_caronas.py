@@ -2,6 +2,7 @@
 
 Cria 4 motoristas de teste e, em cada show futuro, 2 ou 3 caronas (cidades, horários, vagas e preços diferentes).
 A conta de fã de teste reserva e paga UMA vaga, no primeiro show (valor retido); as outras caronas ficam livres para reservar.
+A fã também lança uma carona no primeiro show, com 2 passageiros que já reservaram e pagaram.
 Precisa de CARPOOL_ALLOW_FAKE_PAYMENT=true (padrão).
 
 Rode no servidor:
@@ -86,6 +87,22 @@ def main():
                 print("  vaga reservada e paga (retida):", code)
             else:
                 print("  reserva:", code, b)
+
+    # A fã também lança uma carona no primeiro show, com 2 passageiros que já reservaram e pagaram.
+    ev = events[0]
+    day = datetime.fromisoformat(ev["date"]).date()
+    depart = datetime.combine(day, time(9, 0), tzinfo=timezone(timedelta(hours=-3))) - timedelta(days=1)
+    if depart <= datetime.now(timezone.utc) + timedelta(hours=1):
+        depart = datetime.now(timezone.utc) + timedelta(days=2)
+    body = {"originCity": "São Paulo", "meetingPoint": "Av. Paulista 1000, Bela Vista, São Paulo - SP", "departAt": depart.isoformat(), "seats": 4, "priceCents": 5500, "car": "Civic cinza", "notes": "Saio cedo e volto depois do show."}
+    code, mine = call("POST", f"/artists/{SLUG}/carpool/events/{ev['id']}/rides", body, t_fan)
+    print("carona da fã:", code, "" if code == 201 else mine)
+    if code == 201:
+        for email in (DRIVERS[2][0], DRIVERS[3][0]):
+            code, b = call("POST", f"/artists/{SLUG}/carpool/rides/{mine['id']}/bookings", {"seats": 1}, tokens[email])
+            if code == 201:
+                code, _ = call("POST", f"/artists/{SLUG}/carpool/bookings/{b['id']}/pay", None, tokens[email])
+            print("  passageiro", email, "reservou e pagou:", code)
 
 
 main()
