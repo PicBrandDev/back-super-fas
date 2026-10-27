@@ -196,18 +196,23 @@ def offer_ride(event_id: str, body: RideIn, artist: FanArtist, user: CurrentUser
 
 @router.post("/artists/{slug}/carpool/rides/{ride_id}/bookings", response_model=BookingOut, status_code=201)
 def book_seats(ride_id: str, body: BookIn, artist: FanArtist, user: CurrentUser, db: DB):
-    """Reserva vagas (seguradas por 15 minutos até o pagamento)."""
+    """Reserva UMA vaga (segurada por 15 minutos até o pagamento)."""
     r = _ride(db, artist, ride_id)
     _expire(db, [r.id])
     if r.status != R_OPEN or _aware(r.depart_at) <= utcnow():
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Esta viagem não está mais aberta.")
     if r.driver_id == user.id:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Você não pode reservar vaga na sua própria viagem.")
-    if db.scalar(select(RideBooking.id).where(RideBooking.ride_id == r.id, RideBooking.passenger_id == user.id, RideBooking.status.in_(LIVE))):
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Você já tem vagas nesta viagem.")
-    if body.seats > _left(db, r):
-        raise HTTPException(status.HTTP_409_CONFLICT, "Não há vagas suficientes.")
-    b = RideBooking(ride_id=r.id, passenger_id=user.id, seats=body.seats, amount_cents=body.seats * r.price_cents, expires_at=utcnow() + timedelta(minutes=HOLD_MINUTES))
+    # Uma vaga por pessoa e uma reserva por show: quem já reservou carona para este show precisa cancelar antes de trocar.
+    if db.scalar(
+        select(RideBooking.id)
+        .join(Ride, Ride.id == RideBooking.ride_id)
+        .where(Ride.event_id == r.event_id, RideBooking.passenger_id == user.id, RideBooking.status.in_((B_RESERVED, B_PAID)))
+    ):
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Você já tem uma carona reservada para este show.")
+    if _left(db, r) < 1:
+        raise HTTPException(status.HTTP_409_CONFLICT, "Não há vagas livres.")
+    b = RideBooking(ride_id=r.id, passenger_id=user.id, seats=1, amount_cents=r.price_cents, expires_at=utcnow() + timedelta(minutes=HOLD_MINUTES))
     db.add(b)
     db.commit()
     db.refresh(b)

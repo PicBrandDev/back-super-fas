@@ -1,7 +1,7 @@
 """Mock das caronas por show (chama a própria API; nada é escrito direto no banco).
 
 Cria 4 motoristas de teste e, em cada show futuro, 2 ou 3 caronas (cidades, horários, vagas e preços diferentes).
-A conta de fã de teste reserva e paga uma vaga em uma carona de cada show (valor retido) e deixa outra só reservada.
+A conta de fã de teste reserva e paga UMA vaga, no primeiro show (valor retido); as outras caronas ficam livres para reservar.
 Precisa de CARPOOL_ALLOW_FAKE_PAYMENT=true (padrão).
 
 Rode no servidor:
@@ -78,16 +78,14 @@ def main():
             print(f"{ev['city']} · {name} ({origin}):", code, "" if code == 201 else r)
             if code == 201:
                 rides.append(r)
-        for n, ride in enumerate(rides[:2]):
-            code, b = call("POST", f"/artists/{SLUG}/carpool/rides/{ride['id']}/bookings", {"seats": 1}, t_fan)
-            if code != 201:
-                print("  reserva:", code, b)
-                continue
-            if n == 0:
+        # A fã reserva e paga só UMA vaga (no primeiro show); as demais caronas ficam livres para ela reservar.
+        if ev is events[0] and rides:
+            code, b = call("POST", f"/artists/{SLUG}/carpool/rides/{rides[0]['id']}/bookings", {"seats": 1}, t_fan)
+            if code == 201:
                 code, _ = call("POST", f"/artists/{SLUG}/carpool/bookings/{b['id']}/pay", None, t_fan)
                 print("  vaga reservada e paga (retida):", code)
             else:
-                print("  vaga reservada, falta pagar (vale 15 min)")
+                print("  reserva:", code, b)
 
 
 main()

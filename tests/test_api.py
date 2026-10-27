@@ -1198,19 +1198,18 @@ def test_caronas_por_show_com_valor_retido(client, club_admin, fan):
     # reserva: não na própria viagem, não mais vagas do que há
     book = f"{base}/carpool/rides/{ride['id']}/bookings"
     assert client.post(book, headers=motorista, json={"seats": 1}).status_code == 400
-    assert client.post(book, headers=passageiro, json={"seats": 4}).status_code == 409
-    b = client.post(book, headers=passageiro, json={"seats": 2})
-    assert b.status_code == 201 and b.json()["status"] == "reserved" and b.json()["amountCents"] == 10000
+    b = client.post(book, headers=passageiro, json={"seats": 2})  # sempre uma vaga por reserva
+    assert b.status_code == 201 and b.json()["status"] == "reserved" and b.json()["amountCents"] == 5000 and b.json()["seats"] == 1
     visto = client.get(url, headers=passageiro).json()[0]
-    assert visto["seatsLeft"] == 1 and visto["myBooking"]["status"] == "reserved" and visto["passengers"] == []
-    assert client.post(book, headers=passageiro, json={"seats": 1}).status_code == 400  # uma reserva por viagem
+    assert visto["seatsLeft"] == 2 and visto["myBooking"]["status"] == "reserved" and visto["passengers"] == []
+    assert client.post(book, headers=passageiro, json={"seats": 1}).status_code == 400  # uma reserva por show
 
     # pagamento: o valor fica retido; dá para devolver (faltam mais de 24 h)
     pay = f"{base}/carpool/bookings/{b.json()['id']}/pay"
     assert client.post(pay, headers=passageiro).json()["status"] == "paid"
     assert client.post(pay, headers=passageiro).status_code == 400
     adm = client.get(f"{base}/manage/carpool", headers=club_admin).json()
-    assert adm["heldCents"] >= 10000 and any(i["ride"]["id"] == ride["id"] for i in adm["items"])
+    assert adm["heldCents"] >= 5000 and any(i["ride"]["id"] == ride["id"] for i in adm["items"])
     assert client.get(f"{base}/carpool/me", headers=motorista).json()["offered"][0]["passengers"][0]["status"] == "paid"
     cancel = client.post(f"{base}/carpool/bookings/{b.json()['id']}/cancel", headers=passageiro)
     assert cancel.status_code == 200 and cancel.json()["status"] == "refunded"
