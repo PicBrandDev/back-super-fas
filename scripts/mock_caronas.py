@@ -98,10 +98,10 @@ def main():
     code, mine = call("POST", f"/artists/{SLUG}/carpool/events/{ev['id']}/rides", body, t_fan)
     print("carona da fã:", code, "" if code == 201 else mine)
     if code == 201:
-        for email in (DRIVERS[2][0], DRIVERS[3][0]):
+        for email, metodo in ((DRIVERS[2][0], "pix"), (DRIVERS[3][0], "cartao")):
             code, b = call("POST", f"/artists/{SLUG}/carpool/rides/{mine['id']}/bookings", {"seats": 1}, tokens[email])
             if code == 201:
-                code, _ = call("POST", f"/artists/{SLUG}/carpool/bookings/{b['id']}/pay", None, tokens[email])
+                code, _ = call("POST", f"/artists/{SLUG}/carpool/bookings/{b['id']}/pay", {"method": metodo}, tokens[email])
             print("  passageiro", email, "reservou e pagou:", code)
 
 

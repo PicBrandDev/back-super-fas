@@ -43,6 +43,10 @@ class RideIn(Camel):
     notes: str = Field(default="", max_length=300)
 
 
+class PayIn(Camel):
+    method: str = Field(default="pix", pattern="^(pix|cartao)$")
+
+
 class BookIn(Camel):
     seats: int = Field(default=1, ge=1, le=8)
 
@@ -52,6 +56,7 @@ class BookingOut(Camel):
     seats: int
     amount_cents: int
     status: str  # reserved | paid | completed | cancelled | refunded
+    payment_method: str = ""  # pix | cartao
     expires_at: datetime | None = None
     passenger: Who | None = None  # só para o motorista e a administração
 
@@ -141,7 +146,7 @@ def _left(db, r: Ride) -> int:
 
 def _booking_out(b: RideBooking, users: dict[str, m.User], show_passenger: bool) -> BookingOut:
     return BookingOut(
-        id=b.id, seats=b.seats, amount_cents=b.amount_cents, status=b.status, expires_at=b.expires_at if b.status == B_RESERVED else None,
+        id=b.id, seats=b.seats, amount_cents=b.amount_cents, status=b.status, payment_method=b.payment_method, expires_at=b.expires_at if b.status == B_RESERVED else None,
         passenger=_who(users.get(b.passenger_id)) if show_passenger else None,
     )
 
@@ -230,7 +235,7 @@ def _booking(db, artist: m.Artist, booking_id: str, user: m.User, driver_ok: boo
 
 
 @router.post("/artists/{slug}/carpool/bookings/{booking_id}/pay", response_model=BookingOut)
-def pay_booking(booking_id: str, artist: FanArtist, user: CurrentUser, db: DB):
+def pay_booking(booking_id: str, artist: FanArtist, user: CurrentUser, db: DB, body: PayIn | None = None):
     """Paga a reserva. O valor fica retido até a viagem (simulado enquanto não há gateway)."""
     b, r = _booking(db, artist, booking_id, user)
     _expire(db, [r.id])
@@ -238,7 +243,7 @@ def pay_booking(booking_id: str, artist: FanArtist, user: CurrentUser, db: DB):
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "O prazo desta reserva acabou. Reserve de novo." if b.status == B_CANCELLED else "Esta reserva já foi paga.")
     if not get_settings().carpool_allow_fake_payment:
         raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, "O pagamento das caronas ainda não está disponível.")
-    b.status, b.paid_at, b.expires_at = B_PAID, utcnow(), None
+    b.status, b.paid_at, b.expires_at, b.payment_method = B_PAID, utcnow(), None, (body.method if body else "pix")
     db.add(RideLedger(booking_id=b.id, kind="hold", amount_cents=b.amount_cents, note="pagamento simulado, retido até a viagem"))
     db.commit()
     return _booking_out(b, {}, False)

@@ -53,6 +53,7 @@ class RideBooking(Base):
     amount_cents: Mapped[int] = mapped_column(Integer)  # vagas x preço, no momento da reserva
     status: Mapped[str] = mapped_column(String(12), default=B_RESERVED)
     expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)  # fim do prazo da reserva sem pagar
+    payment_method: Mapped[str] = mapped_column(String(12), default="")  # pix | cartao
     paid_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)

@@ -29,6 +29,7 @@ log = logging.getLogger("superfas.migrations")
 
 # tabela -> [(coluna, tipo SQL)]
 NEW_COLUMNS = {
+    "carpool_bookings": [("payment_method", "VARCHAR(12) DEFAULT ''")],
     "users": [
         ("avatar_path", "VARCHAR(255) DEFAULT ''"),
         ("zip_code", "VARCHAR(9) DEFAULT ''"),
