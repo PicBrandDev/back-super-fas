@@ -514,7 +514,18 @@ def spin(artist: FanArtist, user: CurrentUser, db: DB):
 @router.get("/artists/{slug}/products", response_model=list[ProductOut])
 def list_products(artist: FanArtist, db: DB):
     items = db.scalars(select(m.Product).where(m.Product.artist_id == artist.id).order_by(m.Product.position)).all()
-    return [ProductOut(id=p.id, name=p.name, category=p.category, price_label=brl(p.price_cents), price_cents=p.price_cents, color=p.color) for p in items]
+    return [
+        ProductOut(
+            id=p.id,
+            name=p.name,
+            category=p.category,
+            price_label=brl(p.price_cents),
+            price_cents=p.price_cents,
+            color=p.color,
+            image={"src": p.image_path, "alt": f"Foto do produto {p.name}"} if p.image_path else None,
+        )
+        for p in items
+    ]
 
 
 @router.get("/artists/{slug}/tracks", response_model=list[TrackOut])

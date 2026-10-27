@@ -361,6 +361,28 @@ def test_foto_de_perfil_do_fa_clube(client, club_admin, fan):
     assert overview[0]["avatar"] == r.json()["avatar"]
 
 
+def test_foto_do_produto_da_loja(client, club_admin, fan):
+    base = "/artists/vintage-culture"
+    pid = client.post(f"{base}/manage/products", headers=club_admin, json={"name": "Camiseta Foto", "priceCents": 9000}).json()["id"]
+    assert client.get(f"{base}/products", headers=fan).json()[0]["image"] is None
+    png = b"\x89PNG\r\n\x1a\n" + b"0" * 32
+    url = f"{base}/manage/products/{pid}/image"
+    r = client.post(url, headers=club_admin, files={"image": ("camiseta.png", png, "image/png")})
+    assert r.status_code == 200 and r.json()["imagePath"].startswith("/uploads/")
+    assert client.post(url, headers=fan, files={"image": ("camiseta.png", png, "image/png")}).status_code == 403
+    assert client.post(url, headers=club_admin, files={"image": ("x.gif", b"G", "image/gif")}).status_code == 400
+    assert client.post(f"{base}/manage/products/naoexiste/image", headers=club_admin, files={"image": ("a.png", png, "image/png")}).status_code == 404
+    # o admin vê a foto no CRUD, mas não troca o caminho pelo PATCH
+    admin_item = client.get(f"{base}/manage/products", headers=club_admin).json()[0]
+    assert admin_item["imagePath"] == r.json()["imagePath"]
+    client.patch(f"{base}/manage/products/{pid}", headers=club_admin, json={"imagePath": "/uploads/outra.jpg", "priceCents": 9500})
+    assert client.get(f"{base}/manage/products", headers=club_admin).json()[0]["imagePath"] == r.json()["imagePath"]
+    loja = client.get(f"{base}/products", headers=fan).json()[0]
+    assert loja["image"]["src"] == r.json()["imagePath"] and "Camiseta Foto" in loja["image"]["alt"]
+    assert client.delete(url, headers=club_admin).status_code == 204
+    assert client.get(f"{base}/products", headers=fan).json()[0]["image"] is None
+
+
 def test_feed_do_fa_clube(client, club_admin, fan):
     url = "/artists/vintage-culture/clubs/oficial/feed"
     r = client.get(url, headers=club_admin)

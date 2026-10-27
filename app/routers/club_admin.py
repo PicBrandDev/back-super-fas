@@ -10,9 +10,9 @@ O conteúdo segue o padrão:
 """
 
 from datetime import date, datetime, timezone
-from typing import Any, Callable, Literal, Optional
+from typing import Annotated, Any, Callable, Literal, Optional
 
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, File, HTTPException, UploadFile, status
 from pydantic import Field, create_model
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -21,6 +21,7 @@ from .. import models as m
 from ..resale.guards import ensure_deletable, ensure_editable
 from ..schemas import Camel, MemberOut, RewardOut, br_date
 from ..security import DB, ManagedArtist
+from ..uploads import save_image
 
 router = APIRouter(tags=["Administração do ambiente"])
 
@@ -209,15 +210,21 @@ RESOURCES: list[tuple[str, type, type[Camel], Any, Callable | None]] = [
     ("perks", m.MemberPerk, PerkIn, m.MemberPerk.position, None),
 ]
 
+# Campos que o admin só lê pelo CRUD (mudam por rotas próprias, ex.: a foto do produto).
+READ_ONLY: dict[str, dict[str, Any]] = {
+    "products": {"image_path": (str, "")},
+}
+
 
 def _register(name: str, model: type, In: type[Camel], order_by: Any, hook: Callable | None) -> None:
-    Out = create_model(f"{In.__name__[:-2]}Admin", __base__=In, id=(str, ...))
+    extra = READ_ONLY.get(name, {})
+    Out = create_model(f"{In.__name__[:-2]}Admin", __base__=In, id=(str, ...), **extra)
     Patch = create_model(
         f"{In.__name__[:-2]}Patch",
         __base__=Camel,
         **{f: (Optional[info.annotation], None) for f, info in In.model_fields.items()},  # type: ignore[valid-type]
     )
-    fields = list(In.model_fields)
+    fields = list(In.model_fields) + list(extra)
 
     def to_out(obj: Any) -> Any:
         return Out(id=obj.id, **{f: getattr(obj, f) for f in fields})
@@ -276,6 +283,36 @@ def _register(name: str, model: type, In: type[Camel], order_by: Any, hook: Call
 
 for _r in RESOURCES:
     _register(*_r)
+
+
+# ---------------------------------------------------------------- foto do produto da loja
+
+
+def _product(db: Session, artist: m.Artist, product_id: str) -> m.Product:
+    p = db.get(m.Product, product_id)
+    if not p or p.artist_id != artist.id:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Produto não encontrado.")
+    return p
+
+
+@router.post("/artists/{slug}/manage/products/{product_id}/image", tags=["Conteúdo · products"])
+async def set_product_image(product_id: str, artist: ManagedArtist, db: DB, image: Annotated[UploadFile, File()]):
+    """Troca a foto do produto (JPG, PNG ou WebP, até 5 MB)."""
+    p = _product(db, artist, product_id)
+    path = await save_image(image)
+    if not path:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Escolha uma foto.")
+    p.image_path = path
+    db.commit()
+    return {"imagePath": p.image_path}
+
+
+@router.delete("/artists/{slug}/manage/products/{product_id}/image", status_code=204, tags=["Conteúdo · products"])
+def remove_product_image(product_id: str, artist: ManagedArtist, db: DB):
+    """Tira a foto do produto (o card volta a usar a cor)."""
+    p = _product(db, artist, product_id)
+    p.image_path = ""
+    db.commit()
 
 
 # ---------------------------------------------------------------- membros
