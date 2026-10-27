@@ -151,7 +151,7 @@ def _booking_out(b: RideBooking, users: dict[str, m.User], show_passenger: bool)
     )
 
 
-def _ride_out(db, r: Ride, me: m.User, event: m.Event | None = None) -> RideOut:
+def _ride_out(db, r: Ride, me: m.User, event: m.Event | None = None, full: bool = False) -> RideOut:
     bookings = list(db.scalars(select(RideBooking).where(RideBooking.ride_id == r.id).order_by(RideBooking.created_at)))
     ids = {r.driver_id} | {b.passenger_id for b in bookings}
     users = {u.id: u for u in db.scalars(select(m.User).where(m.User.id.in_(ids)))}
@@ -163,7 +163,7 @@ def _ride_out(db, r: Ride, me: m.User, event: m.Event | None = None) -> RideOut:
         depart_at=_aware(r.depart_at), seats_total=r.seats_total, seats_left=_left(db, r), price_cents=r.price_cents, car=r.car, notes=r.notes,
         status=r.status, driver=_who(users.get(r.driver_id)), mine=mine,
         my_booking=_booking_out(mb, users, False) if mb else None,
-        passengers=[_booking_out(b, users, True) for b in bookings if b.status in (B_PAID, B_COMPLETED, B_RESERVED)] if mine else [],
+        passengers=[_booking_out(b, users, True) for b in bookings if full or b.status in (B_PAID, B_COMPLETED, B_RESERVED)] if (mine or full) else [],
     )
 
 
@@ -351,7 +351,7 @@ def carpool_admin(artist: ManagedArtist, user: CurrentUser, db: DB, event: str |
         tot["held"] += held
         tot["released"] += rel
         tot["refunded"] += ref
-        items.append(CarpoolAdminRow(ride=_ride_out(db, r, user), held_cents=held, released_cents=rel, refunded_cents=ref))
+        items.append(CarpoolAdminRow(ride=_ride_out(db, r, user, full=True), held_cents=held, released_cents=rel, refunded_cents=ref))
     db.commit()
     return CarpoolAdmin(rides=len(rides), seats_booked=seats, held_cents=tot["held"], released_cents=tot["released"], refunded_cents=tot["refunded"], items=items)
 
