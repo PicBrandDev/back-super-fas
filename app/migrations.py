@@ -8,6 +8,7 @@
    - posts da galera, roleta do PicKup e fãs passam a ser do fã clube master.
 4. Cria nas vitrines de cada cantor as que faltam de DEFAULT_AD_SLOTS (ex.: os anúncios dentro do app)
    e atualiza o "onde" da vitrine do Mural se ainda for o texto padrão antigo.
+5. Grava o módulo "resale" desligado nos cantores que ainda não têm a chave (a revenda saiu do app).
 
 Tudo aqui pode rodar várias vezes sem efeito colateral.
 Quando o esquema começar a mudar com frequência, trocar por Alembic.
@@ -72,6 +73,7 @@ def upgrade(engine: Engine) -> None:
         _to_fan_clubs(db)
         _default_ad_slots(db)
         _packages_without_photo_option(db)
+        _resale_module_off(db)
 
 
 def _pickap_to_pickup(db: Session) -> None:
@@ -113,6 +115,20 @@ def _pickap_to_pickup(db: Session) -> None:
     if changed:
         db.commit()
         log.warning("PicKap renomeado para PicKup nos dados gravados")
+
+
+def _resale_module_off(db: Session) -> None:
+    """A revenda saiu do app e fica escondida: cantores sem a chave "resale" nos módulos ganham o módulo desligado.
+    Quem já tem a chave (ligada ou desligada no admin) fica como está."""
+    changed = False
+    for artist in db.scalars(select(m.Artist)):
+        mods = artist.modules or {}
+        if "resale" not in mods:
+            artist.modules = {**mods, "resale": False}
+            changed = True
+            log.warning("Módulo resale desligado: %s", artist.slug)
+    if changed:
+        db.commit()
 
 
 def _packages_without_photo_option(db: Session) -> None:

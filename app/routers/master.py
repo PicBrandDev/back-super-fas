@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 
 from .. import models as m
 from ..resale.guards import release_artist
-from ..defaults import BLANK_THEME, DEFAULT_AD_SLOTS, MODULES, NEW_CLUB_COLORS
+from ..defaults import BLANK_THEME, DEFAULT_AD_SLOTS, DEFAULT_MODULES, NEW_CLUB_COLORS
 from ..schemas import (
     AdSlotOut,
     AdSlotPatch,
@@ -71,7 +71,7 @@ def create_fan_club(body: FanClubCreate, _: MasterUser, db: DB):
         status="setup",
         theme=copy.deepcopy(BLANK_THEME),
         brand_color=NEW_CLUB_COLORS[count % len(NEW_CLUB_COLORS)],
-        modules={k: True for k in MODULES},
+        modules=dict(DEFAULT_MODULES),
     )
     db.add(artist)
     db.flush()
