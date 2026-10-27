@@ -5,6 +5,7 @@ from datetime import datetime
 
 from fastapi import APIRouter, HTTPException, Query, status
 from sqlalchemy import func, or_, select, update
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from .. import models as m
@@ -102,9 +103,13 @@ def _unread_q(me: m.User):
     return (m.Message.sender_id != me.id) & m.Message.read_at.is_(None)
 
 
-def conversation_out(db: Session, c: m.Conversation, me: m.User, unread: int | None = None) -> ConversationOut:
+def conversation_out(
+    db: Session, c: m.Conversation, me: m.User, unread: int | None = None, last: m.Message | None | bool = True
+) -> ConversationOut:
+    """`last=True` busca a última mensagem; a lista passa a já buscada (ou None) para não fazer uma consulta por conversa."""
     other = c.user_b if c.user_a_id == me.id else c.user_a
-    last = db.scalar(select(m.Message).where(m.Message.conversation_id == c.id).order_by(m.Message.id.desc()).limit(1))
+    if last is True:
+        last = db.scalar(select(m.Message).where(m.Message.conversation_id == c.id).order_by(m.Message.id.desc()).limit(1))
     if unread is None:
         unread = db.scalar(select(func.count(m.Message.id)).where(m.Message.conversation_id == c.id, _unread_q(me))) or 0
     return ConversationOut(
@@ -153,14 +158,18 @@ def list_conversations(artist: FanArtist, user: CurrentUser, db: DB):
     ).all()
     if not convs:
         return []
+    ids = [c.id for c in convs]
     counts = dict(
         db.execute(
             select(m.Message.conversation_id, func.count(m.Message.id))
-            .where(m.Message.conversation_id.in_([c.id for c in convs]), _unread_q(user))
+            .where(m.Message.conversation_id.in_(ids), _unread_q(user))
             .group_by(m.Message.conversation_id)
         ).all()
     )
-    return [conversation_out(db, c, user, counts.get(c.id, 0)) for c in convs]
+    # Última mensagem de cada conversa numa consulta só (a de maior id).
+    last_ids = select(func.max(m.Message.id)).where(m.Message.conversation_id.in_(ids)).group_by(m.Message.conversation_id)
+    lasts = {x.conversation_id: x for x in db.scalars(select(m.Message).where(m.Message.id.in_(last_ids)))}
+    return [conversation_out(db, c, user, counts.get(c.id, 0), lasts.get(c.id)) for c in convs]
 
 
 @router.post("/artists/{slug}/chat/conversations", response_model=ConversationOut)
@@ -170,17 +179,26 @@ def start_conversation(body: StartIn, artist: FanArtist, user: CurrentUser, db: 
     if other_id == user.id:
         raise HTTPException(422, "Você não pode conversar com você mesmo.")
     other = db.get(m.User, other_id)
-    if not other:
+    # Só com quem é fã deste ambiente (não abre conversa com equipe, patrocinador ou fã de outro cantor).
+    is_fan = other and db.scalar(select(m.Fandom.id).where(m.Fandom.artist_id == artist.id, m.Fandom.user_id == other.id))
+    if not other or not is_fan:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Fã não encontrado.")
     a, b = sorted((user.id, other.id))
     c = db.scalar(
         select(m.Conversation).where(m.Conversation.artist_id == artist.id, m.Conversation.user_a_id == a, m.Conversation.user_b_id == b)
     )
     if not c:
-        c = m.Conversation(artist_id=artist.id, user_a_id=a, user_b_id=b)
-        db.add(c)
-        db.commit()
-        db.refresh(c)
+        try:
+            c = m.Conversation(artist_id=artist.id, user_a_id=a, user_b_id=b)
+            db.add(c)
+            db.commit()
+            db.refresh(c)
+        except IntegrityError:
+            # Os dois abriram ao mesmo tempo: a outra requisição criou primeiro, devolve a dela.
+            db.rollback()
+            c = db.scalar(
+                select(m.Conversation).where(m.Conversation.artist_id == artist.id, m.Conversation.user_a_id == a, m.Conversation.user_b_id == b)
+            )
     return conversation_out(db, c, user)
 
 
@@ -199,14 +217,18 @@ def list_messages(
     user: CurrentUser,
     db: DB,
     after_id: int | None = None,
+    before_id: int | None = None,
     limit: int = Query(50, ge=1, le=200),
 ):
-    """Sem `after_id`: as últimas `limit` mensagens. Com `after_id`: só as novas (polling). Sempre em ordem crescente."""
+    """Sem cursor: as últimas `limit` mensagens. Com `after_id`: só as novas (polling). Com `before_id`: as `limit`
+    anteriores a ela (carregar o histórico). Sempre em ordem crescente."""
     c = get_conversation(db, artist, user, conversation_id)
     q = select(m.Message).where(m.Message.conversation_id == c.id)
     if after_id is not None:
         msgs = db.scalars(q.where(m.Message.id > after_id).order_by(m.Message.id).limit(limit)).all()
     else:
+        if before_id is not None:
+            q = q.where(m.Message.id < before_id)
         msgs = list(reversed(db.scalars(q.order_by(m.Message.id.desc()).limit(limit)).all()))
     return [message_out(x, user) for x in msgs]
 

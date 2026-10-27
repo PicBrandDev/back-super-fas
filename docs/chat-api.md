@@ -83,7 +83,7 @@ Abre (ou devolve, se já existir) a conversa com outro fã. Há uma só conversa
 
 Resposta `200`: `ConversationOut` (mesmo formato do item da lista; `lastMessage` é `null` numa conversa nova).
 
-Erros: `422` se `userId` é o próprio usuário; `404` se o usuário não existe.
+Erros: `422` se `userId` é o próprio usuário; `404` se o usuário não existe ou não é fã deste ambiente.
 
 ### `GET /artists/{slug}/chat/conversations/{id}`
 
@@ -95,6 +95,7 @@ Mensagens em ordem crescente de `id`.
 
 - Sem `after_id`: as últimas `limit` mensagens (para abrir a conversa).
 - Com `after_id`: só as que chegaram depois dela (polling). Lista vazia = nada novo.
+- Com `before_id`: as `limit` anteriores a ela (carregar o histórico ao rolar para cima). Lista vazia = chegou ao começo.
 - `limit`: 1 a 200 (padrão 50).
 
 ```json

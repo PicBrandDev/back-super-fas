@@ -157,3 +157,32 @@ def test_perfil_publico_e_autor_do_post(client, trio):
 def test_post_oficial_sem_id_de_autor(client, fan):
     oficial = [x for x in client.get(f"{VC}/posts", headers=fan).json() if x["kind"] == "drop"]
     assert oficial and all(x["author"]["id"] is None and x["author"]["avatar"] is None for x in oficial)
+
+
+def test_so_conversa_com_fa_do_ambiente(client, trio):
+    from sqlalchemy import select
+
+    from app import models as m
+    from app.db import SessionLocal
+
+    (ha, _ia), _b, _c = trio
+    # quem não é fã do ambiente (ex.: o admin master) não recebe conversa
+    with SessionLocal() as db:
+        fas = select(m.Fandom.user_id).join(m.Artist).where(m.Artist.slug == "vintage-culture")
+        de_fora = db.scalar(select(m.User.id).where(m.User.id.not_in(fas)).limit(1))
+    assert de_fora
+    r = client.post(f"{CHAT}/conversations", headers=ha, json={"userId": de_fora})
+    assert r.status_code == 404
+
+
+def test_historico_antes_de_uma_mensagem(client, trio):
+    (ha, _ia), _b, (_hc, ic) = trio
+    conv = client.post(f"{CHAT}/conversations", headers=ha, json={"userId": ic}).json()
+    url = f"{CHAT}/conversations/{conv['id']}/messages"
+    ids = [client.post(url, headers=ha, json={"body": f"msg {n}"}).json()["id"] for n in range(5)]
+    ultimas = client.get(f"{url}?limit=2", headers=ha).json()
+    assert [x["id"] for x in ultimas] == ids[3:]
+    antes = client.get(f"{url}?limit=2&before_id={ids[3]}", headers=ha).json()
+    assert [x["id"] for x in antes] == ids[1:3]
+    lista = {c["id"]: c for c in client.get(f"{CHAT}/conversations", headers=ha).json()}
+    assert lista[conv["id"]]["lastMessage"]["id"] == ids[-1]
