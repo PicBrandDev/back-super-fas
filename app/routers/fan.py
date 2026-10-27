@@ -547,7 +547,6 @@ def live_campaign(db: Session, artist: m.Artist, key: str) -> m.Campaign | None:
 
 # lugar do anúncio no app -> vitrine
 IN_APP_SLOTS = {"entry": "entrada", "pickup_video": "pickup_video", "pickup_claim": "pickup_resgate", "feed": "mural"}
-PICKUP_VIDEO_MIN_SECONDS = 30
 
 
 @router.get("/artists/{slug}/ads/in-app", response_model=InAppAdsOut)
@@ -573,7 +572,8 @@ def in_app_ads(artist: FanArtist, db: DB):
             url=c.url or "#",
             image_url=c.art_path or None,
             video_url=c.video_url or None,
-            min_seconds=PICKUP_VIDEO_MIN_SECONDS if place == "pickup_video" else None,
+            # Sem tempo fixo: no vídeo antes do giro o front libera quando o vídeo termina (duração real).
+            min_seconds=None,
         )
     return InAppAdsOut(**out)
 

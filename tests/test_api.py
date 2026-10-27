@@ -925,7 +925,7 @@ def test_anuncios_dentro_do_app(client, master, sponsor, fan):
 
     ads = client.get(f"{VC}/ads/in-app", headers=fan).json()
     v = ads["pickupVideo"]
-    assert v["id"] == camp["id"] and v["minSeconds"] == 30 and v["videoUrl"] == "https://cdn.exemplo.com/v.mp4"
+    assert v["id"] == camp["id"] and v["minSeconds"] is None and v["videoUrl"] == "https://cdn.exemplo.com/v.mp4"
     assert v["sponsor"] == "Bebida Teste" and v["imageUrl"] is None and v["cta"] == "Saiba mais"
     assert ads["entry"] is None
     assert any(c["videoUrl"] for c in client.get("/admin/campaigns", headers=master).json())

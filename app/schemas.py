@@ -495,7 +495,8 @@ class InAppAdOut(Camel):
     url: str
     image_url: str | None = None
     video_url: str | None = None
-    min_seconds: int | None = None  # só no vídeo antes do giro
+    # Tempo mínimo antes de liberar. None no vídeo antes do giro: o front usa a duração real do vídeo.
+    min_seconds: int | None = None
 
 
 class InAppAdsOut(Camel):
