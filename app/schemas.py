@@ -471,6 +471,7 @@ class ProductOut(Camel):
     price_label: str
     price_cents: int | None = None
     color: str
+    image: dict | None = None  # {"src": "/uploads/abc.jpg", "alt": "..."} quando o admin enviou a foto
 
 
 class TrackOut(Camel):

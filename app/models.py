@@ -496,6 +496,7 @@ class Product(Base):
     category: Mapped[str] = mapped_column(String(20), default="roupas")  # roupas | acessorios | musica
     price_cents: Mapped[int | None] = mapped_column(Integer, nullable=True)
     color: Mapped[str] = mapped_column(String(20), default="#E0A526")
+    image_path: Mapped[str] = mapped_column(String(255), default="")  # foto enviada pelo admin (/uploads/...)
     position: Mapped[int] = mapped_column(Integer, default=0)
 
 
