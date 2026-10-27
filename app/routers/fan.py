@@ -398,27 +398,28 @@ def my_orders(artist: FanArtist, user: CurrentUser, db: DB):
 
 
 def _price(db, artist: m.Artist, user: m.User, event: m.Event, body: PurchaseIn):
-    """Confere a opção, as experiências e o cupom; devolve (pacote, opção com rótulo e subtotal, cupom, desconto, total)."""
+    """Confere as experiências extras e o cupom; devolve (pacote, compra com rótulo e subtotal, cupom, desconto, total).
+    O ingresso não é vendido aqui (é comprado na Ingresse): pedido com opção de ingresso é recusado."""
     pkg = db.get(m.EventPackage, body.package_id)
     if not pkg or pkg.event_id != event.id or not pkg.active:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Pacote não encontrado.")
-    items = pkg.items or []
-    if body.item >= len(items):
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Opção inválida.")
-    item = items[body.item]
-    if item.get("sold_out"):
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Essa opção está esgotada.")
+    if body.item is not None:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST, "O ingresso é comprado na Ingresse. Aqui você escolhe só as experiências extras."
+        )
     offered = {a["key"]: a for a in (pkg.addons or [])}
     chosen = list(dict.fromkeys(body.addons))
+    if not chosen:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Escolha ao menos uma experiência extra.")
     for key in chosen:
         if key not in offered:
             raise HTTPException(status.HTTP_400_BAD_REQUEST, "Essa experiência não faz parte do pacote.")
         if offered[key].get("sold_out"):
             raise HTTPException(status.HTTP_400_BAD_REQUEST, f"{ADDON_LABELS.get(key, key)} está esgotado.")
     item = {
-        **item,
-        "label": " + ".join([item["label"], *(ADDON_LABELS.get(k, k) for k in chosen)]),
-        "price_cents": item["price_cents"] + sum(offered[k]["price_cents"] for k in chosen),
+        "label": " + ".join(ADDON_LABELS.get(k, k) for k in chosen)[:160],
+        "kind": "extras",
+        "price_cents": sum(offered[k]["price_cents"] for k in chosen),
     }
     coupon = coupon_lib.find(db, artist, user, body.coupon) if body.coupon.strip() else None
     off = coupon_lib.discount(coupon, item["price_cents"]) if coupon else 0
@@ -427,7 +428,8 @@ def _price(db, artist: m.Artist, user: m.User, event: m.Event, body: PurchaseIn)
 
 @router.post("/artists/{slug}/events/{event_id}/quote", response_model=QuoteOut)
 def quote_ticket(event_id: str, body: PurchaseIn, artist: FanArtist, user: CurrentUser, db: DB):
-    """Valor do carrinho (ingresso + experiências) com o cupom, sem comprar: usado na tela de pagamento."""
+    """Valor do carrinho (experiências extras) com o cupom, sem comprar: usado na tela de pagamento.
+    Não exige o opt-in da Ingresse, para o fã ver o valor antes de marcar a confirmação."""
     e = _event(db, artist, event_id)
     _, item, coupon, off, total = _price(db, artist, user, e, body)
     return QuoteOut(
@@ -451,10 +453,16 @@ def my_coupons(artist: FanArtist, user: CurrentUser, db: DB):
 
 @router.post("/artists/{slug}/events/{event_id}/purchases", response_model=MyTicketOut, status_code=201)
 def buy_ticket(event_id: str, body: PurchaseIn, artist: FanArtist, user: CurrentUser, db: DB):
-    """Compra de ingresso (simulada): registra o ingresso do fã e dá 1 giro da roleta, com o motivo."""
+    """Compra de experiências extras (simulada): exige a confirmação de que o ingresso é da Ingresse,
+    registra a compra do fã e dá 1 giro da roleta, com o motivo."""
     from .. import spins as spin_lib
 
     e = _event(db, artist, event_id)
+    if not body.ticket_optin:
+        raise HTTPException(
+            422,  # mesmo código da validação do corpo
+            "Confirme que já comprou ou vai comprar seu ingresso na Ingresse para levar as experiências extras.",
+        )
     pkg, item, coupon, off, total = _price(db, artist, user, e, body)
     if coupon:
         coupon.used += 1
@@ -469,11 +477,12 @@ def buy_ticket(event_id: str, body: PurchaseIn, artist: FanArtist, user: Current
         price_cents=total,
         coupon_code=coupon.code if coupon else "",
         discount_cents=off,
+        ticket_optin_at=m.now(),
     )
     db.add(purchase)
     f = get_fandom(db, artist, user)
     assert f is not None
-    spin_lib.grant(db, f, f"Compra de ingresso · {e.city} ({e.date.day:02d}/{e.date.month:02d}) · {item['label']}")
+    spin_lib.grant(db, f, f"Compra de experiências extras · {e.city} ({e.date.day:02d}/{e.date.month:02d}) · {item['label']}")
     db.commit()
     db.refresh(purchase)
     return ticket_out(purchase)

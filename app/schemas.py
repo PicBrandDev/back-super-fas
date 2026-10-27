@@ -588,10 +588,14 @@ class StoreOrderOut(Camel):
 
 
 class PurchaseIn(Camel):
+    """Compra de experiências extras do show. O ingresso é comprado na Ingresse, fora do app."""
+
     package_id: str
-    item: int = Field(ge=0)  # posição da opção dentro do pacote
+    item: int | None = Field(default=None, ge=0)  # antigo: opção de ingresso do pacote. Com valor, a compra é recusada
     addons: list[str] = Field(default_factory=list, max_length=10)  # experiências escolhidas (chaves do pacote)
     coupon: str = Field(default="", max_length=30)  # cupom de desconto (opcional)
+    # "Confirmo que já comprei ou vou comprar meu ingresso na Ingresse": obrigatório na compra (422 sem ele); a cotação não exige
+    ticket_optin: bool = False
 
 
 class MyCouponOut(Camel):
@@ -602,7 +606,7 @@ class MyCouponOut(Camel):
 
 
 class QuoteOut(Camel):
-    subtotal_cents: int  # ingresso + experiências
+    subtotal_cents: int  # soma das experiências extras
     discount_cents: int
     total_cents: int
     coupon: str  # código aplicado ("" sem cupom)

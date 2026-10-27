@@ -211,7 +211,8 @@ class EventPhoto(Base):
 
 
 class TicketPurchase(Base):
-    """Ingresso que o fã comprou (hoje simulado: o pagamento acontece fora do app)."""
+    """Compra do fã para um show (hoje simulada: o pagamento acontece fora do app). O app não vende mais ingresso:
+    as compras novas são só de experiências extras (kind "extras"); as antigas e as da demonstração ficam como estão."""
 
     __tablename__ = "ticket_purchases"
 
@@ -222,10 +223,12 @@ class TicketPurchase(Base):
     package_name: Mapped[str] = mapped_column(String(120), default="")
     agency_name: Mapped[str] = mapped_column(String(120), default="")
     label: Mapped[str] = mapped_column(String(160))  # ex.: "Pista + transfer + selo"
-    kind: Mapped[str] = mapped_column(String(10), default="ticket")  # ticket | transfer | seal | photo
+    kind: Mapped[str] = mapped_column(String(10), default="ticket")  # extras | ticket | transfer | seal | photo
     price_cents: Mapped[int] = mapped_column(Integer, default=0)  # valor pago, já com o desconto do cupom
     coupon_code: Mapped[str] = mapped_column(String(30), default="")
     discount_cents: Mapped[int] = mapped_column(Integer, default=0)
+    # Quando o fã confirmou que o ingresso é comprado na Ingresse (compra de experiências extras; vazio nas antigas)
+    ticket_optin_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
 
     event: Mapped["Event"] = relationship()
