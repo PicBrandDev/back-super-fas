@@ -2,9 +2,8 @@
 
 Não se vende mais ingresso pelo app: os pacotes vendem experiências (transfer, jantar, camarim, pré-esquenta, after,
 hotel). Para cada show com pacotes, o script:
-  1. garante que os pacotes tenham experiências (se não tiverem, põe transfer e as demais com preços de exemplo),
-     limpa os ingressos antigos de dentro dos pacotes e renomeia os pacotes de exemplo antigos ("Somente ingresso",
-     "Ingresso + transfer"...) para nomes de experiência;
+  1. deixa cada show com UM pacote de experiências (junta os pacotes de exemplo antigos num só, com transfer e todas as
+     experiências), limpa os ingressos antigos de dentro dele e põe o transfer entre as experiências;
   2. cria compras de experiência de fãs do ambiente (de 25 a 70 por show; cada fã escolhe de 1 a 3 experiências de
      um pacote), espalhadas pelos últimos 30 dias, algumas com cupom.
 
@@ -25,12 +24,6 @@ from app.db import SessionLocal
 from app.defaults import ADDON_LABELS
 
 SLUG = os.environ.get("ARTIST", "vintage-culture")
-# nomes antigos dos pacotes de exemplo (mock_agencias) -> nome e descrição novos
-RENAME = [
-    ("Somente ingresso", "Experiências do show", "Jantar, camarim, pré-esquenta, after e hotel: escolha as que quiser."),
-    ("Ingresso + transfer + selo", "Transfer + experiências", "Tudo do pacote de experiências mais o ônibus em grupo."),
-    ("Ingresso + transfer", "Transfer ida e volta", "Ônibus em grupo, ida e volta, e as experiências que quiser somar."),
-]
 DEFAULT_ADDONS = [("transfer", 9000), ("jantar", 45000), ("camarim", 60000), ("pre", 12000), ("after", 18000), ("hotel", 38000)]
 
 
@@ -47,14 +40,20 @@ def main() -> None:
             pkgs = [p for p in ev.packages if p.active]
             if not pkgs:
                 continue
-            for p in pkgs:
-                if not p.addons:
-                    p.addons = [{"key": k, "price_cents": cents, "sold_out": False} for k, cents in DEFAULT_ADDONS]
-                p.items = []
-                for old, new, desc in RENAME:
-                    if p.name.startswith(old):
-                        p.name, p.description = p.name.replace(old, new, 1), desc
-                        break
+            # Um pacote só por show: o fã escolhe entre as experiências (transfer, jantar, camarim...), sem pacotes repetidos.
+            keep, extra = pkgs[0], pkgs[1:]
+            merged = {a["key"]: a for p in pkgs for a in (p.addons or [])}
+            for k, cents in DEFAULT_ADDONS:
+                merged.setdefault(k, {"key": k, "price_cents": cents, "sold_out": False})
+            order = [k for k, _ in DEFAULT_ADDONS]
+            keep.addons = [merged[k] for k in order if k in merged]
+            keep.items = []
+            keep.name = f"Experiências · {ev.city}"
+            keep.description = "Transfer, jantar, camarim, pré-esquenta, after e hotel: leve só o que quiser."
+            keep.transfer_details = next((p.transfer_details for p in pkgs if p.transfer_details), f"Saída 4h antes do show, retorno 1h após o encerramento ({ev.city}).")
+            for p in extra:
+                db.delete(p)
+            pkgs = [keep]
             have = db.scalar(select(func.count(m.TicketPurchase.id)).where(m.TicketPurchase.event_id == ev.id, m.TicketPurchase.kind == "experience")) or 0
             if have >= 20:
                 print(f"- {ev.city}: já tem {have} compras de experiência, pulei")

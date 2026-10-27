@@ -56,29 +56,24 @@ def main() -> None:
                 print(f"- {ev.city}: já tem pacotes, pulei")
                 continue
             agency = rnd.choice(agencies)  # cada show tem uma única agência
-            # Não se vende ingresso pelo app (a ticketeira faz isso): três pacotes de experiências por show.
+            # Não se vende ingresso pelo app (a ticketeira faz isso): um pacote por show, com transfer e as experiências.
+            # O fã leva só o transfer, só uma experiência ou várias.
             fee = rnd.choice([70, 90, 110]) * 100  # transfer
-            extras = [("jantar", 45000), ("camarim", 60000), ("pre", 12000), ("after", 18000), ("hotel", 38000)]
-            variants = [
-                ("Transfer ida e volta", "Ônibus em grupo, ida e volta.", [("transfer", fee)]),
-                ("Experiências do show", "Jantar, camarim, pré-esquenta, after e hotel: escolha as que quiser.", extras),
-                ("Transfer + experiências", "Tudo do pacote de experiências mais o ônibus em grupo.", [("transfer", fee), *extras]),
-            ]
-            for pos, (name, desc, offers) in enumerate(variants):
-                db.add(
-                    m.EventPackage(
-                        artist_id=artist.id,
-                        event_id=ev.id,
-                        agency_id=agency.id,
-                        name=f"{name} · {ev.city}",
-                        description=desc,
-                        transfer_details=f"Saída 4h antes do show, retorno 1h após o encerramento ({ev.city})." if any(k == "transfer" for k, _ in offers) else "",
-                        url=f"{agency.url}/vintage-culture/{slug(ev.city)}",
-                        items=[],
-                        addons=[{"key": k, "price_cents": cents, "sold_out": False} for k, cents in offers],
-                        position=pos,
-                    )
+            offers = [("transfer", fee), ("jantar", 45000), ("camarim", 60000), ("pre", 12000), ("after", 18000), ("hotel", 38000)]
+            db.add(
+                m.EventPackage(
+                    artist_id=artist.id,
+                    event_id=ev.id,
+                    agency_id=agency.id,
+                    name=f"Experiências · {ev.city}",
+                    description="Transfer, jantar, camarim, pré-esquenta, after e hotel: leve só o que quiser.",
+                    transfer_details=f"Saída 4h antes do show, retorno 1h após o encerramento ({ev.city}).",
+                    url=f"{agency.url}/vintage-culture/{slug(ev.city)}",
+                    items=[],
+                    addons=[{"key": k, "price_cents": cents, "sold_out": False} for k, cents in offers],
+                    position=0,
                 )
+            )
             print(f"+ {ev.city}: pacotes criados e ticketeira configurada")
         db.commit()
 
