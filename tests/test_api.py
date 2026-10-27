@@ -1007,3 +1007,30 @@ def test_lista_de_assinantes_pagina_busca_e_acoes(client, club_admin, fan):
         ats = [e["at"] for e in act["events"]]
         assert ats == sorted(ats, reverse=True)
     assert client.get(f"{base}/subscribers/nao-existe/activity", headers=club_admin).status_code == 404
+
+
+def test_pickup_admin_roleta_historico_estoque_e_ganhadores(client, club_admin, fan):
+    base = "/artists/vintage-culture"
+    ov = client.get(f"{base}/manage/pickup", headers=club_admin).json()
+    assert ov["wheel"]["isMaster"] is True and ov["prizes"] and {"spins", "spinners", "spinsLeft", "rewards"} <= set(ov["summary"])
+    assert client.get(f"{base}/manage/pickup", headers=fan).status_code == 403
+    assert client.get(f"{base}/manage/pickup", params={"club": "nao-existe"}, headers=club_admin).status_code == 404
+
+    # estoque: só a fatia que tem unidades sobrando pode sair
+    slug = ov["wheel"]["slug"]
+    prizes = client.get(f"{base}/clubs/{slug}/manage/prizes", headers=club_admin).json()
+    assert all("stock" in p for p in prizes)
+    for p in prizes:  # zera o estoque de todas, menos de uma fatia comum
+        keep = p["id"] == prizes[0]["id"]
+        client.patch(f"{base}/clubs/{slug}/manage/prizes/{p['id']}", json={"stock": 5 if keep else 0}, headers=club_admin)
+    out = client.post(f"{base}/pickup/spin", headers=fan)
+    if out.status_code == 200:  # o fã de teste pode estar sem giros
+        assert out.json()["prize"]["id"] == prizes[0]["id"]
+        hist = client.get(f"{base}/manage/pickup/history", headers=club_admin).json()
+        assert hist["pageSize"] == 10 and hist["total"] >= 1 and hist["items"][0]["prize"]
+        assert hist["items"][0]["at"] >= hist["items"][-1]["at"]
+        w = client.get(f"{base}/manage/pickup/prizes/{prizes[0]['id']}/winners", headers=club_admin).json()
+        assert w["total"] >= 1 and w["pageSize"] == 10
+    assert client.get(f"{base}/manage/pickup/prizes/nao-existe/winners", headers=club_admin).status_code == 404
+    for p in prizes:  # volta ao ilimitado
+        client.patch(f"{base}/clubs/{slug}/manage/prizes/{p['id']}", json={"stock": None}, headers=club_admin)

@@ -383,11 +383,15 @@ def spin_wheel(db: Session, club: m.FanClub, user: m.User, credit_id: str | None
     prizes = club_prizes(db, club)
     if not prizes:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "A roleta deste fã clube ainda não tem prêmios.")
+    # Fatia com estoque acabado não sai mais (sem estoque definido = ilimitada).
+    drawable = [p for p in prizes if p.stock is None or rewards.remaining(db, club, p) > 0]
+    if not drawable:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Todos os prêmios da roleta deste fã clube acabaram.")
     f = get_fandom(db, club.artist, user)
     assert f is not None
     credit = spins.take(db, f, credit_id)
-    prize = random.choice(prizes)
-    spins.use(credit, prize.label)
+    prize = random.choice(drawable)
+    spins.use(credit, prize.label, club.id, prize.id)
     if prize.is_retry:
         spins.grant(db, f, spins.RETRY)
     f.luck_points += prize.points

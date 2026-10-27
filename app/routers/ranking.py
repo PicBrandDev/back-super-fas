@@ -268,6 +268,7 @@ class AdminRankRow(RankRow):
 
 class LeaderScope(Camel):
     club_slug: str | None = None  # None = ranking geral
+    is_master: bool = False  # fã clube oficial (master)
     name: str
     leader: LeaderOut | None = None  # None = ninguém fixado: vale a ordem do placar
     top: LeaderOut | None = None  # quem lidera pelo placar de verdade (sem o ajuste da administração)
@@ -316,6 +317,7 @@ def manage_ranking(artist: ManagedArtist, db: DB):
         out.append(
             LeaderScope(
                 club_slug=c.slug if c else None,
+                is_master=bool(c and c.is_master),
                 name=c.name if c else "Ranking geral",
                 leader=_leader_out(users.get(pin)) if pinned else None,
                 top=_leader_out(users.get(rows[0][0])) if rows else None,

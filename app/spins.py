@@ -78,9 +78,11 @@ def take(db: Session, f: m.Fandom, credit_id: str | None) -> m.SpinCredit:
     return c
 
 
-def use(c: m.SpinCredit, prize_label: str) -> None:
+def use(c: m.SpinCredit, prize_label: str, club_id: str | None = None, prize_id: str | None = None) -> None:
     c.used_at = datetime.now(timezone.utc)
     c.prize_label = prize_label
+    c.club_id = club_id
+    c.prize_id = prize_id
 
 
 def out(db: Session, f: m.Fandom) -> list[SpinCreditOut]:

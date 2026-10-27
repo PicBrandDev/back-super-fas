@@ -274,6 +274,8 @@ class SpinCredit(Base):
     reason: Mapped[str] = mapped_column(String(200))
     used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     prize_label: Mapped[str] = mapped_column(String(80), default="")  # o que saiu quando foi usado
+    club_id: Mapped[str | None] = mapped_column(String(20), nullable=True, index=True)  # roleta (fã clube) em que foi usado
+    prize_id: Mapped[str | None] = mapped_column(String(20), nullable=True)  # fatia que saiu
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
 
 
@@ -457,6 +459,8 @@ class Prize(Base):
     kind: Mapped[str] = mapped_column(String(12), default="")
     percent: Mapped[int] = mapped_column(Integer, default=0)  # desconto do cupom (kind="coupon")
     instructions: Mapped[str] = mapped_column(String(200), default="")  # como retirar (se vazio, usa o texto padrão do tipo)
+    # Quantas unidades existem para dar (ex.: 100 cupons). Vazio = ilimitado. O que sobra = estoque - brindes já ganhos.
+    stock: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
 
 class Reward(Base):
@@ -473,6 +477,7 @@ class Reward(Base):
     code: Mapped[str] = mapped_column(String(12), index=True)  # código para retirar (ex.: BR-7K2M9)
     instructions: Mapped[str] = mapped_column(String(300), default="")
     coupon_code: Mapped[str] = mapped_column(String(30), default="")  # cupom gerado (kind="coupon")
+    prize_id: Mapped[str | None] = mapped_column(String(20), nullable=True)  # fatia da roleta que deu o brinde
     expires_on: Mapped[date | None] = mapped_column(Date, nullable=True)
     redeemed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)

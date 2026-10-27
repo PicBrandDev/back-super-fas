@@ -47,7 +47,7 @@ def create_for(db: Session, club: m.FanClub, user: m.User, prize: m.Prize) -> m.
     else:
         how = prize.instructions or INSTRUCTIONS.get(prize.kind, INSTRUCTIONS[""])
     reward = m.Reward(
-        artist_id=club.artist_id, club_id=club.id, user_id=user.id, label=prize.label, kind=prize.kind or "",
+        artist_id=club.artist_id, club_id=club.id, user_id=user.id, label=prize.label, kind=prize.kind or "", prize_id=prize.id,
         code=_code(db, club.artist_id, m.Reward, m.Reward.code), instructions=how, coupon_code=coupon_code, expires_on=expires,
     )
     db.add(reward)
@@ -75,3 +75,20 @@ def out(db: Session, r: m.Reward) -> RewardOut:
 def mine(db: Session, artist: m.Artist, user: m.User) -> list[m.Reward]:
     q = select(m.Reward).where(m.Reward.artist_id == artist.id, m.Reward.user_id == user.id).order_by(m.Reward.created_at.desc())
     return list(db.scalars(q))
+
+
+def won_query(club: m.FanClub, prize: m.Prize):
+    """Brindes que saíram desta fatia da roleta (os antigos, sem `prize_id`, são ligados pelo nome da fatia)."""
+    return select(m.Reward).where(
+        m.Reward.club_id == club.id,
+        (m.Reward.prize_id == prize.id) | (m.Reward.prize_id.is_(None) & (m.Reward.label == prize.label)),
+    )
+
+
+def won(db: Session, club: m.FanClub, prize: m.Prize) -> int:
+    return len(db.scalars(won_query(club, prize)).all())
+
+
+def remaining(db: Session, club: m.FanClub, prize: m.Prize) -> int | None:
+    """Quantas unidades ainda podem sair (None = ilimitado)."""
+    return None if prize.stock is None else max(0, prize.stock - won(db, club, prize))
