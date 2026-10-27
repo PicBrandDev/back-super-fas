@@ -28,8 +28,9 @@ from app.db import SessionLocal
 SLUG = os.environ.get("ARTIST", "vintage-culture")
 DRY = os.environ.get("DRY") == "1"
 # Primeiros nomes dos mocks, sem acento e em minúsculas. O que não estiver aqui alterna entre mulher e homem.
-FEMININOS = {"aline", "ana", "beatriz", "bia", "camila", "carla", "elisa", "gabi", "isabela", "julia", "katia", "luana", "marina", "olivia", "queila", "renata", "sofia", "ursula", "yasmin"}
-MASCULINOS = {"bruno", "diego", "felipe", "gabriel", "gustavo", "henrique", "joao", "lucas", "marcos", "nicolas", "paulo", "pedro", "rafael", "thiago", "tiago", "vitor", "wesley", "zeca"}
+# Mesmas listas do fotos_reais.py (os scripts rodam soltos no container e não importam um do outro).
+FEMININOS = {"aline", "ana", "beatriz", "bia", "bianca", "camila", "carla", "elisa", "gabi", "helena", "isabela", "julia", "katia", "larissa", "lu", "luana", "marina", "natalia", "olivia", "queila", "renata", "sofia", "ursula", "yasmin"}
+MASCULINOS = {"bruno", "caio", "diego", "felipe", "gabriel", "gustavo", "henrique", "joao", "lucas", "marcio", "marcos", "mateus", "nicolas", "paulo", "pedro", "rafa", "rafael", "teo", "thiago", "tiago", "vitor", "wesley", "zeca"}
 
 
 def genero(nome: str) -> str | None:

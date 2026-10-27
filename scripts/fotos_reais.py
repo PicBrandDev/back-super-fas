@@ -1,7 +1,9 @@
 """Troca as fotos de mentira dos mocks (degradês coloridos) por fotos de verdade, para a demonstração.
 
 Lê as fotos de FOTOS_DIR (padrão /tmp/fotos), em três subpastas, sempre em ordem alfabética do nome do arquivo:
-  - rostos/  fotos de perfil. `00-demo.*` vai para o usuário da apresentação (DEMO_EMAIL, padrão a conta de fã
+  - rostos/  fotos de perfil. Marque o gênero no fim do nome (`01-f.jpg` mulher, `02-m.jpg` homem): nome feminino
+             só recebe foto `-f`, masculino só `-m` (pelo primeiro nome; contas sem nome de pessoa, como Admin ou
+             Patrocinador, pegam o que sobrar). Foto sem marca serve para qualquer um. `00-demo.*` vai para o usuário da apresentação (DEMO_EMAIL, padrão a conta de fã
              juliacristinalopes2607@gmail.com). As outras vão para quem aparece nas telas, nesta ordem: contas de teste,
              donos e equipe dos fã clubes, fãs do ranking do Instagram e, por fim, os demais autores de post e comentário;
   - posts/   fotos dos posts que têm imagem (mural oficial e fã clubes), por ordem de criação do post. Se faltar foto,
@@ -26,6 +28,7 @@ não volta a ter imagem se você acrescentar fotos depois (rode os mocks de novo
 """
 
 import os
+import unicodedata
 from pathlib import Path
 
 from sqlalchemy import select
@@ -37,6 +40,24 @@ from app.db import SessionLocal
 ARTIST = os.environ.get("ARTIST", "vintage-culture")
 FOTOS_DIR = Path(os.environ.get("FOTOS_DIR", "/tmp/fotos"))
 DEMO_EMAIL = os.environ.get("DEMO_EMAIL", "")
+# Primeiros nomes dos mocks, sem acento e em minúsculas (as mesmas listas do fotos_perfil.py).
+FEMININOS = {"aline", "ana", "beatriz", "bia", "bianca", "camila", "carla", "elisa", "gabi", "helena", "isabela", "julia", "katia", "larissa", "lu", "luana", "marina", "natalia", "olivia", "queila", "renata", "sofia", "ursula", "yasmin"}
+MASCULINOS = {"bruno", "caio", "diego", "felipe", "gabriel", "gustavo", "henrique", "joao", "lucas", "marcio", "marcos", "mateus", "nicolas", "paulo", "pedro", "rafa", "rafael", "teo", "thiago", "tiago", "vitor", "wesley", "zeca"}
+
+
+def genero(nome: str) -> str | None:
+    """'f', 'm' ou None (nome que não é de pessoa ou fora das listas)."""
+    primeiro = unicodedata.normalize("NFD", nome.strip().split()[0].lower()) if nome.strip() else ""
+    primeiro = "".join(c for c in primeiro if not unicodedata.combining(c))
+    return "f" if primeiro in FEMININOS else "m" if primeiro in MASCULINOS else None
+
+
+def genero_da_foto(f: Path) -> str | None:
+    """'f' para `NN-f.jpg`, 'm' para `NN-m.jpg`, None sem marca."""
+    fim = f.stem.lower().rsplit("-", 1)[-1]
+    return fim if fim in ("f", "m") else None
+
+
 # Posts com imagem que ficam sem foto nova: "texto" (padrão) vira post só de texto; "manter" fica com a imagem atual.
 POSTS_SOBRANDO = os.environ.get("POSTS_SOBRANDO", "texto").strip().lower()
 DEMO_FALLBACK = ("juliacristinalopes2607@gmail.com", "fa@superfas.dev")
@@ -150,10 +171,30 @@ def main() -> None:
             return 3
 
         fila = sorted((u for u in users if not demo or u.id != demo.id), key=lambda u: (group(u), u.created_at, u.id))
-        for u, foto in zip(fila, rostos):
-            u.avatar_path = copy(*foto, f"real-user-{u.id}", uploads)
-        sem_rosto = fila[len(rostos):]
-        print(f"+ {min(len(fila), len(rostos))} de {len(fila)} usuários das telas ganharam rosto de verdade")
+        # Foto do gênero do primeiro nome (nunca do outro); quem não tem nome de pessoa pega o que sobrar, depois.
+        pilhas: dict[str | None, list] = {"f": [], "m": [], None: []}
+        for foto in rostos:
+            pilhas[genero_da_foto(foto[0])].append(foto)
+
+        def tira(g: str | None):
+            ordem = [g, None] if g else [None] + sorted(("f", "m"), key=lambda k: -len(pilhas[k]))
+            return next((pilhas[k].pop(0) for k in ordem if pilhas[k]), None)
+
+        com_genero = [u for u in fila if genero(u.name)]
+        recebeu = {}
+        for u in com_genero + [u for u in fila if not genero(u.name)]:
+            foto = tira(genero(u.name))
+            if foto:
+                u.avatar_path = recebeu[u.id] = copy(*foto, f"real-user-{u.id}", uploads)
+        sem_rosto = [u for u in fila if u.id not in recebeu]
+        # Quem ficou sem foto nova mas guarda uma real-user-* de uma rodada anterior perde essa foto (ela agora pode ser
+        # de outra pessoa ou do gênero errado): fica sem foto, e o fotos_perfil.py põe um retrato do gênero do nome.
+        antigas = [u for u in sem_rosto if u.avatar_path and Path(u.avatar_path).name.startswith("real-user-")]
+        for u in antigas:
+            u.avatar_path = None
+        print(f"+ {len(recebeu)} de {len(fila)} usuários das telas ganharam rosto de verdade (foto do gênero do nome)")
+        if antigas:
+            print(f"+ {len(antigas)} perderam a foto de verdade de uma rodada anterior: rode o fotos_perfil.py depois")
 
         # Posts com imagem: um por foto, na ordem; os que sobram viram só texto. Sem nenhuma foto de post (pasta vazia
         # ou ausente) os posts ficam como estão, com a foto de mock: rodar sem fotos não apaga imagem de ninguém.
@@ -176,11 +217,15 @@ def main() -> None:
 
         print("\nRESUMO")
         print(f"  rostos: {len(rostos) + (1 if demo_foto else 0)} fotos para {len(fila)} usuários + o da demo", end="")
-        if len(rostos) > len(fila):
-            print(f"  -> sobraram {len(rostos) - len(fila)} fotos")
-        elif sem_rosto:
+        sobra = sum(len(v) for v in pilhas.values())
+        if sem_rosto:
             semfoto = sum(1 for u in sem_rosto if not u.avatar_path)
-            print(f"  -> faltaram {len(sem_rosto)} fotos ({len(sem_rosto) - semfoto} ficam com a foto de mock, {semfoto} sem foto)")
+            falta = {g: sum(1 for u in sem_rosto if genero(u.name) == g) for g in ("f", "m")}
+            print(f"  -> faltaram {len(sem_rosto)} fotos ({falta['f']} de mulher, {falta['m']} de homem; {len(sem_rosto) - semfoto} ficam com a foto que tinham, {semfoto} sem foto)")
+            if sobra:
+                print(f"     (sobraram {sobra} fotos do outro gênero)")
+        elif sobra:
+            print(f"  -> sobraram {sobra} fotos")
         else:
             print("  -> na medida")
         print(f"  posts:  {len(fotos_posts)} fotos para {len(com_imagem)} posts com imagem", end="")
