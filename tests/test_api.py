@@ -1034,3 +1034,16 @@ def test_pickup_admin_roleta_historico_estoque_e_ganhadores(client, club_admin, 
     assert client.get(f"{base}/manage/pickup/prizes/nao-existe/winners", headers=club_admin).status_code == 404
     for p in prizes:  # volta ao ilimitado
         client.patch(f"{base}/clubs/{slug}/manage/prizes/{p['id']}", json={"stock": None}, headers=club_admin)
+
+
+def test_detalhes_de_post_e_de_hit_no_admin(client, club_admin, fan):
+    base = "/artists/vintage-culture"
+    drop = client.get(f"{base}/posts?kind=drop", headers=fan).json()[0]
+    d = client.get(f"{base}/manage/posts/{drop['id']}/detail", headers=club_admin).json()
+    assert d["id"] == drop["id"] and {"likes", "comments", "views", "sharesTotal", "commentList", "shares"} <= set(d)
+    assert client.get(f"{base}/manage/posts/{drop['id']}/detail", headers=fan).status_code == 403
+    assert client.get(f"{base}/manage/posts/nao-existe/detail", headers=club_admin).status_code == 404
+    track = client.get(f"{base}/tracks", headers=fan).json()[0]
+    t = client.get(f"{base}/manage/tracks/{track['id']}/detail", headers=club_admin).json()
+    assert t["id"] == track["id"] and {"likes", "views", "sharesTotal", "shares"} <= set(t)
+    assert client.get(f"{base}/manage/tracks/nao-existe/detail", headers=club_admin).status_code == 404

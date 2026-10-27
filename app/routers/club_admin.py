@@ -148,6 +148,7 @@ class TrackIn(Camel):
     release_label: str = ""
     duration_sec: int = Field(default=30, ge=1, le=600)
     votes: int = Field(default=0, ge=0)
+    views: int = Field(default=0, ge=0)
     position: int = 0
 
 

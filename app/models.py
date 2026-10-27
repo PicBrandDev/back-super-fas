@@ -544,6 +544,7 @@ class Track(Base):
     release_label: Mapped[str] = mapped_column(String(60), default="")
     duration_sec: Mapped[int] = mapped_column(Integer, default=30)
     votes: Mapped[int] = mapped_column(Integer, default=0)
+    views: Mapped[int] = mapped_column(Integer, default=0)  # vezes que a prévia foi aberta
     position: Mapped[int] = mapped_column(Integer, default=0)
 
 
