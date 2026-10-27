@@ -6,7 +6,8 @@ Lê as fotos de FOTOS_DIR (padrão /tmp/fotos), em três subpastas, sempre em or
              Patrocinador, pegam o que sobrar). Foto sem marca serve para qualquer um. `00-demo.*` vai para o usuário da apresentação (DEMO_EMAIL, padrão a conta de fã
              juliacristinalopes2607@gmail.com). As outras vão para quem aparece nas telas, nesta ordem: contas de teste,
              donos e equipe dos fã clubes, fãs do ranking do Instagram e, por fim, os demais autores de post e comentário;
-  - posts/   fotos dos posts que têm imagem (mural oficial e fã clubes), por ordem de criação do post. Se faltar foto,
+  - posts/   fotos dos posts de fãs e fã clubes que têm imagem, por ordem de criação do post. Os posts oficiais
+             (Drop News) nunca são mexidos: ficam com a foto que já têm. Se faltar foto,
              os posts que sobram viram post só de texto (nenhuma foto se repete); com POSTS_SOBRANDO=manter eles
              ficam com a imagem que já tinham (ex.: servidor que já tem fotos de palco). Sem nenhuma foto de post, os
              posts ficam como estão;
@@ -198,7 +199,8 @@ def main() -> None:
 
         # Posts com imagem: um por foto, na ordem; os que sobram viram só texto. Sem nenhuma foto de post (pasta vazia
         # ou ausente) os posts ficam como estão, com a foto de mock: rodar sem fotos não apaga imagem de ninguém.
-        com_imagem = [p for p in posts if p.image_path or p.has_image]
+        # Os posts oficiais (Drop News) ficam de fora: a foto deles é escolhida a dedo e não é trocada nem apagada aqui.
+        com_imagem = [p for p in posts if (p.image_path or p.has_image) and not p.official]
         for p, foto in zip(com_imagem, fotos_posts):
             p.image_path, p.has_image = copy(*foto, f"real-post-{p.id}", uploads), True
         sobrando = com_imagem[len(fotos_posts):] if fotos_posts else []

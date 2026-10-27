@@ -21,7 +21,7 @@ from pathlib import Path
 from sqlalchemy import select
 
 from app import models as m
-from app.carpool.models import Ride
+from app.carpool.models import Ride, RideBooking
 from app.config import get_settings
 from app.db import SessionLocal
 
@@ -63,6 +63,7 @@ def main() -> None:
             ids |= {s.user_id for s in db.scalars(select(m.ClubStaff).where(m.ClubStaff.club_id.in_(club_ids)))}
             ids |= {mb.user_id for mb in db.scalars(select(m.ClubMember).where(m.ClubMember.club_id.in_(club_ids)))}
         ids |= {r.driver_id for r in db.scalars(select(Ride).where(Ride.artist_id == artist.id))}  # motoristas das caronas
+        ids |= set(db.scalars(select(RideBooking.passenger_id).join(Ride, Ride.id == RideBooking.ride_id).where(Ride.artist_id == artist.id)))  # e passageiros
         users = sorted(db.scalars(select(m.User).where(m.User.id.in_(ids))), key=lambda u: u.id) if ids else []
         alvo = [u for u in users if not u.avatar_path or Path(u.avatar_path).name.startswith(("mock-user-", "perfil-"))]
         print(f"{len(users)} pessoas nas telas; {len(alvo)} sem foto de verdade; {len(users) - len(alvo)} com foto própria (ficam como estão)")

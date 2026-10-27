@@ -1,7 +1,7 @@
-"""Mapa das vitrines: todas as vitrines do ambiente e dos fã clubes, livres ou ocupadas, para o admin e para o patrocinador.
+"""Mapa das vitrines à venda, livres ou ocupadas, para o admin e para o patrocinador.
 
-Grupos: "entrada" (modal ao abrir o app), "roleta" (vídeo antes do giro, anúncio depois do prêmio e fatia patrocinada),
-"feed" (entre os posts do feed do cantor e dos fã clubes) e "outras" (home, evento, loja, drops).
+Só dois grupos aparecem: "entrada" (modal ao abrir o app) e "feed" (entre os posts; o feed é tratado como um só, o do
+ambiente do cantor, sem repetir o de cada fã clube). Roleta, home, evento, loja e drops não são mostradas aqui.
 """
 
 from datetime import date
@@ -95,6 +95,9 @@ def _cards(db, artist: m.Artist, admin: bool, sponsor_id: str | None) -> list[Vi
         by_slot.setdefault(c.slot_id, []).append(c)
     out: list[VitrineCard] = []
     for s in slots:
+        # Só o que se aluga de fato: a entrada do app e o feed (tratado como um só, o do ambiente, sem o de cada fã clube).
+        if s.club_id is not None or _group(s.key) not in ("entrada", "feed"):
+            continue
         live = nxt = None
         for c in sorted(by_slot.get(s.id, []), key=lambda c: (c.start or today)):
             st = campaign_status(c)
