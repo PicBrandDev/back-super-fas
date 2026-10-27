@@ -190,7 +190,8 @@ def main() -> None:
         sem_rosto = [u for u in fila if u.id not in recebeu]
         # Quem ficou sem foto nova mas guarda uma real-user-* de uma rodada anterior perde essa foto (ela agora pode ser
         # de outra pessoa ou do gênero errado): fica sem foto, e o fotos_perfil.py põe um retrato do gênero do nome.
-        antigas = [u for u in sem_rosto if u.avatar_path and Path(u.avatar_path).name.startswith("real-user-")]
+        # Sem nenhuma foto de rosto (pasta vazia ou ausente), ninguém perde a que tem.
+        antigas = [u for u in sem_rosto if rostos and u.avatar_path and Path(u.avatar_path).name.startswith("real-user-")]
         for u in antigas:
             u.avatar_path = None
         print(f"+ {len(recebeu)} de {len(fila)} usuários das telas ganharam rosto de verdade (foto do gênero do nome)")
