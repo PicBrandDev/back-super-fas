@@ -287,6 +287,8 @@ class AuthorOut(Camel):
     initial: str
     official: bool | None = None
     badge: str | None = None  # selo do autor neste fã clube (ex.: "Dono do fã clube")
+    id: str | None = None  # id do fã autor (abre o perfil público e o chat); vazio no post oficial
+    avatar: str | None = None  # foto de perfil do fã autor
 
 
 class PostOut(Camel):
@@ -318,6 +320,8 @@ def post_out(p: m.Post, artist: m.Artist) -> PostOut:
             handle=p.author.handle or "",
             initial=initial_of(p.author.name),
             badge="Dono do fã clube" if owner else None,
+            id=p.author.id,
+            avatar=p.author.avatar_path or None,
         )
     return PostOut(
         id=p.id,
