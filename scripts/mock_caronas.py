@@ -3,7 +3,7 @@
 Cria exatamente 10 caronas nos shows futuros, TODAS já com reservas pagas (Pix ou cartão):
   - 4 motoristas de teste (Lucas, Camila, Thiago, Renata) e a conta de fã de teste, que também lança uma carona;
   - 4 passageiros de teste (Ana, Bruno, Carla, Diego), no máximo uma reserva por show cada;
-  - a conta de fã de teste reserva e paga UMA vaga (na carona do Lucas, no primeiro show).
+  - a conta de fã de teste reserva e paga UMA vaga (na carona da Camila, no segundo show); no primeiro show ela só oferece, e sobra a carona do Lucas para reservar.
 Precisa de CARPOOL_ALLOW_FAKE_PAYMENT=true (padrão).
 
 Rode no servidor:
@@ -116,7 +116,7 @@ def main():
             continue
         n += 1
         passengers = [(PAX[i][0], tokens[PAX[i][0]]) for i in pax]
-        if ei == 0 and who == 0:  # a conta de fã de teste reserva a única vaga dela nesta carona
+        if ei == 1 and who == 1:  # a conta de fã de teste reserva a única vaga dela nesta carona (no show 1)
             passengers.append((FAN, t_fan))
         for j, (pe, pt) in enumerate(passengers):
             code, b = call("POST", f"/artists/{SLUG}/carpool/rides/{ride['id']}/bookings", {"seats": 1}, pt)
