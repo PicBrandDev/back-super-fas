@@ -1165,3 +1165,74 @@ def test_cada_fa_conta_no_ranking_de_um_clube_so(client, fan):
     rk = client.get("/artists/vintage-culture/ranking", headers=fan).json()
     ids = [r["userId"] for c in rk["clubs"] for r in c["top"]]
     assert len(ids) == len(set(ids))  # ninguém aparece no ranking de dois fã clubes
+
+
+def test_caronas_por_show_com_valor_retido(client, club_admin, fan):
+    from datetime import datetime, timedelta, timezone
+
+    from sqlalchemy import select
+
+    from app import models as m
+    from app.carpool.models import Ride
+    from app.db import SessionLocal
+
+    base = "/artists/vintage-culture"
+    show = (datetime.now(timezone.utc) + timedelta(days=10)).date()
+    ev = client.post(f"{base}/manage/events", headers=club_admin, json={"date": show.isoformat(), "city": "Goiânia"}).json()
+    motorista = fan  # fa@superfas.dev
+    # o passageiro é outra conta: o admin do clube (também é usuário do ambiente)
+    passageiro = club_admin
+    url = f"{base}/carpool/events/{ev['id']}/rides"
+    depart = (datetime.now(timezone.utc) + timedelta(days=5)).replace(microsecond=0).isoformat()
+
+    # validações da oferta
+    ruim = {"originCity": "Anápolis", "departAt": depart, "seats": 0, "priceCents": 5000}
+    assert client.post(url, headers=motorista, json=ruim).status_code == 422
+    passado = {"originCity": "Anápolis", "departAt": (datetime.now(timezone.utc) - timedelta(days=1)).isoformat(), "seats": 3, "priceCents": 5000}
+    assert client.post(url, headers=motorista, json=passado).status_code == 400
+    r = client.post(url, headers=motorista, json={"originCity": "Anápolis", "meetingPoint": "Posto Shell", "departAt": depart, "seats": 3, "priceCents": 5000, "car": "Gol branco"})
+    assert r.status_code == 201, r.text
+    ride = r.json()
+    assert ride["seatsLeft"] == 3 and ride["mine"] is True and ride["driver"]["name"]
+
+    # reserva: não na própria viagem, não mais vagas do que há
+    book = f"{base}/carpool/rides/{ride['id']}/bookings"
+    assert client.post(book, headers=motorista, json={"seats": 1}).status_code == 400
+    assert client.post(book, headers=passageiro, json={"seats": 4}).status_code == 409
+    b = client.post(book, headers=passageiro, json={"seats": 2})
+    assert b.status_code == 201 and b.json()["status"] == "reserved" and b.json()["amountCents"] == 10000
+    visto = client.get(url, headers=passageiro).json()[0]
+    assert visto["seatsLeft"] == 1 and visto["myBooking"]["status"] == "reserved" and visto["passengers"] == []
+    assert client.post(book, headers=passageiro, json={"seats": 1}).status_code == 400  # uma reserva por viagem
+
+    # pagamento: o valor fica retido; dá para devolver (faltam mais de 24 h)
+    pay = f"{base}/carpool/bookings/{b.json()['id']}/pay"
+    assert client.post(pay, headers=passageiro).json()["status"] == "paid"
+    assert client.post(pay, headers=passageiro).status_code == 400
+    adm = client.get(f"{base}/manage/carpool", headers=club_admin).json()
+    assert adm["heldCents"] >= 10000 and any(i["ride"]["id"] == ride["id"] for i in adm["items"])
+    assert client.get(f"{base}/carpool/me", headers=motorista).json()["offered"][0]["passengers"][0]["status"] == "paid"
+    cancel = client.post(f"{base}/carpool/bookings/{b.json()['id']}/cancel", headers=passageiro)
+    assert cancel.status_code == 200 and cancel.json()["status"] == "refunded"
+    assert client.get(url, headers=passageiro).json()[0]["seatsLeft"] == 3  # as vagas voltaram
+
+    # nova reserva, paga; só confirma depois da saída; confirma e libera ao motorista
+    b2 = client.post(book, headers=passageiro, json={"seats": 1}).json()
+    client.post(f"{base}/carpool/bookings/{b2['id']}/pay", headers=passageiro)
+    assert client.post(f"{base}/carpool/bookings/{b2['id']}/confirm", headers=passageiro).status_code == 400  # ainda não saiu
+    with SessionLocal() as db:
+        rd = db.scalar(select(Ride).where(Ride.id == ride["id"]))
+        rd.depart_at = datetime.now(timezone.utc) - timedelta(hours=2)
+        db.commit()
+    done = client.post(f"{base}/carpool/bookings/{b2['id']}/confirm", headers=passageiro)
+    assert done.status_code == 200 and done.json()["status"] == "completed"
+    assert client.get(f"{base}/manage/carpool", headers=fan).status_code == 403  # só a administração
+    assert client.get(f"{base}/carpool/events/nao-existe/rides", headers=fan).status_code == 404
+
+    # o motorista cancela uma viagem com passageiro pago: devolve o valor
+    r2 = client.post(url, headers=motorista, json={"originCity": "Trindade", "departAt": depart, "seats": 2, "priceCents": 3000}).json()
+    b3 = client.post(f"{base}/carpool/rides/{r2['id']}/bookings", headers=passageiro, json={"seats": 1}).json()
+    client.post(f"{base}/carpool/bookings/{b3['id']}/pay", headers=passageiro)
+    assert client.post(f"{base}/carpool/rides/{r2['id']}/cancel", headers=passageiro).status_code == 404  # só o motorista
+    assert client.post(f"{base}/carpool/rides/{r2['id']}/cancel", headers=motorista).json()["status"] == "cancelled"
+    assert any(x["status"] == "refunded" for x in client.get(f"{base}/carpool/me", headers=passageiro).json()["booked"])

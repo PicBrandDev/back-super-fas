@@ -21,6 +21,7 @@ from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session
 
 from . import models as m
+from .carpool import models as _carpool_models  # noqa: F401  (registra as tabelas das caronas antes do create_all)
 from .resale import models as _resale_models  # noqa: F401  (registra as tabelas da revenda antes do create_all)
 from .db import Base
 

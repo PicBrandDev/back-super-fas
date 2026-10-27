@@ -68,6 +68,9 @@ class Settings(BaseSettings):
     resale_pii_key: str = ""
     resale_pepper: str = ""
     resale_payment_provider: str = "fake"  # fake = pagamento simulado (desligue em produção quando houver gateway)
+    # Caronas por show: o pagamento é simulado até haver um gateway (a tela avisa "Simulação"); taxa da plataforma em bps (100 = 1%).
+    carpool_allow_fake_payment: bool = True
+    carpool_fee_bps: int = 0
     resale_allow_fake_payment: bool = False  # fora do SQLite (servidor), o pagamento simulado só liga com esta chave explícita
     private_upload_dir: str = ""  # se vazio: a pasta "private" ao lado do upload_dir
 
