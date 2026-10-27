@@ -43,7 +43,8 @@ class PrizeStat(Camel):
     is_retry: bool
     position: int
     stock: int | None = None  # None = ilimitado
-    won: int  # vezes que saiu
+    won: int  # vezes que saiu (unidades entregues)
+    people: int  # pessoas diferentes que ganharam
     remaining: int | None = None  # None = ilimitado
     recent: list[Winner]  # os 5 últimos
 
@@ -126,6 +127,17 @@ def _at(d: datetime) -> datetime:
     return d if d.tzinfo else d.replace(tzinfo=timezone.utc)
 
 
+def _people(db, club: m.FanClub, prize: m.Prize) -> int:
+    """Quantas pessoas diferentes ganharam a fatia."""
+    if prize.kind in NO_REWARD or prize.is_retry:
+        q = select(m.SpinCredit.user_id).where(
+            _spins_of(club), (m.SpinCredit.prize_id == prize.id) | (m.SpinCredit.prize_id.is_(None) & (m.SpinCredit.prize_label == prize.label))
+        )
+    else:
+        q = rewards.won_query(club, prize).with_only_columns(m.Reward.user_id)
+    return db.scalar(select(func.count(func.distinct(q.subquery().c.user_id)))) or 0
+
+
 def _winners(db, club: m.FanClub, prize: m.Prize, limit: int | None = None, offset: int = 0) -> tuple[int, list[Winner]]:
     """Quem ganhou a fatia: dos brindes (com código e situação) ou, nas fatias sem brinde, dos giros."""
     if prize.kind in NO_REWARD or prize.is_retry:
@@ -155,7 +167,7 @@ def pickup_overview(artist: ManagedArtist, db: DB, club: str | None = None):
         stats.append(
             PrizeStat(
                 id=p.id, label=p.label, kind=p.kind, percent=p.percent, points=p.points, is_retry=p.is_retry, position=p.position,
-                stock=p.stock, won=total, remaining=None if p.stock is None else max(0, p.stock - total), recent=recent,
+                stock=p.stock, won=total, people=_people(db, wheel, p), remaining=None if p.stock is None else max(0, p.stock - total), recent=recent,
             )
         )
     used = _spins_of(wheel)

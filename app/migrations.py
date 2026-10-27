@@ -112,6 +112,10 @@ def _pickap_to_pickup(db: Session) -> None:
         if "PicKap" in (p.text or "") or "pickap" in (p.url or ""):
             p.text, p.url = fix(p.text), fix(p.url)
             changed = True
+    for perk in db.scalars(select(m.MemberPerk)):
+        if "PicKap" in (perk.title or "") or "PicKap" in (perk.sub or ""):
+            perk.title, perk.sub = fix(perk.title), fix(perk.sub)
+            changed = True
     if changed:
         db.commit()
         log.warning("PicKap renomeado para PicKup nos dados gravados")
