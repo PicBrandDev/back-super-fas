@@ -5,6 +5,10 @@ Vintage e de cada fã clube. Só para a demonstração das telas de vitrines do 
 Só usa as artes que o projeto já tem (Coca-Cola e Spotify, em public/ads do front); nas outras marcas a tela desenha o
 banner com a cor da marca, sem logo. Os textos são de exemplo, escritos para a demonstração.
 
+As vitrines da roleta (vídeo antes do giro, anúncio depois do prêmio e fatia patrocinada) ficam todas LIVRES: o app
+ainda não tem a roleta com marcas. Se uma rodada anterior deste script reservou alguma delas, ele apaga essas reservas
+(só as das marcas de exemplo daqui; campanhas de verdade, como o vídeo do Departamento, não são tocadas).
+
 Pode rodar de novo: pula as campanhas que já existem (mesma vitrine, marca e título).
 
 Rode no servidor:
@@ -46,9 +50,6 @@ COPY = {
 # (chave da vitrine do ambiente, marca no ar, marca agendada)
 ENV_PLAN = [
     ("entrada", "Coca-Cola", "Nike"),
-    ("pickup_video", "Red Bull", None),
-    ("pickup_resgate", "Sprite", None),
-    ("pickup", "Heineken", None),
     ("mural", "Nike", None),
     ("feed_2", "Spotify", None),
     ("feed_3", None, "Adidas"),
@@ -56,6 +57,7 @@ ENV_PLAN = [
 ]
 # (sufixo da vitrine do clube, marcas por clube na ordem dos clubes)
 CLUB_BRANDS = ["Spotify", "Sprite", "Coca-Cola", "Nike", "Red Bull", "Heineken"]
+ROLETA_KEYS = {"pickup_video", "pickup_resgate", "pickup"}
 PRICE = {"entrada": 150000, "pickup_video": 220000, "pickup_resgate": 120000, "pickup": 90000, "mural": 80000, "feed_2": 70000, "feed_3": 60000, "feed_4": 50000, "home": 100000}
 
 
@@ -74,6 +76,14 @@ def main() -> None:
                 db.flush()
             sponsors[brand] = sp
         slots = {s.key: s for s in artist.ad_slots}
+        # Roleta sempre livre: apaga o que este script reservou lá numa rodada anterior.
+        mine = [sp.id for sp in sponsors.values()]
+        roleta_ids = [s.id for k, s in slots.items() if k.split(".", 1)[-1] in ROLETA_KEYS]
+        freed = 0
+        if roleta_ids:
+            for c in db.scalars(select(m.Campaign).where(m.Campaign.slot_id.in_(roleta_ids), m.Campaign.sponsor_id.in_(mine))):
+                db.delete(c)
+                freed += 1
         for key, s in slots.items():  # preço por semana nas vitrines que ainda não têm
             base = key.split(".", 1)[-1]
             if s.price_cents is None:
@@ -112,7 +122,7 @@ def main() -> None:
             if i % 3 == 0:
                 book(f"{c.slug}.home", CLUB_BRANDS[(i + 1) % len(CLUB_BRANDS)], True, i)
         db.commit()
-        print(f"pronto: {added} aluguéis de vitrine com marcas conhecidas ({len(BRANDS)} marcas).")
+        print(f"pronto: {added} aluguéis de vitrine com marcas conhecidas ({len(BRANDS)} marcas); roleta livre ({freed} reservas antigas apagadas).")
 
 
 main()
