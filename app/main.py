@@ -75,14 +75,43 @@ for r in (auth.router, fan.router, clubs.router, club_admin.router, analytics.ro
 Path(settings.upload_dir).mkdir(parents=True, exist_ok=True)
 
 
+THUMB_WIDTHS = (96, 256, 720, 1080)  # avatar pequeno, avatar grande, foto do feed, cartaz
+
+
+def _thumb(folder: Path, path: Path, width: int) -> Path:
+    """Versão reduzida da foto (JPEG, largura `width`), guardada em .thumbs para não refazer. Se algo falhar, devolve o original."""
+    out = folder / ".thumbs" / str(width) / (path.stem + ".jpg")
+    try:
+        if out.is_file() and out.stat().st_mtime >= path.stat().st_mtime:
+            return out
+        from PIL import Image, ImageOps
+
+        with Image.open(path) as im:
+            im = ImageOps.exif_transpose(im)
+            if im.width <= width:
+                return path
+            im = im.convert("RGB")
+            im.thumbnail((width, width * 4), Image.LANCZOS)
+            out.parent.mkdir(parents=True, exist_ok=True)
+            tmp = out.with_suffix(".tmp")
+            im.save(tmp, "JPEG", quality=80, optimize=True, progressive=True)
+            tmp.replace(out)
+        return out
+    except Exception:
+        return path
+
+
 @app.get("/uploads/{name}", include_in_schema=False)
-def uploaded_file(name: str):
+def uploaded_file(name: str, w: int | None = None):
     """Entrega as fotos enviadas. É uma rota comum (e não um StaticFiles montado) porque o StaticFiles dá 404
-    quando a API roda atrás de um prefixo (ROOT_PATH=/api), que é como ela sobe no servidor."""
+    quando a API roda atrás de um prefixo (ROOT_PATH=/api), que é como ela sobe no servidor.
+    Com `?w=96|256|720|1080` entrega a foto reduzida (o avatar de 32 px não precisa baixar a foto de 1 MB)."""
     folder = Path(settings.upload_dir).resolve()
     path = (folder / name).resolve()
     if path.parent != folder or name.startswith(".") or not path.is_file():
         raise HTTPException(404)
+    if w in THUMB_WIDTHS and path.suffix.lower() in (".jpg", ".jpeg", ".png", ".webp"):
+        path = _thumb(folder, path, w)
     return FileResponse(path)
 
 

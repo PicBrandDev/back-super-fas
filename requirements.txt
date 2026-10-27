@@ -10,3 +10,4 @@ python-multipart==0.0.32
 email-validator==2.3.0
 boto3==1.43.118
 cryptography==50.0.2
+Pillow==11.3.0
