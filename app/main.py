@@ -23,10 +23,18 @@ def _sync_instagram() -> None:
     from . import models as m
 
     with SessionLocal() as db:
-        artist = db.scalar(select(m.Artist).where(m.Artist.slug == get_settings().instagram_artist))
-        if artist:
-            r = instagram.sync(db, artist)
-            logging.getLogger("superfas.instagram").info("Instagram: %d posts lidos, %d novos compartilhamentos", r.found, r.verified)
+        # Um ambiente por vez: a falha de um (hashtag sem posts, limite da Meta) não impede os outros.
+        for slug in instagram.synced_slugs():
+            artist = db.scalar(select(m.Artist).where(m.Artist.slug == slug))
+            if not artist:
+                continue
+            try:
+                r = instagram.sync(db, artist)
+            except Exception:  # noqa: BLE001
+                db.rollback()
+                logging.getLogger("superfas.instagram").exception("Falha na conferência do Instagram (%s)", slug)
+                continue
+            logging.getLogger("superfas.instagram").info("Instagram %s: %d posts lidos, %d novos compartilhamentos", slug, r.found, r.verified)
 
 
 async def _instagram_loop() -> None:

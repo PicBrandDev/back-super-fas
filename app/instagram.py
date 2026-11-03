@@ -3,11 +3,15 @@
 Como funciona: a legenda sugerida pelo app leva a hashtag e um código do fã (ex.: `FS-7K2QM`). A API de busca por
 hashtag devolve os posts públicos mais recentes (últimas 24 horas) e, por privacidade, não diz quem postou:
 quem identifica o fã é o código na legenda. Cada post do Instagram pontua uma vez só (`media_id` único).
+
+Cada ambiente de artista tem a própria hashtag (`hashtag_for`) e só os ambientes configurados são conferidos
+(`instagram_artist` + `instagram_more_artists`, ver config.py).
 """
 
 import json
 import logging
 import re
+import unicodedata
 import urllib.parse
 import urllib.request
 from dataclasses import dataclass
@@ -38,6 +42,37 @@ def enabled() -> bool:
     return bool(s.instagram_enabled and s.instagram_user_id and s.instagram_access_token)
 
 
+def _more_artists() -> dict[str, str]:
+    """`instagram_more_artists` lido como {slug: hashtag} (hashtag vazia = a padrão do nome do artista)."""
+    out: dict[str, str] = {}
+    for item in get_settings().instagram_more_artists.split(","):
+        slug, _, tag = item.strip().partition(":")
+        if slug.strip():
+            out[slug.strip()] = tag.strip().lstrip("#")
+    return out
+
+
+def synced_slugs() -> list[str]:
+    """Ambientes cujo ranking o servidor confere no Instagram (o `instagram_artist` primeiro)."""
+    return list(dict.fromkeys([get_settings().instagram_artist, *_more_artists()]))
+
+
+def hashtag_for(artist: m.Artist) -> str:
+    """Hashtag do ranking do ambiente: a configurada ou "EuSouUmSuperFaDo" + o nome do artista sem espaços nem acentos."""
+    s = get_settings()
+    if artist.slug == s.instagram_artist:
+        return s.instagram_hashtag
+    if tag := _more_artists().get(artist.slug):
+        return tag
+    plain = unicodedata.normalize("NFKD", artist.name).encode("ascii", "ignore").decode()
+    return "EuSouUmSuperFaDo" + "".join(w[:1].upper() + w[1:] for w in re.findall(r"[A-Za-z0-9]+", plain))
+
+
+def verifies(artist: m.Artist) -> bool:
+    """A conferência automática no Instagram está ligada para este ambiente."""
+    return enabled() and artist.slug in synced_slugs()
+
+
 def _get(path: str, params: dict) -> dict:
     s = get_settings()
     q = urllib.parse.urlencode({**params, "access_token": s.instagram_access_token})
@@ -46,10 +81,10 @@ def _get(path: str, params: dict) -> dict:
         return json.loads(res.read().decode())
 
 
-def recent_media() -> list[dict]:
+def recent_media(hashtag: str) -> list[dict]:
     """Posts públicos recentes (24 h) com a hashtag: id, legenda e link."""
     s = get_settings()
-    tag = _get("ig_hashtag_search", {"user_id": s.instagram_user_id, "q": s.instagram_hashtag})["data"][0]["id"]
+    tag = _get("ig_hashtag_search", {"user_id": s.instagram_user_id, "q": hashtag})["data"][0]["id"]
     items: list[dict] = []
     page = _get(f"{tag}/recent_media", {"user_id": s.instagram_user_id, "fields": "id,caption,permalink,timestamp", "limit": 50})
     for _ in range(MAX_PAGES):
@@ -76,23 +111,23 @@ def share_code(db: Session, f: m.Fandom) -> str:
             return code
 
 
-def caption_for(text: str, code: str) -> str:
+def caption_for(text: str, code: str, hashtag: str) -> str:
     """Legenda sugerida: o texto do post + a hashtag do ranking + o código do fã."""
-    tag = get_settings().instagram_hashtag
-    return f"{text.strip()[:280]}\n\n#{tag} {code}"
+    return f"{text.strip()[:280]}\n\n#{hashtag} {code}"
 
 
 def sync(db: Session, artist: m.Artist, media: list[dict] | None = None) -> SyncResult:
-    """Lê os posts da hashtag e dá ponto aos fãs cujo código aparece na legenda. `media` serve para testes."""
+    """Lê os posts da hashtag do ambiente e dá ponto aos fãs cujo código aparece na legenda. `media` serve para testes."""
+    hashtag = hashtag_for(artist)
     if media is None:
-        if not enabled():
+        if not verifies(artist):
             return SyncResult(enabled=False)
         try:
-            media = recent_media()
+            media = recent_media(hashtag)
         except Exception as exc:  # noqa: BLE001
-            log.exception("Falha ao consultar a API do Instagram")
+            log.exception("Falha ao consultar a API do Instagram (%s)", artist.slug)
             return SyncResult(enabled=True, error=str(exc)[:200])
-    tag = get_settings().instagram_hashtag.lower()
+    tag = hashtag.lower()
     codes = {f.share_code.upper(): f for f in db.scalars(select(m.Fandom).where(m.Fandom.artist_id == artist.id, m.Fandom.share_code != ""))}
     out = SyncResult(enabled=True, found=len(media))
     for item in media:

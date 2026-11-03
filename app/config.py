@@ -53,8 +53,12 @@ class Settings(BaseSettings):
     instagram_enabled: bool = False
     instagram_user_id: str = ""  # id da conta profissional do Instagram
     instagram_access_token: str = ""
-    instagram_hashtag: str = "EuSouUmSuperFaDoVintage"
+    instagram_hashtag: str = "EuSouUmSuperFaDoVintage"  # hashtag do `instagram_artist`
     instagram_artist: str = "vintage-culture"  # ambiente que o ranking pontua
+    # Outros ambientes que o ranking também pontua, separados por vírgula: "slug" ou "slug:Hashtag".
+    # Sem hashtag vale "EuSouUmSuperFaDo" + o nome do artista sem espaços (Departamento -> EuSouUmSuperFaDoDepartamento).
+    # Cada ambiente é uma hashtag consultada na Meta (a conta pode consultar até 30 hashtags diferentes por semana).
+    instagram_more_artists: str = ""
     instagram_sync_minutes: int = 30  # de quanto em quanto tempo a API confere (o Instagram só devolve as últimas 24h)
     graph_api_version: str = "v21.0"
 

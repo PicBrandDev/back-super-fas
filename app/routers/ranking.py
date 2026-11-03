@@ -8,7 +8,6 @@ from fastapi import APIRouter, HTTPException, status
 
 from .. import instagram
 from .. import models as m
-from ..config import get_settings
 from ..schemas import Camel
 from ..security import DB, CurrentUser, ManagedArtist, get_club_or_404
 from .fan import FanArtist, get_fandom
@@ -161,7 +160,8 @@ def start_share(post_id: str, artist: FanArtist, user: CurrentUser, db: DB):
     db.add(share)
     db.commit()
     db.refresh(share)
-    return ShareOut(share_id=share.id, hashtag=get_settings().instagram_hashtag, code=code, caption=instagram.caption_for(post.text, code))
+    tag = instagram.hashtag_for(artist)
+    return ShareOut(share_id=share.id, hashtag=tag, code=code, caption=instagram.caption_for(post.text, code, tag))
 
 
 @router.post("/artists/{slug}/tracks/{track_id}/share", response_model=ShareOut, status_code=201)
@@ -178,7 +178,8 @@ def start_track_share(track_id: str, artist: FanArtist, user: CurrentUser, db: D
     db.commit()
     db.refresh(share)
     text = f"{track.title}" + (f" · {track.meta}" if track.meta else "")
-    return ShareOut(share_id=share.id, hashtag=get_settings().instagram_hashtag, code=code, caption=instagram.caption_for(text, code))
+    tag = instagram.hashtag_for(artist)
+    return ShareOut(share_id=share.id, hashtag=tag, code=code, caption=instagram.caption_for(text, code, tag))
 
 
 @router.post("/artists/{slug}/shares/{share_id}/claim", response_model=ClaimOut)
@@ -269,7 +270,7 @@ def ranking(artist: FanArtist, user: CurrentUser, db: DB):
             )
         )
     db.commit()
-    return RankingOut(hashtag=get_settings().instagram_hashtag, my_code=code, auto_verify=instagram.enabled(), me=my_me, top=top, clubs=clubs)
+    return RankingOut(hashtag=instagram.hashtag_for(artist), my_code=code, auto_verify=instagram.verifies(artist), me=my_me, top=top, clubs=clubs)
 
 
 @router.post("/artists/{slug}/manage/instagram/sync", response_model=SyncOut)

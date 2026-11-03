@@ -835,6 +835,60 @@ def test_ranking_fa_super_com_instagram_simulado(client, club_admin, fan, monkey
     assert client.post(f"{base}/manage/instagram/sync", headers=fan).status_code == 403
 
 
+def test_ranking_instagram_em_varios_ambientes(client, master, fan, monkeypatch):
+    from sqlalchemy import select
+
+    from app import instagram, main, models as m
+    from app.config import get_settings
+    from app.db import SessionLocal
+
+    def more_artists(value: str) -> None:
+        monkeypatch.setenv("INSTAGRAM_MORE_ARTISTS", value)
+        get_settings.cache_clear()  # as configurações ficam em cache
+
+    r = client.post("/admin/fan-clubs", headers=master, json={"name": "Departamento", "instagram": "@departamento____", "template": "vc", "invites": []})
+    assert r.status_code == 201, r.text
+    assert client.patch("/admin/fan-clubs/departamento", headers=master, json={"status": "active"}).status_code == 200
+
+    # cada ambiente tem a sua hashtag; por padrão o servidor só confere o Vintage
+    rank = client.get("/artists/departamento/ranking", headers=fan).json()
+    assert rank["hashtag"] == "EuSouUmSuperFaDoDepartamento" and rank["autoVerify"] is False
+    assert client.get("/artists/vintage-culture/ranking", headers=fan).json()["hashtag"] == "EuSouUmSuperFaDoVintage"
+    assert instagram.synced_slugs() == ["vintage-culture"]
+    code = rank["myCode"]
+    assert code != client.get("/artists/vintage-culture/ranking", headers=fan).json()["myCode"]  # um código por ambiente
+
+    try:
+        more_artists("departamento, outro:#HashDoOutro")
+        assert instagram.synced_slugs() == ["vintage-culture", "departamento", "outro"]
+        media = [
+            {"id": "dp-1", "caption": f"#EuSouUmSuperFaDoVintage {code}"},  # hashtag de outro ambiente: não conta aqui
+            {"id": "dp-2", "caption": f"Bora! #eusouumsuperfadodepartamento {code}", "permalink": "https://instagram.com/p/dp"},
+        ]
+        with SessionLocal() as db:
+            vc = db.scalar(select(m.Artist).where(m.Artist.slug == "vintage-culture"))
+            dp = db.scalar(select(m.Artist).where(m.Artist.slug == "departamento"))
+            assert instagram.sync(db, vc, media).verified == 0  # o código do Departamento não pontua no Vintage
+            assert instagram.sync(db, dp, media).verified == 1
+            share = db.scalar(select(m.InstagramShare).where(m.InstagramShare.media_id == "dp-2"))
+            assert share.artist_id == dp.id and share.status == "verified"
+        assert client.get("/artists/departamento/ranking", headers=fan).json()["me"]["shares"] == 1
+
+        # hashtag própria configurada
+        more_artists("departamento:TroubleDancing")
+        assert client.get("/artists/departamento/ranking", headers=fan).json()["hashtag"] == "TroubleDancing"
+
+        # o loop do servidor confere cada ambiente configurado que existe (o "outro" não existe e fica de fora)
+        more_artists("departamento, outro")
+        seen: list[str] = []
+        monkeypatch.setattr(instagram, "sync", lambda db, artist, media=None: seen.append(artist.slug) or instagram.SyncResult(enabled=True))
+        main._sync_instagram()
+        assert seen == ["vintage-culture", "departamento"]
+    finally:
+        monkeypatch.delenv("INSTAGRAM_MORE_ARTISTS", raising=False)
+        get_settings.cache_clear()
+
+
 def test_perfil_do_fa(client, fan):
     p = client.get("/auth/profile", headers=fan)
     assert p.status_code == 200
