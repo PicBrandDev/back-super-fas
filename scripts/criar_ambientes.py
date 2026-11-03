@@ -36,7 +36,10 @@ def slug(nome):
 
 
 def call(method, path, body=None, token=None):
-    h = {"content-type": "application/json"} if body is not None else {}
+    # O Cloudflare do servidor bloqueia o User-Agent padrão do Python (erro 1010).
+    h = {"User-Agent": "superfas-scripts/1.0"}
+    if body is not None:
+        h["content-type"] = "application/json"
     if token:
         h["Authorization"] = "Bearer " + token
     req = urllib.request.Request(BASE + path, data=json.dumps(body).encode() if body is not None else None, headers=h, method=method)
