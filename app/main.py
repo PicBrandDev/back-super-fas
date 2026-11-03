@@ -4,9 +4,9 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, JSONResponse, Response
 
-from . import instagram
+from . import instagram, uploads
 from .config import DEV_SECRET, get_settings
 from .db import SessionLocal, engine
 from .migrations import upgrade
@@ -106,6 +106,9 @@ def uploaded_file(name: str, w: int | None = None):
     """Entrega as fotos enviadas. É uma rota comum (e não um StaticFiles montado) porque o StaticFiles dá 404
     quando a API roda atrás de um prefixo (ROOT_PATH=/api), que é como ela sobe no servidor.
     Com `?w=96|256|720|1080` entrega a foto reduzida (o avatar de 32 px não precisa baixar a foto de 1 MB)."""
+    got = uploads.fetch(name, w if w in THUMB_WIDTHS else None)
+    if got:
+        return Response(got[0], media_type=got[1], headers={"Cache-Control": "public, max-age=31536000, immutable"})
     folder = Path(settings.upload_dir).resolve()
     path = (folder / name).resolve()
     if path.parent != folder or name.startswith(".") or not path.is_file():

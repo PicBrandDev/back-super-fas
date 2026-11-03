@@ -1,7 +1,6 @@
 """Portal do patrocinador: as campanhas da própria marca."""
 
 from datetime import date
-from pathlib import Path
 from typing import Annotated
 from urllib.parse import urlparse
 
@@ -9,8 +8,7 @@ from fastapi import APIRouter, File, Form, HTTPException, UploadFile, status
 from sqlalchemy import select
 
 from .. import models as m
-from ..config import get_settings
-from ..models import new_id
+from .. import uploads
 from ..schemas import CampaignOut, SponsorOut, campaign_out, sponsor_out
 from ..security import DB, SponsorUser, get_artist_or_404
 
@@ -24,11 +22,7 @@ VIDEO_SLOTS = {"pickup_video"}  # vitrines que exigem vídeo (link ou arquivo)
 
 
 def _save_upload(data: bytes, ext: str) -> str:
-    folder = Path(get_settings().upload_dir)
-    folder.mkdir(parents=True, exist_ok=True)
-    name = f"{new_id()}{ext}"
-    (folder / name).write_bytes(data)
-    return f"/uploads/{name}"
+    return uploads.save_bytes(data, ext)
 
 
 def _check_video_url(v: str) -> str:

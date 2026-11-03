@@ -63,6 +63,11 @@ class Settings(BaseSettings):
 
     # Onde ficam as artes enviadas pelos patrocinadores.
     upload_dir: str = "./uploads"
+    # Bucket S3 das fotos e artes enviadas (conta/chaves próprias, separadas do Photo Finder). Vazio = grava em upload_dir.
+    uploads_s3_bucket: str = ""
+    uploads_aws_region: str = "sa-east-1"
+    uploads_aws_access_key_id: str = ""
+    uploads_aws_secret_access_key: str = ""
     # Revenda de ingressos: chave (Fernet, base64 de 32 bytes) que cifra CPF, telefone e códigos dos ingressos; se vazia, deriva do
     # JWT_SECRET (troque em produção). O pepper separa o hash do CPF. Provas dos ingressos ficam fora do /uploads público.
     resale_pii_key: str = ""

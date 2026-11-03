@@ -9,9 +9,9 @@ from sqlalchemy import select
 
 from .. import models as m
 from .. import rekognition
-from ..config import get_settings
 from ..schemas import Camel
 from ..security import DB, CurrentUser, ManagedArtist, is_env_admin
+from .. import uploads
 from ..uploads import MAX_IMAGE_BYTES, save_image
 from .fan import FanArtist, _event
 
@@ -49,7 +49,10 @@ def photo_out(p: m.EventPhoto) -> PhotoOut:
 
 
 def _file_bytes(path: str) -> bytes:
-    return (Path(get_settings().upload_dir) / Path(path).name).read_bytes()
+    data = uploads.read_bytes(Path(path).name)
+    if data is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Foto não encontrada.")
+    return data
 
 
 def _index(p: m.EventPhoto) -> None:
