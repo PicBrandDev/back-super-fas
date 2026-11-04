@@ -310,6 +310,7 @@ class ClubRef(Camel):
     slug: str
     name: str
     avatar: str | None = None  # foto de perfil do fã clube
+    is_master: bool = False  # fã clube oficial do artista (leva o selo)
 
 
 class InviteOut(Camel):
@@ -408,7 +409,7 @@ def post_out(p: m.Post, artist: m.Artist) -> PostOut:
         image={"src": p.image_path, "alt": f"Foto do post de {artist.name}"} if p.image_path else None,
         quote=p.quote or None,
         url=p.url or None,
-        club=ClubRef(slug=p.club.slug, name=p.club.name, avatar=p.club.avatar_path or None) if p.club else None,
+        club=ClubRef(slug=p.club.slug, name=p.club.name, avatar=p.club.avatar_path or None, is_master=p.club.is_master) if p.club else None,
         likes=p.likes,
         comments=p.comments,
         reposts=p.reposts,

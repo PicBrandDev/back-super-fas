@@ -295,7 +295,7 @@ def public_profile(user_id: str, artist: FanArtist, user: CurrentUser, db: DB):
         handle=u.handle or None,
         avatar=u.avatar_path or None,
         verified=is_club_owner(u),
-        club=ClubRef(slug=club.slug, name=club.name, avatar=club.avatar_path or None) if club else None,
+        club=ClubRef(slug=club.slug, name=club.name, avatar=club.avatar_path or None, is_master=club.is_master) if club else None,
         points=next((row[3] for row in board if row[0] == u.id), 0.0),
         rank=rank,
         is_me=u.id == user.id,

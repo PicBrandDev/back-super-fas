@@ -51,6 +51,7 @@ class ClubBoard(Camel):
     slug: str
     name: str
     avatar: str | None = None
+    is_master: bool = False  # fã clube oficial do artista (leva o selo e vem primeiro)
     ranked: int  # quantos membros do fã clube já têm compartilhamento confirmado
     me: MyRank | None = None  # None quando o fã não é membro deste fã clube
     top: list[RankRow]
@@ -255,6 +256,7 @@ def ranking(artist: FanArtist, user: CurrentUser, db: DB):
                 slug=c.slug,
                 name=c.name,
                 avatar=c.avatar_path or None,
+                is_master=c.is_master,
                 ranked=len(rows),
                 me=MyRank(position=mine_c[0] if mine_c else None, shares=mine_c[1] if mine_c else 0, points=mine_c[2] if mine_c else 0.0, pending=pending or 0) if user.id in member_ids else None,
                 top=[
