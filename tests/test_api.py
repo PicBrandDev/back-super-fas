@@ -1115,7 +1115,7 @@ def test_vitrines_do_app_em_ambiente_novo(client, master):
     assert not {"evento", "drops", "feed_2", "feed_3", "feed_4"} & set(slots)  # saíram do catálogo
     assert slots["mural"]["where"] == "Mural · um anúncio a cada 1 post"
     assert slots["pickup_video"]["name"] == "Roleta · vídeo antes de girar"
-    assert slots["pickup_resgate"]["name"] == "Roleta · vídeo ao pegar o brinde"
+    assert slots["pickup_resgate"]["name"] == "Roleta · anúncio ao pegar o brinde"
 
 
 def test_migracao_cria_vitrines_que_faltam():
@@ -1358,10 +1358,12 @@ def test_vitrines_da_roleta_da_loja_e_das_noticias_chegam_ao_fa(client, fan, spo
     assert ads["news"]["title"] == "Anúncio noticias" and ads["shop"]["title"] == "Anúncio loja"
     assert ads["shopPurchase"]["title"] == "Anúncio loja_compra"
     assert ads["pickupClaim"]["videoUrl"] == "https://cdn.exemplo.com/v.mp4"
-    # a vitrine de vídeo ao pegar o brinde exige vídeo
+    # só a vitrine de vídeo antes de girar exige vídeo; ao pegar o brinde vale uma arte (ou um vídeo)
     form = {"club": "vintage-culture", "slot": "pickup_resgate", "brand": "Marca", "title": "T", "text": "t", "link": "https://x.com",
             "start": today.isoformat(), "end": (today + timedelta(days=7)).isoformat()}
     r = client.post("/sponsor/campaigns", headers=sponsor, data=form)
+    assert r.status_code == 201, r.text
+    r = client.post("/sponsor/campaigns", headers=sponsor, data={**form, "slot": "pickup_video"})
     assert r.status_code == 400 and "vídeo" in r.json()["detail"]
     # módulo de anúncios desligado: nada chega ao fã
     client.patch("/admin/fan-clubs/vintage-culture", headers=master, json={"modules": {"ads": False}})

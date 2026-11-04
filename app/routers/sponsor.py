@@ -18,7 +18,7 @@ ART_TYPES = {"image/jpeg": ".jpg", "image/png": ".png"}
 MAX_ART_BYTES = 5 * 1024 * 1024
 VIDEO_TYPES = {"video/mp4": ".mp4", "video/webm": ".webm"}
 MAX_VIDEO_BYTES = 50 * 1024 * 1024
-VIDEO_SLOTS = {"pickup_video", "pickup_resgate"}  # vitrines que exigem vídeo (link ou arquivo)
+VIDEO_SLOTS = {"pickup_video"}  # vitrines que exigem vídeo (link ou arquivo); "pickup_resgate" aceita arte ou vídeo
 
 
 def _save_upload(data: bytes, ext: str) -> str:

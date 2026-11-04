@@ -52,7 +52,7 @@ DEFAULT_AD_SLOTS = [
     ("pickup_3", "Roleta · camada 3", "Roleta · terceira camada, uma fatia com a marca e o prêmio", "Logo + prêmio ou cupom", 18, 44),
     ("pickup_4", "Roleta · camada 4", "Roleta · quarta camada, uma fatia com a marca e o prêmio", "Logo + prêmio ou cupom", 18, 44),
     ("pickup_video", "Roleta · vídeo antes de girar", "Roleta · vídeo obrigatório antes de girar", "Vídeo até 60 s (MP4) + título + link", 10, 76),
-    ("pickup_resgate", "Roleta · vídeo ao pegar o brinde", "Roleta · vídeo quando o fã toca para pegar o brinde", "Vídeo até 60 s (MP4) + título + link", 10, 76),
+    ("pickup_resgate", "Roleta · anúncio ao pegar o brinde", "Roleta · janela quando o fã toca para pegar o brinde", "Arte + título + texto + link (ou vídeo)", 50, 34),
     # Loja
     ("loja", "Loja · em cima da lojinha", "Loja · topo da página, acima dos produtos", "Banner 16:9 + link", 16, 20),
     ("loja_compra", "Loja · depois da compra", "Loja · tela de pedido confirmado, depois de comprar a camiseta", "Arte + título + texto + link", 40, 30),
