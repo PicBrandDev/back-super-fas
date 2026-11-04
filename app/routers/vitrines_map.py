@@ -1,7 +1,7 @@
 """Mapa das vitrines à venda, livres ou ocupadas, para o admin e para o patrocinador.
 
-Só dois grupos aparecem: "entrada" (modal ao abrir o app) e "feed" (entre os posts; o feed é tratado como um só, o do
-ambiente do cantor, sem repetir o de cada fã clube). Roleta, home, evento, loja e drops não são mostradas aqui.
+Quatro grupos, todos do ambiente do cantor: "entrada" (modal ao abrir o app e card do Início), "feed" (Mural, fã clubes e
+notícias), "roleta" (4 camadas e os 2 vídeos) e "loja" (topo da lojinha e depois da compra).
 """
 
 from datetime import date
@@ -15,8 +15,7 @@ from ..security import DB, ManagedArtist, SponsorUser, get_artist_or_404
 
 router = APIRouter(tags=["Mapa das vitrines"])
 
-GROUP_ORDER = {"entrada": 0, "roleta": 1, "feed": 2, "outras": 3}
-ROLETA_KEYS = {"pickup_video", "pickup_resgate", "pickup"}
+GROUP_ORDER = {"entrada": 0, "feed": 1, "roleta": 2, "loja": 3, "outras": 4}
 
 
 class Booking(Camel):
@@ -39,7 +38,7 @@ class VitrineCard(Camel):
     name: str
     where: str
     format: str
-    group: str  # entrada | roleta | feed | outras
+    group: str  # entrada | feed | roleta | loja | outras
     club_slug: str | None = None  # None = ambiente do cantor
     club_name: str | None = None
     price_cents_per_week: int | None = None
@@ -57,12 +56,14 @@ class VitrinesMap(Camel):
 
 def _group(key: str) -> str:
     base = key.split(".", 1)[-1]
-    if base == "entrada":
+    if base in ("entrada", "home"):
         return "entrada"
-    if base in ROLETA_KEYS:
+    if base.startswith("pickup"):
         return "roleta"
-    if base == "mural" or base.startswith("feed"):
+    if base in ("mural", "feed_clubes", "noticias"):
         return "feed"
+    if base in ("loja", "loja_compra"):
+        return "loja"
     return "outras"
 
 
@@ -95,8 +96,8 @@ def _cards(db, artist: m.Artist, admin: bool, sponsor_id: str | None) -> list[Vi
         by_slot.setdefault(c.slot_id, []).append(c)
     out: list[VitrineCard] = []
     for s in slots:
-        # Só o que se aluga de fato: a entrada do app e o feed (tratado como um só, o do ambiente, sem o de cada fã clube).
-        if s.club_id is not None or _group(s.key) not in ("entrada", "feed"):
+        # Só as vitrines do ambiente do cantor (as de cada fã clube não são alugadas separadamente), e só as do catálogo.
+        if s.club_id is not None or _group(s.key) == "outras":
             continue
         live = nxt = None
         for c in sorted(by_slot.get(s.id, []), key=lambda c: (c.start or today)):

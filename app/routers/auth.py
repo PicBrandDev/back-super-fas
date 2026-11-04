@@ -4,7 +4,7 @@ from fastapi import APIRouter, File, HTTPException, UploadFile, status
 from sqlalchemy import select
 
 from .. import models as m
-from ..schemas import AddressIn, ChangePasswordIn, LoginIn, ProfileOut, RegisterIn, SessionUser, TokenOut, profile_out, session_user
+from ..schemas import AddressIn, ChangePasswordIn, LoginIn, NameIn, ProfileOut, RegisterIn, SessionUser, TokenOut, profile_out, session_user
 from ..security import DB, CurrentUser, create_token, hash_password, master_club, verify_password
 from ..uploads import save_image
 
@@ -65,6 +65,15 @@ def register(body: RegisterIn, db: DB):
 
 @router.get("/me", response_model=SessionUser)
 def me(user: CurrentUser):
+    return session_user(user)
+
+
+@router.patch("/me", response_model=SessionUser)
+def rename_me(body: NameIn, user: CurrentUser, db: DB):
+    """Troca o nome de quem está logado."""
+    user.name = body.name.strip()
+    db.commit()
+    db.refresh(user)
     return session_user(user)
 
 

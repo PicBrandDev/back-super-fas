@@ -453,10 +453,10 @@ def club_home_ad(club: FanClubDep, db: DB):
 
 @router.get("/artists/{slug}/clubs/{club}/ads/feed", response_model=list[FeedAdOut])
 def club_feed_ads(club: FanClubDep, db: DB):
-    """Posts patrocinados do feed do fã clube: `{slug}.mural` (depois do 4º post), `.feed_2` (8º) e `.feed_3` (12º)."""
-    from .fan import feed_ads
+    """O post patrocinado do feed do fã clube: depois de cada 2 posts (vitrine "feed_clubes" do ambiente)."""
+    from .fan import CLUBS_EVERY, feed_ads
 
-    return [a for a in feed_ads(db, club.artist, club) if a.position <= 12]
+    return feed_ads(db, club.artist, "feed_clubes", CLUBS_EVERY)
 
 
 @router.get("/artists/{slug}/clubs/{club}/campaigns", response_model=list[CampaignOut])

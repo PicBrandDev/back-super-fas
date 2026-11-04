@@ -11,9 +11,18 @@ class Base(DeclarativeBase):
 
 
 def make_engine(url: str):
-    kwargs: dict = {"pool_pre_ping": True}
+    kwargs: dict = {}
     if url.startswith("sqlite"):
         kwargs["connect_args"] = {"check_same_thread": False}
+    else:
+        # Banco em outra máquina: cada ida e volta custa tempo, e o pre_ping manda um SELECT 1 extra a cada requisição.
+        # Em vez dele, as conexões são renovadas a cada 4 minutos (antes de o banco derrubar as ociosas) e o TCP avisa se cair.
+        kwargs.update(
+            pool_recycle=240,
+            pool_size=10,
+            max_overflow=10,
+            connect_args={"keepalives": 1, "keepalives_idle": 30, "keepalives_interval": 10, "keepalives_count": 3},
+        )
     return create_engine(url, **kwargs)
 
 

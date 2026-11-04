@@ -36,37 +36,38 @@ MODULES = ("mural", "agenda", "pickup", "loja", "drops", "photo", "ads", "resale
 # Módulos de cada fã clube novo: todos ligados, menos a revenda (saiu do app e fica escondida até segunda ordem).
 DEFAULT_MODULES = {**{k: True for k in MODULES}, "resale": False}
 
-# Texto antigo do "onde" da vitrine do Mural (a subida da API troca pelo novo se ninguém editou).
-OLD_MURAL_WHERE = "Mural · aba Galera, a cada [n] posts"
-MURAL_WHERE = "Mural · post pequeno entre os cartazes, a cada 4"
-
-# key, nome, onde, formato, diagrama (top, altura)
+# key, nome, onde, formato, diagrama (top, altura em px de um celular de 96 px de altura)
+# O catálogo das vitrines à venda em cada ambiente de cantor. A key é fixa: ela liga a vitrine ao lugar do app.
 DEFAULT_AD_SLOTS = [
-    ("home", "Card da Home", "Início · logo acima do Drop News", "Arte + título + texto + link", 20, 16),
-    ("mural", "Post patrocinado no Mural", MURAL_WHERE, "Post com imagem + link", 28, 24),
-    ("evento", "Patrocínio de evento", "Tela do evento · faixa acima de Onde comprar", "Logo + texto + link", 58, 12),
-    ("pickup", "Prêmio patrocinado no PicKup", "Roleta · uma fatia com a marca e o prêmio", "Logo + prêmio ou cupom", 18, 44),
-    ("loja", "Banner da Loja", "Loja · topo da página", "Banner 16:9 + link", 16, 20),
-    ("drops", "“Apresenta” no Drops Hits", "Player de prévias · “[Marca] apresenta”", "Logo", 22, 10),
-    # Anúncios dentro do app (GET /artists/{slug}/ads/in-app)
-    ("entrada", "Anúncio de entrada", "Ao abrir o app · modal logo após o login", "Arte + título + texto + link", 22, 52),
-    ("pickup_video", "Vídeo antes do giro", "Roleta · vídeo de 30 s obrigatório antes de girar", "Vídeo até 60 s (MP4) + título + link", 10, 76),
-    ("pickup_resgate", "Anúncio no resgate do prêmio", "Roleta · modal quando o fã ganha um prêmio", "Arte + título + texto + link", 26, 44),
-    # Mais posições entre os posts do feed do cantor (a "mural" é a 1ª, a cada 4 posts)
-    ("feed_2", "Feed do Vintage · posição 2", "Feed · entre os posts, depois do 8º", "Post com imagem + link", 44, 24),
-    ("feed_3", "Feed do Vintage · posição 3", "Feed · entre os posts, depois do 12º", "Post com imagem + link", 60, 24),
-    ("feed_4", "Feed do Vintage · posição 4", "Feed · entre os posts, depois do 16º", "Post com imagem + link", 76, 20),
+    # Entrada e Início
+    ("entrada", "Modal de entrada do app", "Ao abrir o app · modal logo depois do login", "Arte + título + texto + link", 22, 52),
+    ("home", "Início · abaixo do primeiro post", "Início · logo abaixo do primeiro card da tela", "Arte + título + texto + link", 24, 16),
+    # Feeds
+    ("mural", "Mural · depois de cada post", "Mural · um anúncio a cada 1 post", "Post com imagem + link", 36, 18),
+    ("feed_clubes", "Fã clubes · a cada 2 posts", "Feed de cada fã clube e Comunidade filtrada por clube · um anúncio a cada 2 posts", "Post com imagem + link", 50, 18),
+    ("noticias", "Notícias · post aleatório", "Comunidade · um post patrocinado em posição aleatória entre as notícias", "Post com imagem + link", 62, 18),
+    # Roleta (PicKup da sorte)
+    ("pickup", "Roleta · camada 1", "Roleta · primeira camada, uma fatia com a marca e o prêmio", "Logo + prêmio ou cupom", 18, 44),
+    ("pickup_2", "Roleta · camada 2", "Roleta · segunda camada, uma fatia com a marca e o prêmio", "Logo + prêmio ou cupom", 18, 44),
+    ("pickup_3", "Roleta · camada 3", "Roleta · terceira camada, uma fatia com a marca e o prêmio", "Logo + prêmio ou cupom", 18, 44),
+    ("pickup_4", "Roleta · camada 4", "Roleta · quarta camada, uma fatia com a marca e o prêmio", "Logo + prêmio ou cupom", 18, 44),
+    ("pickup_video", "Roleta · vídeo antes de girar", "Roleta · vídeo obrigatório antes de girar", "Vídeo até 60 s (MP4) + título + link", 10, 76),
+    ("pickup_resgate", "Roleta · vídeo ao pegar o brinde", "Roleta · vídeo quando o fã toca para pegar o brinde", "Vídeo até 60 s (MP4) + título + link", 10, 76),
+    # Loja
+    ("loja", "Loja · em cima da lojinha", "Loja · topo da página, acima dos produtos", "Banner 16:9 + link", 16, 20),
+    ("loja_compra", "Loja · depois da compra", "Loja · tela de pedido confirmado, depois de comprar a camiseta", "Arte + título + texto + link", 40, 30),
 ]
+
+# Vitrines que existiram e saíram do catálogo (o script scripts/atualizar_vitrines.py as remove, com --apply).
+RETIRED_ENV_SLOTS = ("evento", "drops", "feed_2", "feed_3", "feed_4")
+RETIRED_CLUB_SLOTS = ("mural", "feed_2", "feed_3")  # o feed dos clubes agora é a vitrine "feed_clubes" do ambiente
 
 NEW_CLUB_COLORS = ["#2F5BD3", "#1F7A4D", "#7A3FB8", "#14171C"]
 
 # Vitrines de cada fã clube (a key final fica "{slug do clube}.{key}").
 CLUB_AD_SLOTS = [
     ("home", "Card do fã clube", "Página do fã clube · topo", "Arte + título + texto + link", 20, 16),
-    ("mural", "Post patrocinado no mural do clube", "Mural do fã clube · entre os posts da galera", "Post com imagem + link", 28, 24),
     ("pickup", "Fatia patrocinada no PicKup do clube", "Roleta do fã clube · uma fatia com a marca", "Logo + prêmio ou cupom", 18, 44),
-    ("feed_2", "Feed do clube · posição 2", "Feed do fã clube · entre os posts, depois do 8º", "Post com imagem + link", 44, 24),
-    ("feed_3", "Feed do clube · posição 3", "Feed do fã clube · entre os posts, depois do 12º", "Post com imagem + link", 60, 24),
 ]
 
 MAX_CLUB_STAFF = 10  # por fã clube: 1 dono + ajudantes

@@ -111,6 +111,10 @@ class SessionUser(Camel):
     avatar: str | None = None  # foto de perfil
 
 
+class NameIn(Camel):
+    name: str = Field(min_length=2, max_length=120)
+
+
 class TokenOut(Camel):
     token: str
     user: SessionUser
@@ -190,6 +194,15 @@ def slot_occupied(db: Session, slot: m.AdSlot) -> bool:
     """Ocupada = tem campanha aprovada no ar hoje."""
     q = select(m.Campaign).where(m.Campaign.slot_id == slot.id, m.Campaign.status == "approved")
     return any(campaign_status(c) == "live" for c in db.scalars(q))
+
+
+def slot_occupant(db: Session, slot: m.AdSlot) -> str | None:
+    """Nome do patrocinador da campanha aprovada e no ar hoje (None = vitrine livre)."""
+    q = select(m.Campaign).where(m.Campaign.slot_id == slot.id, m.Campaign.status == "approved")
+    for c in db.scalars(q):
+        if campaign_status(c) == "live":
+            return c.brand or c.sponsor.brand or c.sponsor.email
+    return None
 
 
 def artists_out(db: Session, artists: list[m.Artist]) -> list[ArtistOut]:
@@ -530,9 +543,10 @@ class HomeAdOut(Camel):
 
 
 class FeedAdOut(HomeAdOut):
-    """Post patrocinado do feed: depois do 4º, 8º, 12º ou 16º post."""
+    """Post patrocinado do feed: aparece depois de cada `every` posts (1 no Mural, 2 nos fã clubes)."""
 
-    position: int
+    position: int  # o primeiro post depois do qual o anúncio entra (igual a `every`)
+    every: int = 1
 
 
 class InAppAdOut(Camel):
@@ -552,7 +566,11 @@ class InAppAdsOut(Camel):
     entry: InAppAdOut | None = None  # modal ao abrir o app (vitrine "entrada")
     pickup_video: InAppAdOut | None = None  # vídeo obrigatório antes do giro ("pickup_video")
     pickup_claim: InAppAdOut | None = None  # modal ao ganhar um prêmio ("pickup_resgate")
-    feed: InAppAdOut | None = None  # post pequeno entre os cartazes do Mural ("mural")
+    feed: InAppAdOut | None = None  # post patrocinado do Mural, depois de cada post ("mural")
+    news: InAppAdOut | None = None  # post patrocinado em posição aleatória entre as notícias da Comunidade ("noticias")
+    shop: InAppAdOut | None = None  # banner em cima da lojinha ("loja")
+    shop_purchase: InAppAdOut | None = None  # depois da compra da camiseta ("loja_compra")
+    pickup_layers: list[InAppAdOut] = Field(default_factory=list)  # camadas da roleta, da 1ª à 4ª ("pickup", "pickup_2".."pickup_4"); camada livre fica de fora
 
 
 class PerkOut(Camel):
@@ -697,12 +715,14 @@ class AdSlotOut(Camel):
     price_label: str
     price_cents: int | None = None
     occupied: bool
+    occupied_by: str | None = None  # patrocinador que ocupa a vitrine hoje
     active: bool
     diagram: dict
 
 
 def ad_slot_out(db: Session, s: m.AdSlot) -> AdSlotOut:
     price = f"{brl(s.price_cents)} / semana"
+    occupant = slot_occupant(db, s)
     return AdSlotOut(
         id=s.key,
         name=s.name,
@@ -710,7 +730,8 @@ def ad_slot_out(db: Session, s: m.AdSlot) -> AdSlotOut:
         format=s.format,
         price_label=price,
         price_cents=s.price_cents,
-        occupied=slot_occupied(db, s),
+        occupied=occupant is not None,
+        occupied_by=occupant,
         active=s.active,
         diagram={"top": s.diagram_top, "height": s.diagram_height},
     )

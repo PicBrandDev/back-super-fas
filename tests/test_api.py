@@ -146,7 +146,7 @@ def test_master_cria_fa_clube_com_convites(client, master, fan):
     assert r.status_code == 201, r.text
     body = r.json()
     assert body["artist"]["slug"] == "alok" and body["artist"]["status"] == "setup"
-    assert body["artist"]["adSlotsSummary"] == "0 de 12 ocupadas"
+    assert body["artist"]["adSlotsSummary"] == "0 de 13 ocupadas"
     invite = body["invites"][0]
     assert invite["tempPassword"]
 
@@ -286,7 +286,7 @@ def test_fa_clubes_do_ambiente(client, club_admin, fan, sponsor, master):
     assert other["invite"]["emailSent"] is False  # sem SMTP nos testes: a senha provisória é mostrada na tela
     rio = login(client, "dono-rio@exemplo.com", other["invite"]["tempPassword"])
     slots = client.get(f"{SP}/ad-slots", headers=sponsor).json()
-    assert [s["id"] for s in slots] == ["fa-clube-sp.home", "fa-clube-sp.mural", "fa-clube-sp.pickup", "fa-clube-sp.feed_2", "fa-clube-sp.feed_3"]
+    assert [s["id"] for s in slots] == ["fa-clube-sp.home", "fa-clube-sp.pickup"]  # o feed dos clubes é a vitrine "feed_clubes" do ambiente
     today = date.today()
     camp = client.post(
         "/sponsor/campaigns",
@@ -1023,7 +1023,7 @@ def test_vitrines_alugadas(client, club_admin, sponsor, fan):
     today = date.today()
     with SessionLocal() as db:
         artist = db.scalar(select(m.Artist).where(m.Artist.slug == "vintage-culture"))
-        env_slot = next(s for s in artist.ad_slots if s.club_id is None)
+        env_slot = next(s for s in artist.ad_slots if s.club_id is None and s.key == "home")
         club_slot = next(s for s in artist.ad_slots if s.club_id is not None)
         env_slot.price_cents = 50000
         sp = db.scalar(select(m.Sponsor).where(m.Sponsor.email == "marca@superfas.dev"))
@@ -1052,9 +1052,14 @@ def test_vitrines_alugadas(client, club_admin, sponsor, fan):
 def test_vitrines_do_app_em_ambiente_novo(client, master):
     slug = client.post("/admin/fan-clubs", headers=master, json={"name": "Artista Anúncios", "fanClubName": "Fãs Anúncios"}).json()["artist"]["slug"]
     slots = {s["id"]: s for s in client.get(f"/artists/{slug}/ad-slots", headers=master).json()}
-    assert {"entrada", "pickup_video", "pickup_resgate", "mural", "home"} <= set(slots)
-    assert slots["mural"]["where"] == "Mural · post pequeno entre os cartazes, a cada 4"
-    assert slots["pickup_video"]["name"] == "Vídeo antes do giro"
+    assert set(slots) == {
+        "entrada", "home", "mural", "feed_clubes", "noticias", "pickup", "pickup_2", "pickup_3", "pickup_4",
+        "pickup_video", "pickup_resgate", "loja", "loja_compra",
+    }
+    assert not {"evento", "drops", "feed_2", "feed_3", "feed_4"} & set(slots)  # saíram do catálogo
+    assert slots["mural"]["where"] == "Mural · um anúncio a cada 1 post"
+    assert slots["pickup_video"]["name"] == "Roleta · vídeo antes de girar"
+    assert slots["pickup_resgate"]["name"] == "Roleta · vídeo ao pegar o brinde"
 
 
 def test_migracao_cria_vitrines_que_faltam():
@@ -1079,12 +1084,13 @@ def test_migracao_cria_vitrines_que_faltam():
         env = [s for s in artist.ad_slots if s.club_id is None]
         assert [s.key for s in env].count("pickup_resgate") == 1
         resgate = next(s for s in env if s.key == "pickup_resgate")
-        assert resgate.position == max(s.position for s in env)
-        assert next(s for s in env if s.key == "mural").where == "Mural · post pequeno entre os cartazes, a cada 4"
+        assert resgate.position == 10  # a posição do catálogo
+        # o lugar das vitrines do catálogo acompanha o código (preço e liga/desliga ficam como o admin deixou)
+        assert next(s for s in env if s.key == "mural").where == "Mural · um anúncio a cada 1 post"
 
 
 def test_anuncios_dentro_do_app(client, master, sponsor, fan):
-    empty = {"entry": None, "pickupVideo": None, "pickupClaim": None, "feed": None}
+    empty = {"entry": None, "pickupVideo": None, "pickupClaim": None, "feed": None, "news": None, "shop": None, "shopPurchase": None, "pickupLayers": []}
     r = client.get(f"{VC}/ads/in-app", headers=fan)
     assert r.status_code == 200, r.text
     assert {k: r.json()[k] for k in ("pickupVideo", "pickupClaim", "entry")} == {k: None for k in ("pickupVideo", "pickupClaim", "entry")}
@@ -1194,12 +1200,15 @@ def test_mapa_das_vitrines_admin_e_patrocinador(client, club_admin, sponsor, fan
     base = "/artists/vintage-culture"
     mp = client.get(f"{base}/vitrines-map", headers=club_admin).json()
     groups = {c["group"] for c in mp["cards"]}
-    assert groups == {"entrada", "feed"}  # sem roleta nem as outras telas
+    assert groups == {"entrada", "feed", "roleta", "loja"}
     keys = {c["key"] for c in mp["cards"]}
-    assert {"entrada", "mural", "feed_2", "feed_3", "feed_4"} <= keys
-    assert not any(c["clubSlug"] for c in mp["cards"])  # o feed é um só, o do ambiente (sem o de cada fã clube)
+    assert keys == {
+        "entrada", "home", "mural", "feed_clubes", "noticias", "pickup", "pickup_2", "pickup_3", "pickup_4",
+        "pickup_video", "pickup_resgate", "loja", "loja_compra",
+    }
+    assert not any(c["clubSlug"] for c in mp["cards"])  # só as vitrines do ambiente do cantor
     order = [c["group"] for c in mp["cards"]]
-    assert order == sorted(order, key=lambda g: {"entrada": 0, "feed": 1}[g])
+    assert order == sorted(order, key=lambda g: {"entrada": 0, "feed": 1, "roleta": 2, "loja": 3}[g])
     assert client.get(f"{base}/vitrines-map", headers=fan).status_code == 403
     sp = client.get("/sponsor/vitrines-map", params={"artist": "vintage-culture"}, headers=sponsor).json()
     assert len(sp["cards"]) == len(mp["cards"])
@@ -1240,31 +1249,72 @@ def test_anuncios_do_feed(client, fan):
         artist = db.scalar(select(m.Artist).where(m.Artist.slug == "vintage-culture"))
         sp = db.scalar(select(m.Sponsor).where(m.Sponsor.email == "marca@superfas.dev"))
         env = {s.key: s for s in artist.ad_slots if s.club_id is None}
-        club = next(c for c in artist.clubs if c.slug == "fa-clube-sp")
-        cl = {s.key: s for s in artist.ad_slots if s.club_id == club.id}
-        assert {"feed_2", "feed_3", "feed_4"} <= set(env) and {"fa-clube-sp.mural", "fa-clube-sp.feed_2", "fa-clube-sp.feed_3"} <= set(cl)
+        assert {"mural", "feed_clubes", "noticias"} <= set(env)
         for slot, title, start, end, status in [
-            (env["feed_2"], "Feed8 no ar", today - timedelta(days=1), today + timedelta(days=5), "approved"),
-            (env["feed_3"], "Feed12 agendado", today + timedelta(days=3), today + timedelta(days=9), "approved"),
-            (env["feed_4"], "Feed16 pendente", today - timedelta(days=1), today + timedelta(days=5), "pending"),
-            (cl["fa-clube-sp.mural"], "Clube4 no ar", today - timedelta(days=1), today + timedelta(days=5), "approved"),
-            (cl["fa-clube-sp.feed_3"], "Clube12 encerrado", today - timedelta(days=9), today - timedelta(days=2), "approved"),
+            (env["mural"], "Mural no ar", today - timedelta(days=1), today + timedelta(days=5), "approved"),
+            (env["feed_clubes"], "Clubes agendado", today + timedelta(days=3), today + timedelta(days=9), "approved"),
+            (env["noticias"], "Notícia pendente", today - timedelta(days=1), today + timedelta(days=5), "pending"),
         ]:
             db.add(m.Campaign(sponsor_id=sp.id, slot_id=slot.id, brand="Marca Feed", title=title, text="t", cta="Ver", url="https://x.com",
                               art_path="/ads/x.png", start=start, end=end, status=status))
         db.commit()
 
+    # Mural: a campanha entra depois de cada post (a cada 1)
     env_ads = {a["title"]: a for a in client.get(f"{VC}/ads/feed", headers=fan).json() if a["sponsor"] == "Marca Feed"}
-    assert set(env_ads) == {"Feed8 no ar"}
-    ad = env_ads["Feed8 no ar"]
-    assert ad["position"] == 8 and ad["cta"] == "Ver" and ad["url"] == "https://x.com" and ad["artUrl"] == "/ads/x.png"
+    assert set(env_ads) == {"Mural no ar"}
+    ad = env_ads["Mural no ar"]
+    assert ad["position"] == 1 and ad["every"] == 1 and ad["cta"] == "Ver" and ad["url"] == "https://x.com" and ad["artUrl"] == "/ads/x.png"
 
-    club_ads = {a["title"]: a for a in client.get(f"{SP}/ads/feed", headers=fan).json() if a["sponsor"] == "Marca Feed"}
-    assert set(club_ads) == {"Clube4 no ar"} and club_ads["Clube4 no ar"]["position"] == 4
+    # Fã clubes: o que está agendado ou pendente não aparece (vitrine sem campanha no ar não lista nada)
+    assert [a for a in client.get(f"{SP}/ads/feed", headers=fan).json() if a["sponsor"] == "Marca Feed"] == []
+    assert client.get(f"{VC}/ads/in-app", headers=fan).json()["news"] is None
+    with SessionLocal() as db:
+        c = db.scalar(select(m.Campaign).where(m.Campaign.title == "Clubes agendado"))
+        c.start = today - timedelta(days=1)
+        db.commit()
+    club_ads = [a for a in client.get(f"{SP}/ads/feed", headers=fan).json() if a["sponsor"] == "Marca Feed"]
+    assert len(club_ads) == 1 and club_ads[0]["title"] == "Clubes agendado" and club_ads[0]["position"] == 2 and club_ads[0]["every"] == 2
     # as rotas vizinhas continuam respondendo
     assert client.get(f"{VC}/ads/home", headers=fan).status_code == 200
     assert client.get(f"{VC}/ads/in-app", headers=fan).status_code == 200
     assert client.get(f"{SP}/ads/home", headers=fan).status_code == 200
+
+
+def test_vitrines_da_roleta_da_loja_e_das_noticias_chegam_ao_fa(client, fan, sponsor, master):
+    from sqlalchemy import select
+
+    from app import models as m
+    from app.db import SessionLocal
+
+    client.patch(f"{VC}/ad-slots/loja", headers=master, json={"active": True})  # outro teste a desliga
+    today = date.today()
+    with SessionLocal() as db:
+        artist = db.scalar(select(m.Artist).where(m.Artist.slug == "vintage-culture"))
+        sp = db.scalar(select(m.Sponsor).where(m.Sponsor.email == "marca@superfas.dev"))
+        env = {s.key: s for s in artist.ad_slots if s.club_id is None}
+        for key in ("pickup", "pickup_3", "noticias", "loja", "loja_compra", "pickup_resgate"):
+            db.add(m.Campaign(sponsor_id=sp.id, slot_id=env[key].id, brand="Marca " + key, title="Anúncio " + key, text="t", cta="Ver", url="https://x.com",
+                              art_path="/ads/x.png", video_url="https://cdn.exemplo.com/v.mp4" if key == "pickup_resgate" else "",
+                              start=today - timedelta(days=1), end=today + timedelta(days=5), status="approved"))
+        db.commit()
+    ads = client.get(f"{VC}/ads/in-app", headers=fan).json()
+    assert [a["title"] for a in ads["pickupLayers"]] == ["Anúncio pickup", "Anúncio pickup_3"]  # camadas livres ficam de fora
+    assert ads["news"]["title"] == "Anúncio noticias" and ads["shop"]["title"] == "Anúncio loja"
+    assert ads["shopPurchase"]["title"] == "Anúncio loja_compra"
+    assert ads["pickupClaim"]["videoUrl"] == "https://cdn.exemplo.com/v.mp4"
+    # a vitrine de vídeo ao pegar o brinde exige vídeo
+    form = {"club": "vintage-culture", "slot": "pickup_resgate", "brand": "Marca", "title": "T", "text": "t", "link": "https://x.com",
+            "start": today.isoformat(), "end": (today + timedelta(days=7)).isoformat()}
+    r = client.post("/sponsor/campaigns", headers=sponsor, data=form)
+    assert r.status_code == 400 and "vídeo" in r.json()["detail"]
+    # módulo de anúncios desligado: nada chega ao fã
+    client.patch("/admin/fan-clubs/vintage-culture", headers=master, json={"modules": {"ads": False}})
+    try:
+        out = client.get(f"{VC}/ads/in-app", headers=fan).json()
+        assert out["pickupLayers"] == [] and out["news"] is None and out["shop"] is None
+        assert client.get(f"{VC}/ads/feed", headers=fan).json() == []
+    finally:
+        client.patch("/admin/fan-clubs/vintage-culture", headers=master, json={"modules": {"ads": True}})
 
 
 def test_ranking_do_fa_traz_o_id_de_cada_pessoa(client, fan):
@@ -1359,3 +1409,11 @@ def test_nome_do_fa_clube_oficial_e_obrigatorio(client, master):
     assert client.patch(f"/admin/fan-clubs/{slug}", headers=master, json={"fanClubName": "[Nome do fã clube]"}).status_code == 422
     assert client.patch(f"/admin/fan-clubs/{slug}", headers=master, json={"fanClubName": "Nova Gente"}).json()["fanClubName"] == "Nova Gente"
     assert client.patch(f"/admin/fan-clubs/{slug}", headers=master, json={"instagram": "@novo"}).status_code == 200  # sem o campo, segue valendo
+
+
+def test_troca_o_proprio_nome(client, master):
+    assert client.patch("/auth/me", headers=master, json={"name": "A"}).status_code == 422
+    r = client.patch("/auth/me", headers=master, json={"name": "  Julia Master "})
+    assert r.status_code == 200 and r.json()["name"] == "Julia Master"
+    assert client.get("/auth/me", headers=master).json()["name"] == "Julia Master"
+    assert client.patch("/auth/me", json={"name": "Sem login"}).status_code == 401

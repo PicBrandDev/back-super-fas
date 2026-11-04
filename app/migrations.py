@@ -163,26 +163,28 @@ def _packages_without_photo_option(db: Session) -> None:
 
 def _default_ad_slots(db: Session) -> None:
     """Cantores antigos ganham as vitrines padrão que faltam (no fim da lista), sem mexer nas que já existem."""
-    from .defaults import CLUB_AD_SLOTS, DEFAULT_AD_SLOTS, MURAL_WHERE, OLD_MURAL_WHERE
+    from .defaults import CLUB_AD_SLOTS, DEFAULT_AD_SLOTS
 
     for artist in db.scalars(select(m.Artist)):
         env = [s for s in artist.ad_slots if s.club_id is None]
         keys = {s.key for s in artist.ad_slots}
-        pos = max((s.position for s in env), default=-1) + 1
+        order = {k: i for i, (k, *_rest) in enumerate(DEFAULT_AD_SLOTS)}
         for key, name, where, fmt, top, height in DEFAULT_AD_SLOTS:
             if key in keys:
                 continue
             db.add(
                 m.AdSlot(
                     artist_id=artist.id, key=key, name=name, where=where, format=fmt,
-                    diagram_top=top, diagram_height=height, position=pos,
+                    diagram_top=top, diagram_height=height, position=order[key],
                 )
             )
-            pos += 1
             log.warning("Vitrine criada: %s.%s", artist.slug, key)
+        # Nome, lugar, formato e desenho das vitrines do catálogo acompanham o código (preço e liga/desliga são do admin).
+        meta = {k: (n, w, f, t, h) for k, n, w, f, t, h in DEFAULT_AD_SLOTS}
         for s in env:
-            if s.key == "mural" and s.where == OLD_MURAL_WHERE:
-                s.where = MURAL_WHERE
+            if s.key in meta:
+                s.name, s.where, s.format, s.diagram_top, s.diagram_height = meta[s.key]
+                s.position = order[s.key]
         # Fã clubes antigos ganham as vitrines de clube que faltam.
         for club in artist.clubs:
             have = {s.key for s in artist.ad_slots if s.club_id == club.id}

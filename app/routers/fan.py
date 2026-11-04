@@ -563,35 +563,23 @@ def home_ad_out(c: m.Campaign) -> HomeAdOut:
     return HomeAdOut(id=c.id, sponsor=c.brand or c.sponsor.brand, title=c.title, text=c.text, cta=c.cta or "Saiba mais", url=c.url or "#", art_url=c.art_path or None)
 
 
-# posição no feed (depois de quantos posts) -> sufixo da vitrine
-FEED_POSITIONS = {4: "mural", 8: "feed_2", 12: "feed_3", 16: "feed_4"}
+# vitrine -> de quantos em quantos posts o anúncio entra: o Mural (a cada 1) e o feed dos fã clubes (a cada 2)
+MURAL_EVERY = 1
+CLUBS_EVERY = 2
 
 
-def feed_ads(db: Session, artist: m.Artist, club: m.FanClub | None = None) -> list[FeedAdOut]:
-    """As campanhas no ar das posições do feed (do ambiente ou de um fã clube); posição sem campanha no ar fica de fora."""
-    out = []
-    for pos, suffix in FEED_POSITIONS.items():
-        q = select(m.AdSlot).where(m.AdSlot.artist_id == artist.id)
-        if club is None:
-            q = q.where(m.AdSlot.club_id.is_(None), m.AdSlot.key == suffix)
-        else:
-            q = q.where(m.AdSlot.club_id == club.id, m.AdSlot.key == f"{club.slug}.{suffix}")
-        slot = db.scalar(q)
-        if not slot or not slot.active:
-            continue
-        cq = select(m.Campaign).where(m.Campaign.slot_id == slot.id, m.Campaign.status == "approved").order_by(m.Campaign.created_at)
-        c = next((c for c in db.scalars(cq) if campaign_status(c) == "live"), None)
-        if c:
-            out.append(FeedAdOut(position=pos, **home_ad_out(c).model_dump()))
-    return out
+def feed_ads(db: Session, artist: m.Artist, key: str, every: int) -> list[FeedAdOut]:
+    """A campanha no ar de uma vitrine de feed do ambiente, que entra depois de cada `every` posts; sem campanha, lista vazia."""
+    if (artist.modules or {}).get("ads", True) is False:
+        return []
+    c = live_campaign(db, artist, key)
+    return [FeedAdOut(position=every, every=every, **home_ad_out(c).model_dump())] if c else []
 
 
 @router.get("/artists/{slug}/ads/feed", response_model=list[FeedAdOut])
 def feed_ads_env(artist: FanArtist, db: DB):
-    """Posts patrocinados do feed do cantor: depois do 4º (mural), 8º, 12º e 16º post."""
-    if (artist.modules or {}).get("ads", True) is False:
-        return []
-    return feed_ads(db, artist)
+    """O post patrocinado do Mural: depois de cada post (vitrine "mural")."""
+    return feed_ads(db, artist, "mural", MURAL_EVERY)
 
 
 def live_campaign(db: Session, artist: m.Artist, key: str) -> m.Campaign | None:
@@ -604,7 +592,32 @@ def live_campaign(db: Session, artist: m.Artist, key: str) -> m.Campaign | None:
 
 
 # lugar do anúncio no app -> vitrine
-IN_APP_SLOTS = {"entry": "entrada", "pickup_video": "pickup_video", "pickup_claim": "pickup_resgate", "feed": "mural"}
+IN_APP_SLOTS = {
+    "entry": "entrada",
+    "pickup_video": "pickup_video",
+    "pickup_claim": "pickup_resgate",
+    "feed": "mural",
+    "news": "noticias",
+    "shop": "loja",
+    "shop_purchase": "loja_compra",
+}
+# camadas da roleta, da 1ª à 4ª
+PICKUP_LAYER_SLOTS = ("pickup", "pickup_2", "pickup_3", "pickup_4")
+
+
+def in_app_out(c: m.Campaign) -> InAppAdOut:
+    return InAppAdOut(
+        id=c.id,
+        sponsor=c.brand or c.sponsor.brand,
+        title=c.title,
+        text=c.text,
+        cta=c.cta or "Saiba mais",
+        url=c.url or "#",
+        image_url=c.art_path or None,
+        video_url=c.video_url or None,
+        # Sem tempo fixo: no vídeo antes do giro o front libera quando o vídeo termina (duração real).
+        min_seconds=None,
+    )
 
 
 @router.get("/artists/{slug}/ads/in-app", response_model=InAppAdsOut)
@@ -619,21 +632,10 @@ def in_app_ads(artist: FanArtist, db: DB):
     out = {}
     for place, key in IN_APP_SLOTS.items():
         c = live_campaign(db, artist, key)
-        if not c:
-            continue
-        out[place] = InAppAdOut(
-            id=c.id,
-            sponsor=c.brand or c.sponsor.brand,
-            title=c.title,
-            text=c.text,
-            cta=c.cta or "Saiba mais",
-            url=c.url or "#",
-            image_url=c.art_path or None,
-            video_url=c.video_url or None,
-            # Sem tempo fixo: no vídeo antes do giro o front libera quando o vídeo termina (duração real).
-            min_seconds=None,
-        )
-    return InAppAdsOut(**out)
+        if c:
+            out[place] = in_app_out(c)
+    layers = [live_campaign(db, artist, key) for key in PICKUP_LAYER_SLOTS]
+    return InAppAdsOut(**out, pickup_layers=[in_app_out(c) for c in layers if c])
 
 
 @router.get("/artists/{slug}/ad-slots", response_model=list[AdSlotOut])
