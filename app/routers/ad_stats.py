@@ -56,6 +56,7 @@ class CampaignStats(Camel):
 
 class SponsorStats(Camel):
     name: str
+    avatar: str | None = None  # foto de perfil do patrocinador (de quem entra pelo portal dele)
     views: int
     clicks: int
     ctr: float
@@ -69,6 +70,11 @@ class AdsAnalytics(Camel):
     ctr: float
     series: list[Point]
     sponsors: list[SponsorStats]
+
+
+def sponsor_avatar(sp: m.Sponsor | None) -> str | None:
+    """Foto de perfil do patrocinador: a de quem entra pelo portal dele (a primeira que tiver foto)."""
+    return next((u.avatar_path for u in sp.users if u.avatar_path), None) if sp else None
 
 
 def _ctr(views: int, clicks: int) -> float:
@@ -124,9 +130,11 @@ def ads_analytics(artist: ManagedArtist, db: DB, days: int = 30):
                 series=series(per),
             )
         )
+    avatars = {(c.brand or c.sponsor.brand or c.sponsor.email): c.sponsor for c in camps}
     sponsors = [
         SponsorStats(
             name=name,
+            avatar=sponsor_avatar(avatars.get(name)),
             views=sum(c.views for c in cs),
             clicks=sum(c.clicks for c in cs),
             ctr=_ctr(sum(c.views for c in cs), sum(c.clicks for c in cs)),

@@ -498,6 +498,7 @@ class Product(Base):
     color: Mapped[str] = mapped_column(String(20), default="#E0A526")
     image_path: Mapped[str] = mapped_column(String(255), default="")  # foto enviada pelo admin (/uploads/...)
     position: Mapped[int] = mapped_column(Integer, default=0)
+    stock: Mapped[int | None] = mapped_column(Integer, nullable=True)  # unidades em estoque (vazio = sem controle de estoque)
 
 
 class ProductPurchase(Base):
@@ -516,6 +517,19 @@ class ProductPurchase(Base):
     size: Mapped[str] = mapped_column(String(4), default="")  # P, M, G, GG (roupas)
     order_id: Mapped[str | None] = mapped_column(ForeignKey("store_orders.id", ondelete="SET NULL"), nullable=True, index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+
+
+class StoreEvent(Base):
+    """Passo do fã na loja: viu o produto, pôs no carrinho ou tirou dele (a compra fica em ProductPurchase)."""
+
+    __tablename__ = "store_events"
+
+    id: Mapped[str] = mapped_column(String(20), primary_key=True, default=new_id)
+    artist_id: Mapped[str] = mapped_column(ForeignKey("artists.id", ondelete="CASCADE"), index=True)
+    user_id: Mapped[str | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True)
+    product_id: Mapped[str | None] = mapped_column(ForeignKey("products.id", ondelete="CASCADE"), nullable=True, index=True)
+    kind: Mapped[str] = mapped_column(String(12))  # view | cart_add | cart_remove
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now, index=True)
 
 
 class StoreOrder(Base):

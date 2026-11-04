@@ -34,7 +34,7 @@ def conversa(client, trio):
 
 def test_inicia_conversa_e_reaproveita(client, trio, conversa):
     (ha, ia), (hb, ib), _c = trio
-    assert conversa["other"] == {"id": ib, "name": "Bruno Chat", "handle": "@bruno.chat", "avatar": None}
+    assert conversa["other"] == {"id": ib, "name": "Bruno Chat", "handle": "@bruno.chat", "avatar": None, "verified": False}
     assert conversa["lastMessage"] is None and conversa["lastMessageAt"] is None and conversa["unread"] == 0
     # o mesmo par (nos dois sentidos, e em snake_case) cai na mesma conversa
     assert client.post(f"{CHAT}/conversations", headers=ha, json={"user_id": ib}).json()["id"] == conversa["id"]

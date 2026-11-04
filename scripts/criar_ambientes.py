@@ -24,10 +24,16 @@ ARTISTAS = [
     ("Zé Felipe", "zefelipe"),
     ("Ana Castela", "anacastelaoficial"),
     ("Natanzinho Lima", "natanzinholima"),
-    ("Anitta e Matuê", "anitta"),
+    ("Anitta", "anitta"),
+    ("Matuê", "matue"),
     ("Xand Avião", "xandaviao"),
     ("Departamento", "departamento"),
 ]
+
+
+# Ambientes que foram criados juntos por engano e agora são separados. Só sai se ainda estiver em branco
+# (em configuração e sem nenhum fã); senão o script avisa e não apaga nada.
+SEPARADOS = ["anitta-e-matue"]
 
 
 def slug(nome):
@@ -55,6 +61,15 @@ code, r = call("POST", "/auth/login", {"email": EMAIL, "password": SENHA})
 if code != 200:
     raise SystemExit(f"login do master falhou ({code}): {r}")
 token = r["token"]
+
+for velho in SEPARADOS:
+    code, a = call("GET", f"/artists/{velho}", None, token)
+    if code != 200:
+        continue
+    if a["status"] == "setup" and str(a.get("members", "0")) in ("0", ""):
+        print(f"{velho}: apagado" if call("DELETE", f"/admin/fan-clubs/{velho}", None, token)[0] == 204 else f"{velho}: não deu para apagar")
+    else:
+        print(f"{velho}: tem fãs ou está no ar, não foi apagado (apague pelo admin master quando quiser)")
 
 for nome, insta in ARTISTAS:
     s = slug(nome)

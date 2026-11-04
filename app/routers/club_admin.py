@@ -141,6 +141,7 @@ class ProductIn(Camel):
     price_cents: int | None = Field(default=None, ge=0)
     color: str = "#E0A526"
     position: int = 0
+    stock: int | None = Field(default=None, ge=0)  # unidades em estoque (vazio = sem controle de estoque)
 
 
 class TrackIn(Camel):

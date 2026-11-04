@@ -1,6 +1,6 @@
 """Área do fã: leitura do conteúdo do fã clube e as ações do fã (postar, girar, assinar…)."""
 
-from datetime import date
+from datetime import date, datetime, timezone
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -12,10 +12,12 @@ from .. import coupons as coupon_lib
 from .. import rewards as rewards_lib
 from ..defaults import ADDON_LABELS
 from ..schemas import (
+    is_club_owner,
     AddonOut,
     AdSlotOut,
     ArtistOut,
     CheckoutIn,
+    StoreTrackIn,
     StoreLineOut,
     StoreOrderOut,
     StoreQuoteOut,
@@ -110,6 +112,7 @@ def viewer_out(user: m.User, f: m.Fandom | None, artist: m.Artist | None = None)
         handle=user.handle or user.email.split("@")[0],
         initial=initial_of(user.name),
         avatar=user.avatar_path or None,
+        verified=is_club_owner(user),
         luck_points=f.luck_points if f else 0,
         spins=f.spins if f else 0,
         pending_gifts=0,
@@ -323,6 +326,13 @@ def _store_price(db, artist: m.Artist, body: CheckoutIn):
         if p.category != "roupas":
             size = ""
         prods[p.id] = p
+        if p.stock is not None:
+            want = sum(i.qty for i in body.items if i.product_id == p.id)
+            if want > p.stock:
+                raise HTTPException(
+                    status.HTTP_400_BAD_REQUEST,
+                    f"{p.name} esgotou." if p.stock <= 0 else f"Só restam {p.stock} unidade(s) de {p.name}.",
+                )
         lines.append(
             StoreLineOut(
                 product_id=p.id, name=p.name, category=p.category, qty=it.qty, size=size,
@@ -334,6 +344,25 @@ def _store_price(db, artist: m.Artist, body: CheckoutIn):
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Informe o endereço de entrega.")
     shipping = 0 if body.delivery == "pickup" or subtotal >= FREE_SHIPPING_FROM_CENTS else SHIPPING_CENTS
     return lines, prods, subtotal, shipping, subtotal + shipping
+
+
+@router.post("/artists/{slug}/store/track", status_code=204)
+def store_track(body: StoreTrackIn, artist: FanArtist, user: CurrentUser, db: DB):
+    """O app avisa que o fã viu um produto da loja ou o pôs no (ou tirou do) carrinho. A visualização conta uma vez por dia."""
+    p = db.get(m.Product, body.product_id)
+    if p is None or p.artist_id != artist.id:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Produto não encontrado.")
+    if body.kind == "view":
+        today = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
+        seen = db.scalar(
+            select(m.StoreEvent.id).where(
+                m.StoreEvent.product_id == p.id, m.StoreEvent.user_id == user.id, m.StoreEvent.kind == "view", m.StoreEvent.created_at >= today
+            )
+        )
+        if seen:
+            return
+    db.add(m.StoreEvent(artist_id=artist.id, user_id=user.id, product_id=p.id, kind=body.kind))
+    db.commit()
 
 
 @router.post("/artists/{slug}/store/quote", response_model=StoreQuoteOut)
@@ -374,6 +403,8 @@ def store_checkout(body: CheckoutIn, artist: FanArtist, user: CurrentUser, db: D
             )
         )
         units += l.qty
+        if p.stock is not None:
+            p.stock = max(0, p.stock - l.qty)
         if p.category == "roupas":
             for _ in range(l.qty):
                 spin_lib.grant(db, f, f"Compra de camiseta · {p.name}")
@@ -526,6 +557,7 @@ def list_products(artist: FanArtist, db: DB):
             price_cents=p.price_cents,
             color=p.color,
             image={"src": p.image_path, "alt": f"Foto do produto {p.name}"} if p.image_path else None,
+            sold_out=p.stock is not None and p.stock <= 0,
         )
         for p in items
     ]

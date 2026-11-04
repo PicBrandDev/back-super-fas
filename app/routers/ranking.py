@@ -1,6 +1,7 @@
 """Ranking "Fã Super": o fã compartilha um post oficial no Instagram e pontua quando a legenda leva a hashtag."""
 
-from datetime import datetime, timezone
+from collections import Counter
+from datetime import date, datetime, timedelta, timezone
 
 from sqlalchemy import func, select
 
@@ -8,7 +9,7 @@ from fastapi import APIRouter, HTTPException, status
 
 from .. import instagram
 from .. import models as m
-from ..schemas import Camel
+from ..schemas import Camel, is_club_owner
 from ..security import DB, CurrentUser, ManagedArtist, get_club_or_404
 from .fan import FanArtist, get_fandom
 
@@ -28,6 +29,7 @@ class RankRow(Camel):
     name: str
     handle: str
     avatar: str | None = None  # foto de perfil do fã
+    verified: bool = False  # dono de fã clube
     shares: int  # compartilhamentos confirmados
     points: float = 0.0  # pontos do ranking (com casas decimais)
     me: bool = False
@@ -222,6 +224,7 @@ def ranking(artist: FanArtist, user: CurrentUser, db: DB):
             name=users[uid].name if uid in users else "Fã",
             handle=(users[uid].handle or "") if uid in users else "",
             avatar=(users[uid].avatar_path or None) if uid in users else None,
+            verified=is_club_owner(users.get(uid)),
             shares=n,
             points=pts,
             me=uid == user.id,
@@ -261,6 +264,7 @@ def ranking(artist: FanArtist, user: CurrentUser, db: DB):
                         name=names[uid].name if uid in names else "Fã",
                         handle=(names[uid].handle or "") if uid in names else "",
                         avatar=(names[uid].avatar_path or None) if uid in names else None,
+                        verified=is_club_owner(names.get(uid)),
                         shares=n,
                         points=pts,
                         me=uid == user.id,
@@ -288,6 +292,7 @@ class LeaderOut(Camel):
     name: str
     handle: str = ""
     avatar: str | None = None
+    verified: bool = False
 
 
 class AdminRankRow(RankRow):
@@ -314,10 +319,99 @@ class FanHit(Camel):
     name: str
     handle: str = ""
     avatar: str | None = None
+    verified: bool = False
 
 
 def _leader_out(u: m.User | None) -> LeaderOut | None:
-    return LeaderOut(user_id=u.id, name=u.name, handle=u.handle or "", avatar=u.avatar_path or None) if u else None
+    return LeaderOut(user_id=u.id, name=u.name, handle=u.handle or "", avatar=u.avatar_path or None, verified=is_club_owner(u)) if u else None
+
+
+class TopShared(Camel):
+    kind: str  # post | drop
+    id: str
+    text: str
+    image: str | None = None
+    shares: int  # compartilhamentos confirmados no Instagram
+    people: int  # fãs diferentes que compartilharam
+    waiting: int  # "já postei" ainda sem conferência
+
+
+class HashtagAnalytics(Camel):
+    hashtag: str
+    auto_verify: bool  # a conferência no Instagram está ligada
+    people: int  # fãs que usaram a hashtag (com compartilhamento confirmado)
+    verified: int  # compartilhamentos confirmados
+    waiting: int  # o fã disse que postou, ainda sem conferência
+    started: int  # abriram o compartilhamento e não disseram que postaram
+    verified_month: int
+    people_month: int
+    from_official_post: int  # confirmados que republicam um post oficial
+    from_drop: int  # confirmados que compartilham um Drop (faixa)
+    from_free: int  # confirmados com a hashtag em um post do próprio fã (sem post oficial)
+    series: list[dict]  # [{day, value}] confirmados por dia nos últimos 30 dias
+    top: list[TopShared]  # o que mais foi compartilhado
+
+
+@router.get("/artists/{slug}/manage/ranking/analytics", response_model=HashtagAnalytics)
+def hashtag_analytics(artist: ManagedArtist, db: DB):
+    """Quem usou a hashtag, de onde veio (post oficial, Drop ou post livre) e quais posts do artista mais foram compartilhados."""
+    shares = db.scalars(select(m.InstagramShare).where(m.InstagramShare.artist_id == artist.id)).all()
+    ok = [x for x in shares if x.status == "verified"]
+    today = datetime.now(timezone.utc).date()
+    since = today - timedelta(days=29)
+    day_of = lambda x: (x.verified_at or x.created_at).astimezone(timezone.utc).date()  # noqa: E731
+    recent = [x for x in ok if day_of(x) >= since]
+    per_day = Counter(day_of(x) for x in recent)
+
+    ids_post = {x.post_id for x in shares if x.post_id}
+    ids_track = {x.track_id for x in shares if x.track_id}
+    posts = {p.id: p for p in db.scalars(select(m.Post).where(m.Post.id.in_(ids_post)))} if ids_post else {}
+    tracks = {t.id: t for t in db.scalars(select(m.Track).where(m.Track.id.in_(ids_track)))} if ids_track else {}
+
+    groups: dict[tuple[str, str], list[m.InstagramShare]] = {}
+    for x in shares:
+        if x.post_id and x.post_id in posts:
+            groups.setdefault(("post", x.post_id), []).append(x)
+        elif x.track_id and x.track_id in tracks:
+            groups.setdefault(("drop", x.track_id), []).append(x)
+    top = []
+    for (kind, ref), items in groups.items():
+        confirmed = [i for i in items if i.status == "verified"]
+        if not confirmed:
+            continue
+        if kind == "post":
+            p = posts[ref]
+            text, image = p.text, p.image_path or None
+        else:
+            t = tracks[ref]
+            text, image = t.title + (f" · {t.meta}" if t.meta else ""), None
+        top.append(
+            TopShared(
+                kind=kind,
+                id=ref,
+                text=text[:160],
+                image=image,
+                shares=len(confirmed),
+                people=len({i.user_id for i in confirmed}),
+                waiting=sum(1 for i in items if i.status == "claimed"),
+            )
+        )
+    top.sort(key=lambda t: (-t.shares, -t.people))
+    return HashtagAnalytics(
+        hashtag=instagram.hashtag_for(artist),
+        auto_verify=instagram.verifies(artist),
+        people=len({x.user_id for x in ok}),
+        verified=len(ok),
+        waiting=sum(1 for x in shares if x.status == "claimed"),
+        started=sum(1 for x in shares if x.status == "started"),
+        verified_month=len(recent),
+        people_month=len({x.user_id for x in recent}),
+        from_official_post=sum(1 for x in ok if x.post_id),
+        from_drop=sum(1 for x in ok if x.track_id),
+        from_free=sum(1 for x in ok if not x.post_id and not x.track_id),
+        series=[{"day": (d := since + timedelta(days=i)).isoformat(), "value": per_day[d]} for i in range(30)],
+        top=top[:5],
+    )
 
 
 def _club_member_ids(c: m.FanClub) -> set[str]:
@@ -358,6 +452,7 @@ def manage_ranking(artist: ManagedArtist, db: DB):
                         name=users[uid].name if uid in users else "Fã",
                         handle=(users[uid].handle or "") if uid in users else "",
                         avatar=(users[uid].avatar_path or None) if uid in users else None,
+                        verified=is_club_owner(users.get(uid)),
                         shares=n,
                         points=pts,
                     )
@@ -388,7 +483,7 @@ def search_fans(artist: ManagedArtist, db: DB, q: str = "", club: str | None = N
         .order_by(m.User.name)
         .limit(15)
     )
-    return [FanHit(user_id=u.id, name=u.name, handle=u.handle or "", avatar=u.avatar_path or None) for u in users]
+    return [FanHit(user_id=u.id, name=u.name, handle=u.handle or "", avatar=u.avatar_path or None, verified=is_club_owner(u)) for u in users]
 
 
 @router.put("/artists/{slug}/manage/ranking/leader", response_model=LeaderScope)

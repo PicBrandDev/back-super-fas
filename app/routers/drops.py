@@ -10,7 +10,7 @@ from fastapi import APIRouter, File, Form, HTTPException, UploadFile, status
 from sqlalchemy import select
 
 from .. import models as m
-from ..schemas import Camel, br_date, time_label
+from ..schemas import Camel, br_date, is_club_owner, time_label
 from ..security import DB, CurrentUser, ManagedArtist, ManagedClub
 from ..uploads import save_image
 from .fan import FanArtist
@@ -32,6 +32,7 @@ class FeedItem(Camel):
     author: str
     handle: str = ""  # @ do autor (vazio para o artista)
     author_avatar: str | None = None  # foto de perfil do autor (vazio para o artista)
+    author_verified: bool = False  # autor é dono de fã clube
     club_name: str | None = None
     time_label: str
     date: str
@@ -52,6 +53,7 @@ def feed_item(p: m.Post, artist: m.Artist) -> FeedItem:
         author=author,
         handle="" if p.official or not p.author else (p.author.handle or ""),
         author_avatar=None if p.official or not p.author else (p.author.avatar_path or None),
+        author_verified=bool(p.author) and not p.official and is_club_owner(p.author),
         club_name=p.club.name if p.club else None,
         time_label=time_label(p.created_at),
         date=br_date(p.created_at.date()),

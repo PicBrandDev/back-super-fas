@@ -830,6 +830,13 @@ def test_ranking_fa_super_com_instagram_simulado(client, club_admin, fan, monkey
     oficial = next(c for c in rank["clubs"] if c["slug"] == "oficial")
     assert oficial["me"]["position"] == 1 and oficial["top"][0]["me"] is True  # ranking do fã clube
 
+    # analytics da hashtag: quem usou, de onde veio e qual post oficial mais foi compartilhado
+    an = client.get(f"{base}/manage/ranking/analytics", headers=club_admin).json()
+    assert an["hashtag"] == "EuSouUmSuperFaDoVintage" and an["verified"] >= 1 and an["people"] >= 1
+    assert an["verified"] == an["fromOfficialPost"] + an["fromDrop"] + an["fromFree"] and len(an["series"]) == 30
+    assert an["top"] and an["top"][0]["shares"] >= 1 and an["top"][0]["kind"] in ("post", "drop")
+    assert client.get(f"{base}/manage/ranking/analytics", headers=fan).status_code == 403
+
     off = client.post(f"{base}/manage/instagram/sync", headers=club_admin).json()
     assert off["enabled"] is False  # sem credenciais da Meta
     assert client.post(f"{base}/manage/instagram/sync", headers=fan).status_code == 403
@@ -947,13 +954,62 @@ def test_giros_por_post_e_por_camiseta(client, club_admin, fan):
     assert pedidos[0]["code"] == c["orderCode"] and pedidos[0]["totalCents"] == 32000 and [l["qty"] for l in pedidos[0]["lines"]] == [2, 1]
 
 
+def test_estoque_e_vendas_da_loja(client, club_admin, fan):
+    base = "/artists/vintage-culture"
+    prod = client.post(f"{base}/manage/products", headers=club_admin, json={"name": "Camiseta Estoque", "category": "roupas", "priceCents": 10000, "stock": 3}).json()
+    assert prod["stock"] == 3
+    item = {"productId": prod["id"], "qty": 4, "size": "G"}
+    assert client.post(f"{base}/store/quote", headers=fan, json={"items": [item]}).status_code == 400  # só restam 3
+    ok = client.post(f"{base}/store/checkout", headers=fan, json={"items": [{**item, "qty": 2}]})
+    assert ok.status_code == 201, ok.text
+    mine = next(p for p in client.get(f"{base}/manage/products", headers=club_admin).json() if p["id"] == prod["id"])
+    assert mine["stock"] == 1  # a compra tirou 2 do estoque
+    assert client.post(f"{base}/store/checkout", headers=fan, json={"items": [{**item, "qty": 2}]}).status_code == 400
+    assert client.post(f"{base}/store/checkout", headers=fan, json={"items": [{**item, "qty": 1}]}).status_code == 201
+    shown = next(p for p in client.get(f"{base}/products", headers=fan).json() if p["id"] == prod["id"])
+    assert shown["soldOut"] is True  # estoque zerado
+
+    an = client.get(f"{base}/manage/store/analytics", headers=club_admin).json()
+    row = next(p for p in an["products"] if p["productId"] == prod["id"])
+    assert row["sold"] == 3 and row["revenueCents"] == 30000 and row["buyers"] == 1 and row["stock"] == 0
+    assert row["bySize"] == {"G": 3} and len(row["history"]) == 2 and row["history"][0]["name"]
+    assert an["units"] >= 3 and an["revenueCents"] >= 30000
+    assert client.get(f"{base}/manage/store/analytics", headers=fan).status_code == 403
+
+
+def test_funil_da_loja_visualizacao_carrinho_e_compra(client, club_admin, fan):
+    base = "/artists/vintage-culture"
+    prod = client.post(f"{base}/manage/products", headers=club_admin, json={"name": "Camiseta Funil", "category": "roupas", "priceCents": 9000}).json()
+    track = lambda kind: client.post(f"{base}/store/track", headers=fan, json={"productId": prod["id"], "kind": kind})  # noqa: E731
+    assert track("view").status_code == 204 and track("view").status_code == 204  # a visualização conta uma vez por dia
+    assert track("cart_add").status_code == 204 and track("cart_add").status_code == 204 and track("cart_remove").status_code == 204
+    assert client.post(f"{base}/store/track", headers=fan, json={"productId": "nao-existe", "kind": "view"}).status_code == 404
+    assert client.post(f"{base}/store/track", headers=fan, json={"productId": prod["id"], "kind": "invalido"}).status_code == 422
+
+    def row():
+        ins = client.get(f"{base}/manage/store/insights?days=30", headers=club_admin).json()
+        return ins, next(p for p in ins["products"] if p["productId"] == prod["id"])
+
+    ins, r = row()
+    assert (r["views"], r["carts"], r["removes"], r["purchases"]) == (1, 2, 1, 0)
+    assert r["abandoned"] == 1 and r["viewToCart"] == 100.0 and r["cartToBuy"] == 0.0  # pôs no carrinho e não comprou
+    assert len(ins["series"]) == 30 and len(ins["byHour"]) == 24 and len(ins["byWeekday"]) == 7
+    assert client.post(f"{base}/store/checkout", headers=fan, json={"items": [{"productId": prod["id"], "qty": 1, "size": "M"}]}).status_code == 201
+    ins, r = row()
+    assert r["purchases"] == 1 and r["abandoned"] == 0 and r["cartToBuy"] == 100.0 and r["revenueCents"] == 9000
+    assert ins["units"] >= 1 and ins["bySize"].get("M", 0) >= 1
+    assert client.get(f"{base}/manage/store/insights", headers=fan).status_code == 403
+
+
 def test_selo_de_dono_do_fa_clube_nos_posts(client, club_admin, fan):
     base = "/artists/vintage-culture"
     club_posts = f"{base}/clubs/oficial/posts"
     dono = client.post(club_posts, headers=club_admin, json={"text": "Aviso do dono"}).json()
     assert dono["author"]["badge"] == "Dono do fã clube"
+    assert dono["author"]["verified"] is True
     comum = client.post(f"{club_posts}/media", headers=fan, data={"text": "Post de fã"}).json()
     assert comum["author"]["badge"] is None
+    assert comum["author"]["verified"] is False
     feed = client.get(f"{base}/posts", headers=fan).json()
     assert next(p for p in feed if p["id"] == dono["id"])["author"]["badge"] == "Dono do fã clube"
 

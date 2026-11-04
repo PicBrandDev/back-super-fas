@@ -9,7 +9,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from .. import models as m
-from ..schemas import Camel, ClubRef, PostOut, post_out
+from ..schemas import Camel, ClubRef, PostOut, is_club_owner, post_out
 from ..security import DB, CurrentUser, forbidden
 from .fan import FanArtist
 
@@ -31,6 +31,7 @@ class ChatUserOut(Camel):
     name: str
     handle: str | None = None
     avatar: str | None = None
+    verified: bool = False  # dono de fã clube
 
 
 class MessageOut(Camel):
@@ -72,6 +73,7 @@ class PublicProfileOut(Camel):
     name: str
     handle: str | None = None
     avatar: str | None = None
+    verified: bool = False  # dono de fã clube
     club: ClubRef | None = None  # fã clube dele neste ambiente
     points: float | None = None  # pontos do ranking Fã Super (os mesmos do ranking, com casas decimais)
     rank: int | None = None  # posição no ranking Fã Super
@@ -83,7 +85,7 @@ class PublicProfileOut(Camel):
 
 
 def user_out(u: m.User) -> ChatUserOut:
-    return ChatUserOut(id=u.id, name=u.name, handle=u.handle or None, avatar=u.avatar_path or None)
+    return ChatUserOut(id=u.id, name=u.name, handle=u.handle or None, avatar=u.avatar_path or None, verified=is_club_owner(u))
 
 
 def message_out(msg: m.Message, me: m.User) -> MessageOut:
@@ -292,6 +294,7 @@ def public_profile(user_id: str, artist: FanArtist, user: CurrentUser, db: DB):
         name=u.name,
         handle=u.handle or None,
         avatar=u.avatar_path or None,
+        verified=is_club_owner(u),
         club=ClubRef(slug=club.slug, name=club.name, avatar=club.avatar_path or None) if club else None,
         points=next((row[3] for row in board if row[0] == u.id), 0.0),
         rank=rank,

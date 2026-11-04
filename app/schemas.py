@@ -8,8 +8,8 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
 from pydantic.alias_generators import to_camel
-from sqlalchemy import func, select
-from sqlalchemy.orm import Session
+from sqlalchemy import event, func, select
+from sqlalchemy.orm import Session, object_session
 
 from . import models as m
 
@@ -109,6 +109,26 @@ class SessionUser(Camel):
     sponsor_id: str | None = None
     must_change_password: bool = False
     avatar: str | None = None  # foto de perfil
+    verified: bool = False  # dono de fã clube: selo verificado
+
+
+def is_club_owner(u: "m.User | None") -> bool:
+    """Dono de algum fã clube: leva o selo verificado ao lado da foto. Os donos são lidos uma vez por sessão."""
+    if u is None:
+        return False
+    db = object_session(u)
+    if db is None:
+        return any(st.role == m.STAFF_OWNER for st in u.staff_of)
+    owners = db.info.get("owner_ids")
+    if owners is None:
+        owners = set(db.scalars(select(m.ClubStaff.user_id).where(m.ClubStaff.role == m.STAFF_OWNER)))
+        db.info["owner_ids"] = owners
+    return u.id in owners
+
+
+@event.listens_for(Session, "after_commit")
+def _forget_owners(db: Session) -> None:
+    db.info.pop("owner_ids", None)
 
 
 class NameIn(Camel):
@@ -127,6 +147,7 @@ class ProfileOut(Camel):
     handle: str
     role: str
     avatar: str | None = None
+    verified: bool = False  # dono de fã clube: selo verificado
     city: str
     zip_code: str
     street: str
@@ -145,6 +166,7 @@ def profile_out(u: m.User) -> ProfileOut:
         handle=u.handle,
         role=u.role,
         avatar=u.avatar_path or None,
+        verified=is_club_owner(u),
         city=u.city,
         zip_code=u.zip_code,
         street=u.street,
@@ -167,6 +189,7 @@ def session_user(u: m.User) -> SessionUser:
         sponsor_id=u.sponsor_id,
         must_change_password=u.must_change_password,
         avatar=u.avatar_path or None,
+        verified=is_club_owner(u),
     )
 
 
@@ -328,6 +351,7 @@ class ViewerOut(Camel):
     is_member: bool
     clubs: list[str] = []  # fã clubes (slugs) em que o fã entrou neste cantor
     avatar: str | None = None  # foto de perfil
+    verified: bool = False  # dono de fã clube: selo verificado
 
 
 class AuthorOut(Camel):
@@ -338,6 +362,7 @@ class AuthorOut(Camel):
     badge: str | None = None  # selo do autor neste fã clube (ex.: "Dono do fã clube")
     id: str | None = None  # id do fã autor (abre o perfil público e o chat); vazio no post oficial
     avatar: str | None = None  # foto de perfil do autor (vazio para o artista)
+    verified: bool = False  # autor é dono de algum fã clube: selo verificado ao lado da foto
 
 
 class PostOut(Camel):
@@ -371,6 +396,7 @@ def post_out(p: m.Post, artist: m.Artist) -> PostOut:
             badge="Dono do fã clube" if owner else None,
             id=p.author.id,
             avatar=p.author.avatar_path or None,
+            verified=is_club_owner(p.author),
         )
     return PostOut(
         id=p.id,
@@ -520,6 +546,7 @@ class ProductOut(Camel):
     price_cents: int | None = None
     color: str
     image: dict | None = None  # {"src": "/uploads/abc.jpg", "alt": "..."} quando o admin enviou a foto
+    sold_out: bool = False  # estoque zerado: não dá para comprar
 
 
 class TrackOut(Camel):
@@ -609,6 +636,11 @@ class StoreItemIn(Camel):
     product_id: str
     qty: int = Field(default=1, ge=1, le=10)
     size: str = Field(default="", max_length=4)  # P, M, G ou GG (obrigatório nas roupas)
+
+
+class StoreTrackIn(Camel):
+    product_id: str
+    kind: Literal["view", "cart_add", "cart_remove"]
 
 
 class CheckoutIn(Camel):
