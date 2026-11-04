@@ -17,7 +17,7 @@ def set_resale(client, master, on: bool):
 
 
 def test_fa_clube_novo_nasce_com_a_revenda_desligada(client, master):
-    r = client.post("/admin/fan-clubs", headers=master, json={"name": "Revenda Off", "instagram": "@revendaoff", "invites": []})
+    r = client.post("/admin/fan-clubs", headers=master, json={"name": "Revenda Off", "fanClubName": "Fãs Revenda Off", "instagram": "@revendaoff", "invites": []})
     assert r.status_code == 201, r.text
     mods = r.json()["artist"]["modules"]
     assert mods["resale"] is False and mods["ads"] is True

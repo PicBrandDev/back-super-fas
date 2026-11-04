@@ -67,6 +67,7 @@ def create_fan_club(body: FanClubCreate, _: MasterUser, db: DB):
     artist = m.Artist(
         slug=slug,
         name=body.name.strip(),
+        fan_club_name=body.fan_club_name.strip(),
         instagram=body.instagram.strip(),
         status="setup",
         theme=copy.deepcopy(BLANK_THEME),

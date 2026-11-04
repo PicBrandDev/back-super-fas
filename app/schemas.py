@@ -6,7 +6,7 @@ Os campos saem em camelCase, iguais aos tipos do front (src/lib/types.ts).
 from datetime import date, datetime, timezone
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, EmailStr, Field
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
 from pydantic.alias_generators import to_camel
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
@@ -192,34 +192,57 @@ def slot_occupied(db: Session, slot: m.AdSlot) -> bool:
     return any(campaign_status(c) == "live" for c in db.scalars(q))
 
 
+def artists_out(db: Session, artists: list[m.Artist]) -> list[ArtistOut]:
+    """Vários ambientes de uma vez, com poucas consultas (membros, vitrines e campanhas no ar de todos juntos).
+    Para a lista não fazer uma viagem ao banco por vitrine, carregue `ad_slots` e `clubs` antes (selectinload)."""
+    if not artists:
+        return []
+    ids = [a.id for a in artists]
+    members = dict(
+        db.execute(
+            select(m.Fandom.artist_id, func.count())
+            .where(m.Fandom.artist_id.in_(ids), m.Fandom.member_status == "active")
+            .group_by(m.Fandom.artist_id)
+        ).all()
+    )
+    slots = {a.id: [s for s in a.ad_slots if s.club_id is None] for a in artists}  # vitrines do ambiente
+    slot_ids = [s.id for ss in slots.values() for s in ss]
+    live: set[str] = set()
+    if slot_ids:
+        q = select(m.Campaign).where(m.Campaign.slot_id.in_(slot_ids), m.Campaign.status == "approved")
+        live = {c.slot_id for c in db.scalars(q) if campaign_status(c) == "live"}
+    out = []
+    for a in artists:
+        mine = slots[a.id]
+        occupied = sum(1 for s in mine if s.id in live)
+        out.append(
+            ArtistOut(
+                id=a.id,
+                slug=a.slug,
+                name=a.name,
+                initial=initial_of(a.name),
+                fan_club_name=a.fan_club_name,
+                instagram=a.instagram or None,
+                status=a.status,
+                theme=a.theme,
+                member_price_cents=a.member_price_cents,
+                members=str(members.get(a.id) or 0),
+                ad_slots_summary=f"{occupied} de {len(mine)} ocupadas" if mine else "Não configuradas",
+                brand_color=a.brand_color,
+                modules=a.modules or {},
+                clubs=len(a.clubs),
+            )
+        )
+    return out
+
+
 def artist_out(db: Session, a: m.Artist) -> ArtistOut:
-    members = db.scalar(
-        select(func.count()).select_from(m.Fandom).where(m.Fandom.artist_id == a.id, m.Fandom.member_status == "active")
-    )
-    slots = [s for s in a.ad_slots if s.club_id is None]  # vitrines do ambiente
-    occupied = sum(1 for s in slots if slot_occupied(db, s))
-    summary = f"{occupied} de {len(slots)} ocupadas" if slots else "Não configuradas"
-    return ArtistOut(
-        id=a.id,
-        slug=a.slug,
-        name=a.name,
-        initial=initial_of(a.name),
-        fan_club_name=a.fan_club_name,
-        instagram=a.instagram or None,
-        status=a.status,
-        theme=a.theme,
-        member_price_cents=a.member_price_cents,
-        members=str(members or 0),
-        ad_slots_summary=summary,
-        brand_color=a.brand_color,
-        modules=a.modules or {},
-        clubs=len(a.clubs),
-    )
+    return artists_out(db, [a])[0]
 
 
 class ArtistPatch(Camel):
     name: str | None = Field(default=None, min_length=2, max_length=120)
-    fan_club_name: str | None = None
+    fan_club_name: str | None = Field(default=None, max_length=120)
     instagram: str | None = None
     status: Literal["active", "setup"] | None = None
     member_price_cents: int | None = Field(default=None, ge=0)
@@ -227,9 +250,21 @@ class ArtistPatch(Camel):
     modules: dict[str, bool] | None = None
     theme: dict | None = None
 
+    @field_validator("fan_club_name")
+    @classmethod
+    def _fan_club_name_required(cls, v: str | None) -> str | None:
+        # O nome oficial do fã clube é obrigatório: se vier no pedido, não pode ficar vazio nem ser texto-modelo.
+        if v is None:
+            return v
+        v = v.strip()
+        if len(v) < 2 or v.startswith("["):
+            raise ValueError("Informe o nome oficial do fã clube.")
+        return v
+
 
 class FanClubCreate(Camel):
     name: str = Field(min_length=2, max_length=120)
+    fan_club_name: str = Field(min_length=2, max_length=120)  # nome oficial do fã clube (obrigatório)
     instagram: str = ""
     template: Literal["blank", "vc"] = "blank"
     invites: list[EmailStr] = Field(default_factory=list, max_length=10)
@@ -796,7 +831,8 @@ class FanClubOut(Camel):
     my_role: str | None = None  # "owner" | "helper" se quem está vendo é da equipe
 
 
-def fan_club_out(c: m.FanClub, viewer: m.User | None = None) -> FanClubOut:
+def fan_club_out(c: m.FanClub, viewer: m.User | None = None, members: int | None = None, joined: bool | None = None) -> FanClubOut:
+    """`members` e `joined` já prontos evitam carregar a lista inteira de membros (as listas calculam tudo de uma vez)."""
     owner = next((st.user for st in c.staff if st.role == m.STAFF_OWNER), None)
     my_role = next((st.role for st in c.staff if viewer and st.user_id == viewer.id), None)
     return FanClubOut(
@@ -807,10 +843,10 @@ def fan_club_out(c: m.FanClub, viewer: m.User | None = None) -> FanClubOut:
         city=c.city,
         is_master=c.is_master,
         status=c.status,
-        members=len(c.members),
+        members=len(c.members) if members is None else members,
         avatar=c.avatar_path or None,
         owner=PersonOut(name=owner.name, handle=owner.handle) if owner else None,
-        joined=bool(viewer and any(mb.user_id == viewer.id for mb in c.members)),
+        joined=bool(viewer and any(mb.user_id == viewer.id for mb in c.members)) if joined is None else joined,
         my_role=my_role,
     )
 

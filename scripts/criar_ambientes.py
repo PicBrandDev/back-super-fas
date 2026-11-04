@@ -61,5 +61,5 @@ for nome, insta in ARTISTAS:
     if call("GET", f"/artists/{s}", None, token)[0] == 200:
         print(f"{nome}: já existe ({s})")
         continue
-    code, r = call("POST", "/admin/fan-clubs", {"name": nome, "instagram": "@" + insta, "template": "blank", "invites": []}, token)
+    code, r = call("POST", "/admin/fan-clubs", {"name": nome, "fanClubName": f"Fã clube oficial {nome}", "instagram": "@" + insta, "template": "blank", "invites": []}, token)
     print(f"{nome}: {code}", r["artist"]["slug"] if code == 201 else r)

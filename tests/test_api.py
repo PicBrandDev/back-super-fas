@@ -57,7 +57,7 @@ def test_permissoes(client, fan, club_admin, sponsor):
     assert client.get("/admin/campaigns", headers=club_admin).status_code == 403
     assert client.post(f"{VC}/manage/events", headers=fan, json={"date": "2026-12-01", "city": "X"}).status_code == 403
     assert client.get(f"{VC}/members", headers=sponsor).status_code == 403
-    assert client.post("/admin/fan-clubs", headers=club_admin, json={"name": "Outro"}).status_code == 403
+    assert client.post("/admin/fan-clubs", headers=club_admin, json={"name": "Outro", "fanClubName": "Fãs do Outro"}).status_code == 403
     assert client.get("/sponsor/campaigns", headers=fan).status_code == 403
 
 
@@ -125,7 +125,7 @@ def test_acoes_do_fa(client, fan, club_admin):
 
 
 def test_evento_de_outro_fa_clube_e_recusado(client, master, club_admin):
-    created = client.post("/admin/fan-clubs", headers=master, json={"name": "Artista X"}).json()
+    created = client.post("/admin/fan-clubs", headers=master, json={"name": "Artista X", "fanClubName": "Fãs do X"}).json()
     slug = created["artist"]["slug"]
     other = client.post(f"/artists/{slug}/manage/events", headers=master, json={"date": "2026-12-01", "city": "Rio"}).json()
     r = client.post(f"{VC}/manage/vendors", headers=club_admin, json={"eventId": other["id"], "name": "Hack"})
@@ -141,7 +141,7 @@ def test_master_cria_fa_clube_com_convites(client, master, fan):
     r = client.post(
         "/admin/fan-clubs",
         headers=master,
-        json={"name": "Alok", "instagram": "@alok", "template": "vc", "invites": ["equipe@alok.com"]},
+        json={"name": "Alok", "fanClubName": "Alok Fam", "instagram": "@alok", "template": "vc", "invites": ["equipe@alok.com"]},
     )
     assert r.status_code == 201, r.text
     body = r.json()
@@ -254,7 +254,7 @@ def test_fa_clubes_do_ambiente(client, club_admin, fan, sponsor, master):
     assert client.post(f"{VC}/manage/events", headers=owner, json={"date": "2026-12-01", "city": "X"}).status_code == 403
     assert client.get(f"{VC}/clubs/oficial/staff", headers=owner).status_code == 403
     assert client.post(f"{SP}/staff", headers=owner, json={"email": "x@exemplo.com", "role": "owner"}).status_code == 403
-    assert client.post(f"{VC}/clubs", headers=owner, json={"name": "Outro"}).status_code == 403
+    assert client.post(f"{VC}/clubs", headers=owner, json={"name": "Outro", "fanClubName": "Fãs do Outro"}).status_code == 403
 
     # Mas convida ajudantes; o ajudante não convida ninguém.
     inv = client.post(f"{SP}/staff", headers=owner, json={"email": "ajuda-sp@exemplo.com", "role": "helper"})
@@ -846,7 +846,7 @@ def test_ranking_instagram_em_varios_ambientes(client, master, fan, monkeypatch)
         monkeypatch.setenv("INSTAGRAM_MORE_ARTISTS", value)
         get_settings.cache_clear()  # as configurações ficam em cache
 
-    r = client.post("/admin/fan-clubs", headers=master, json={"name": "Departamento", "instagram": "@departamento____", "template": "vc", "invites": []})
+    r = client.post("/admin/fan-clubs", headers=master, json={"name": "Departamento", "fanClubName": "Fãs do Departamento", "instagram": "@departamento____", "template": "vc", "invites": []})
     assert r.status_code == 201, r.text
     assert client.patch("/admin/fan-clubs/departamento", headers=master, json={"status": "active"}).status_code == 200
 
@@ -1050,7 +1050,7 @@ def test_vitrines_alugadas(client, club_admin, sponsor, fan):
 
 
 def test_vitrines_do_app_em_ambiente_novo(client, master):
-    slug = client.post("/admin/fan-clubs", headers=master, json={"name": "Artista Anúncios"}).json()["artist"]["slug"]
+    slug = client.post("/admin/fan-clubs", headers=master, json={"name": "Artista Anúncios", "fanClubName": "Fãs Anúncios"}).json()["artist"]["slug"]
     slots = {s["id"]: s for s in client.get(f"/artists/{slug}/ad-slots", headers=master).json()}
     assert {"entrada", "pickup_video", "pickup_resgate", "mural", "home"} <= set(slots)
     assert slots["mural"]["where"] == "Mural · post pequeno entre os cartazes, a cada 4"
@@ -1347,3 +1347,15 @@ def test_caronas_por_show_com_valor_retido(client, club_admin, fan):
     assert client.post(f"{base}/carpool/rides/{r2['id']}/cancel", headers=passageiro).status_code == 404  # só o motorista
     assert client.post(f"{base}/carpool/rides/{r2['id']}/cancel", headers=motorista).json()["status"] == "cancelled"
     assert any(x["status"] == "refunded" for x in client.get(f"{base}/carpool/me", headers=passageiro).json()["booked"])
+
+
+def test_nome_do_fa_clube_oficial_e_obrigatorio(client, master):
+    assert client.post("/admin/fan-clubs", headers=master, json={"name": "Sem Nome"}).status_code == 422
+    assert client.post("/admin/fan-clubs", headers=master, json={"name": "Sem Nome", "fanClubName": " "}).status_code == 422
+    ok = client.post("/admin/fan-clubs", headers=master, json={"name": "Com Nome", "fanClubName": "  Fãs do Com Nome "})
+    assert ok.status_code == 201 and ok.json()["artist"]["fanClubName"] == "Fãs do Com Nome"
+    slug = ok.json()["artist"]["slug"]
+    assert client.patch(f"/admin/fan-clubs/{slug}", headers=master, json={"fanClubName": ""}).status_code == 422
+    assert client.patch(f"/admin/fan-clubs/{slug}", headers=master, json={"fanClubName": "[Nome do fã clube]"}).status_code == 422
+    assert client.patch(f"/admin/fan-clubs/{slug}", headers=master, json={"fanClubName": "Nova Gente"}).json()["fanClubName"] == "Nova Gente"
+    assert client.patch(f"/admin/fan-clubs/{slug}", headers=master, json={"instagram": "@novo"}).status_code == 200  # sem o campo, segue valendo

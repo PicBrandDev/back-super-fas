@@ -12,8 +12,8 @@ from typing import Annotated, Any, Optional
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
 from pydantic import create_model
-from sqlalchemy import select
-from sqlalchemy.orm import Session
+from sqlalchemy import func, select
+from sqlalchemy.orm import Session, selectinload
 
 from .. import models as m
 from .. import rewards
@@ -216,10 +216,16 @@ def list_clubs(slug: str, user: CurrentUser, db: DB):
     env = is_env_admin(db, user, artist)
     if artist.status != "active" and not env:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Cantor não encontrado.")
+    clubs = db.scalars(
+        select(m.FanClub).where(m.FanClub.artist_id == artist.id).options(selectinload(m.FanClub.staff).selectinload(m.ClubStaff.user))
+    ).all()
+    ids = [c.id for c in clubs]
+    counts = dict(db.execute(select(m.ClubMember.club_id, func.count()).where(m.ClubMember.club_id.in_(ids)).group_by(m.ClubMember.club_id)).all()) if ids else {}
+    mine = set(db.scalars(select(m.ClubMember.club_id).where(m.ClubMember.club_id.in_(ids), m.ClubMember.user_id == user.id))) if ids and user else set()
     out = []
-    for c in sorted(artist.clubs, key=lambda c: (not c.is_master, c.position, c.created_at)):
+    for c in sorted(clubs, key=lambda c: (not c.is_master, c.position, c.created_at)):
         if c.status == "active" or env or staff_role(db, user, c):
-            out.append(fan_club_out(c, user))
+            out.append(fan_club_out(c, user, members=counts.get(c.id, 0), joined=c.id in mine))
     return out
 
 

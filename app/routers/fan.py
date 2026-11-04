@@ -5,7 +5,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 
 from .. import models as m
 from .. import coupons as coupon_lib
@@ -47,6 +47,7 @@ from ..schemas import (
     ViewerOut,
     ad_slot_out,
     artist_out,
+    artists_out,
     br_date,
     brl,
     campaign_status,
@@ -121,8 +122,10 @@ def viewer_out(user: m.User, f: m.Fandom | None, artist: m.Artist | None = None)
 
 @router.get("/artists", response_model=list[ArtistOut])
 def list_artists(db: DB, user: Annotated[m.User | None, Depends(current_user_optional)]):
-    artists = db.scalars(select(m.Artist).order_by(m.Artist.created_at)).all()
-    return [artist_out(db, a) for a in artists if a.status == "active" or (user and can_manage(db, user, a))]
+    q = select(m.Artist).options(selectinload(m.Artist.ad_slots), selectinload(m.Artist.clubs)).order_by(m.Artist.created_at)
+    artists = db.scalars(q).all()
+    visible = [a for a in artists if a.status == "active" or (user and (user.role == m.ROLE_MASTER or can_manage(db, user, a)))]
+    return artists_out(db, visible)
 
 
 @router.get("/artists/{slug}", response_model=ArtistOut)
