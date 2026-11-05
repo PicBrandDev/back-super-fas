@@ -597,8 +597,8 @@ def home_ad_out(c: m.Campaign) -> HomeAdOut:
     return HomeAdOut(id=c.id, sponsor=c.brand or c.sponsor.brand, title=c.title, text=c.text, cta=c.cta or "Saiba mais", url=c.url or "#", art_url=c.art_path or None)
 
 
-# vitrine -> de quantos em quantos posts o anúncio entra: o Mural (a cada 1) e o feed dos fã clubes (a cada 2)
-MURAL_EVERY = 1
+# vitrine -> de quantos em quantos posts o anúncio entra: um banner de patrocínio a cada 2 posts, no Mural e nos fã clubes
+MURAL_EVERY = 2
 CLUBS_EVERY = 2
 
 

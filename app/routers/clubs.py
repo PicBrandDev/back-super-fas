@@ -454,9 +454,24 @@ def club_home_ad(club: FanClubDep, db: DB):
 @router.get("/artists/{slug}/clubs/{club}/ads/feed", response_model=list[FeedAdOut])
 def club_feed_ads(club: FanClubDep, db: DB):
     """O post patrocinado do feed do fã clube: depois de cada 2 posts (vitrine "feed_clubes" do ambiente)."""
-    from .fan import CLUBS_EVERY, feed_ads
+    from .fan import CLUBS_EVERY, home_ad_out, live_campaigns
 
-    return feed_ads(db, club.artist, "feed_clubes", CLUBS_EVERY)
+    if (club.artist.modules or {}).get("ads", True) is False:
+        return []
+    # As marcas das vitrines de feed do cantor (fã clubes, Mural e notícias: valem para todos os fã clubes) e as das vitrines de feed deste fã clube.
+    camps = {c.id: c for key in ("feed_clubes", "mural", "noticias") for c in live_campaigns(db, club.artist, key)}
+    for s in club_slots(club, db):
+        if s.active and not s.key.endswith(".home"):
+            q = select(m.Campaign).where(m.Campaign.slot_id == s.id, m.Campaign.status == "approved").order_by(m.Campaign.created_at)
+            camps.update({c.id: c for c in db.scalars(q) if campaign_status(c) == "live"})
+    seen: set[tuple[str, str]] = set()  # a mesma marca com o mesmo anúncio em várias vitrines entra uma vez só
+    out = []
+    for c in camps.values():
+        k = (c.brand or c.sponsor.brand, c.title)
+        if k not in seen:
+            seen.add(k)
+            out.append(FeedAdOut(position=CLUBS_EVERY, every=CLUBS_EVERY, **home_ad_out(c).model_dump()))
+    return out
 
 
 @router.get("/artists/{slug}/clubs/{club}/campaigns", response_model=list[CampaignOut])

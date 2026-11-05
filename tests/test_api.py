@@ -1325,16 +1325,17 @@ def test_anuncios_do_feed(client, fan):
     env_ads = {a["title"]: a for a in client.get(f"{VC}/ads/feed", headers=fan).json() if a["sponsor"] == "Marca Feed"}
     assert set(env_ads) == {"Mural no ar"}
     ad = env_ads["Mural no ar"]
-    assert ad["position"] == 1 and ad["every"] == 1 and ad["cta"] == "Ver" and ad["url"] == "https://x.com" and ad["artUrl"] == "/ads/x.png"
+    assert ad["position"] == 2 and ad["every"] == 2 and ad["cta"] == "Ver" and ad["url"] == "https://x.com" and ad["artUrl"] == "/ads/x.png"
 
     # Fã clubes: o que está agendado ou pendente não aparece (vitrine sem campanha no ar não lista nada)
-    assert [a for a in client.get(f"{SP}/ads/feed", headers=fan).json() if a["sponsor"] == "Marca Feed"] == []
+    # (o feed do fã clube também alterna as marcas do Mural e das notícias; o que está agendado ou pendente não entra)
+    assert [a for a in client.get(f"{SP}/ads/feed", headers=fan).json() if a["title"] == "Clubes agendado"] == []
     assert client.get(f"{VC}/ads/in-app", headers=fan).json()["news"] is None
     with SessionLocal() as db:
         c = db.scalar(select(m.Campaign).where(m.Campaign.title == "Clubes agendado"))
         c.start = today - timedelta(days=1)
         db.commit()
-    club_ads = [a for a in client.get(f"{SP}/ads/feed", headers=fan).json() if a["sponsor"] == "Marca Feed"]
+    club_ads = [a for a in client.get(f"{SP}/ads/feed", headers=fan).json() if a["title"] == "Clubes agendado"]
     assert len(club_ads) == 1 and club_ads[0]["title"] == "Clubes agendado" and club_ads[0]["position"] == 2 and club_ads[0]["every"] == 2
     # as rotas vizinhas continuam respondendo
     assert client.get(f"{VC}/ads/home", headers=fan).status_code == 200
