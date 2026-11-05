@@ -1,4 +1,4 @@
-"""Põe todas as marcas de exemplo nos feeds (Mural, fã clubes e notícias) de Vintage Culture e Departamento, para o banner
+"""Põe todas as marcas de exemplo nos feeds (Mural, fã clubes e notícias) de Vintage Culture, Departamento e Anitta, para o banner
 de patrocínio a cada 2 posts alternar entre Coca-Cola, Sprite, Nike, Spotify, Red Bull, Heineken e Adidas.
 
 Pula a campanha que já existe (mesma vitrine, marca e título). As artes que o projeto já tem vão junto; nas outras marcas
@@ -15,7 +15,7 @@ from sqlalchemy import select
 from app import models as m
 from app.db import SessionLocal
 
-ARTISTAS = ["vintage-culture", "departamento"]
+ARTISTAS = ["vintage-culture", "departamento", "anitta"]
 VITRINES = ["feed_clubes", "mural", "noticias"]
 ARTE = {"Coca-Cola": "/patrocinadores/coca_anuncio1.png", "Spotify": "/ads/spotify.jpg"}
 COPY = {
