@@ -437,12 +437,12 @@ def live_ad(db: Session, slot: m.AdSlot | None) -> HomeAdOut | None:
     if not slot or not slot.active:
         return None
     q = select(m.Campaign).where(m.Campaign.slot_id == slot.id, m.Campaign.status == "approved")
-    for c in db.scalars(q.order_by(m.Campaign.created_at)):
-        if campaign_status(c) == "live":
-            from .fan import home_ad_out
+    live = [c for c in db.scalars(q.order_by(m.Campaign.created_at)) if campaign_status(c) == "live"]
+    if not live:
+        return None
+    from .fan import home_ad_out
 
-            return home_ad_out(c)
-    return None
+    return home_ad_out(random.choice(live))  # com mais de uma marca no ar, alterna entre elas
 
 
 @router.get("/artists/{slug}/clubs/{club}/ads/home", response_model=HomeAdOut | None)

@@ -1,5 +1,6 @@
 """Área do fã: leitura do conteúdo do fã clube e as ações do fã (postar, girar, assinar…)."""
 
+import random
 from datetime import date, datetime, timezone
 from typing import Annotated
 
@@ -605,8 +606,8 @@ def feed_ads(db: Session, artist: m.Artist, key: str, every: int) -> list[FeedAd
     """A campanha no ar de uma vitrine de feed do ambiente, que entra depois de cada `every` posts; sem campanha, lista vazia."""
     if (artist.modules or {}).get("ads", True) is False:
         return []
-    c = live_campaign(db, artist, key)
-    return [FeedAdOut(position=every, every=every, **home_ad_out(c).model_dump())] if c else []
+    # Todas as marcas no ar da vitrine: o app alterna entre elas a cada anúncio que aparece no feed.
+    return [FeedAdOut(position=every, every=every, **home_ad_out(c).model_dump()) for c in live_campaigns(db, artist, key)]
 
 
 @router.get("/artists/{slug}/ads/feed", response_model=list[FeedAdOut])
@@ -615,13 +616,19 @@ def feed_ads_env(artist: FanArtist, db: DB):
     return feed_ads(db, artist, "mural", MURAL_EVERY)
 
 
-def live_campaign(db: Session, artist: m.Artist, key: str) -> m.Campaign | None:
-    """A campanha aprovada e no ar da vitrine (a mais antiga primeiro), se a vitrine estiver ligada."""
+def live_campaigns(db: Session, artist: m.Artist, key: str) -> list[m.Campaign]:
+    """As campanhas aprovadas e no ar da vitrine (a mais antiga primeiro), se a vitrine estiver ligada."""
     slot = db.scalar(select(m.AdSlot).where(m.AdSlot.artist_id == artist.id, m.AdSlot.key == key))
     if not slot or not slot.active:
-        return None
+        return []
     q = select(m.Campaign).where(m.Campaign.slot_id == slot.id, m.Campaign.status == "approved")
-    return next((c for c in db.scalars(q.order_by(m.Campaign.created_at)) if campaign_status(c) == "live"), None)
+    return [c for c in db.scalars(q.order_by(m.Campaign.created_at)) if campaign_status(c) == "live"]
+
+
+def live_campaign(db: Session, artist: m.Artist, key: str) -> m.Campaign | None:
+    """Uma campanha no ar da vitrine: com mais de uma marca, sorteia a cada pedido (rodízio entre elas)."""
+    live = live_campaigns(db, artist, key)
+    return random.choice(live) if live else None
 
 
 # lugar do anúncio no app -> vitrine
