@@ -18,6 +18,7 @@ ARTES = {
     "Nike": [f"/patrocinadores/nike_anuncio{i}.png" for i in range(1, 7)],
     "Sprite": [f"/patrocinadores/sprite_anuncio{i}.png" for i in range(1, 4)],
     "Coca-Cola": ["/patrocinadores/coca_anuncio1.png"],
+    "Red Bull": ["/patrocinadores/redbull_anuncio1.png"],
     "Adidas": [f"/patrocinadores/adidas_anuncio{i}.png" for i in range(1, 4)],
 }
 
