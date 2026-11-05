@@ -15,6 +15,8 @@ from app.db import SessionLocal
 
 ARTES = {
     "Heineken": ["/patrocinadores/anuncio1.png", "/patrocinadores/anuncio2.png", "/patrocinadores/anuncio3.png"],
+    "Nike": [f"/patrocinadores/nike_anuncio{i}.png" for i in range(1, 7)],
+    "Sprite": [f"/patrocinadores/sprite_anuncio{i}.png" for i in range(1, 4)],
 }
 
 with SessionLocal() as db:
