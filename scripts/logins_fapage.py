@@ -1,4 +1,4 @@
-"""Deixa o login de todo patrocinador como <marca>@fapage.com.br com a senha 123 (só para demonstração).
+"""Deixa o login de todo patrocinador como <marca>@fapage.com.br com a senha senha123 (só para demonstração).
 
 Cria o usuário (papel "patrocinador") se o patrocinador ainda não tiver, ou troca e-mail e senha do que já existe.
 
@@ -15,7 +15,7 @@ from app import models as m
 from app.db import SessionLocal
 from app.security import hash_password
 
-SENHA = "123"
+SENHA = "senha123"
 DOMINIO = "fapage.com.br"
 
 
