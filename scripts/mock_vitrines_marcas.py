@@ -27,7 +27,7 @@ SLUG = os.environ.get("ARTIST", "vintage-culture")
 
 # marca -> (e-mail do patrocinador, arte que já existe ou "")
 BRANDS = {
-    "Coca-Cola": ("cocacola@patrocinio.example", "/ads/coca-cola.png"),
+    "Coca-Cola": ("cocacola@patrocinio.example", "/patrocinadores/coca_anuncio1.png"),
     "Sprite": ("sprite@patrocinio.example", ""),
     "Nike": ("nike@patrocinio.example", ""),
     "Spotify": ("spotify@patrocinio.example", "/ads/spotify.jpg"),

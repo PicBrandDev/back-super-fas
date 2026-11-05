@@ -17,7 +17,7 @@ from app.db import SessionLocal
 
 ARTISTAS = ["vintage-culture", "departamento"]
 VITRINES = ["feed_clubes", "mural", "noticias"]
-ARTE = {"Coca-Cola": "/ads/coca-cola.png", "Spotify": "/ads/spotify.jpg"}
+ARTE = {"Coca-Cola": "/patrocinadores/coca_anuncio1.png", "Spotify": "/ads/spotify.jpg"}
 COPY = {
     "Coca-Cola": ("Abra a felicidade no próximo show", "Gelada na pista, sempre. Resgate a sua com o código SUPERFA.", "Ver oferta", "https://www.cocacola.com.br"),
     "Sprite": ("Refresque o set inteiro", "Bem gelada entre um drop e outro. Cupom SPRITEFA na loja do evento.", "Quero a minha", "https://www.sprite.com.br"),
