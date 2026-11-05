@@ -70,7 +70,8 @@ def main() -> None:
             raise SystemExit(f"ambiente {SLUG} não existe")
         sponsors: dict[str, m.Sponsor] = {}
         for brand, (email, _) in BRANDS.items():
-            sp = db.scalar(select(m.Sponsor).where(m.Sponsor.email == email))
+            # Acha pelo e-mail de exemplo ou, se o login já foi trocado (marca@fapage.com.br), pela marca.
+            sp = db.scalar(select(m.Sponsor).where(m.Sponsor.email == email)) or db.scalar(select(m.Sponsor).where(m.Sponsor.brand == brand))
             if not sp:
                 sp = m.Sponsor(brand=brand, email=email, status="active")
                 db.add(sp)
