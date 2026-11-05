@@ -7,6 +7,7 @@ from fastapi import APIRouter, HTTPException, status
 from sqlalchemy import select, update
 
 from .. import models as m
+from ..ad_catalog import DEFAULT_CLICK_MILLI, DEFAULT_VIEW_MILLI
 from ..schemas import Camel
 from ..security import DB, CurrentUser, ManagedArtist, MasterUser
 from .fan import FanArtist
@@ -56,6 +57,7 @@ class CampaignStats(Camel):
     views: int
     clicks: int
     ctr: float  # cliques / visualizações, em %
+    spent_cents: int = 0  # o que já consumiu: views × preço da view + cliques × preço do clique
     goal_views: int
     goal_clicks: int
     series: list[Point]
@@ -68,6 +70,7 @@ class SponsorStats(Camel):
     views: int
     clicks: int
     ctr: float
+    spent_cents: int = 0
     campaigns: list[CampaignStats]
 
 
@@ -76,6 +79,7 @@ class AdsAnalytics(Camel):
     views: int
     clicks: int
     ctr: float
+    spent_cents: int = 0
     series: list[Point]
     sponsors: list[SponsorStats]
 
@@ -89,6 +93,12 @@ def sponsor_avatar(sp: m.Sponsor | None) -> str | None:
 
 def _ctr(views: int, clicks: int) -> float:
     return round(clicks * 100 / views, 2) if views else 0.0
+
+
+def _spent(slot: m.AdSlot, views: int, clicks: int) -> int:
+    vm = slot.view_price_milli if slot.view_price_milli is not None else DEFAULT_VIEW_MILLI
+    cm = slot.click_price_milli if slot.click_price_milli is not None else DEFAULT_CLICK_MILLI
+    return round((views * vm + clicks * cm) / 10)
 
 
 def _analytics(db, camps: list[m.Campaign], days: int, with_artist: bool = False) -> AdsAnalytics:
@@ -135,6 +145,7 @@ def _analytics(db, camps: list[m.Campaign], days: int, with_artist: bool = False
                 views=v,
                 clicks=k,
                 ctr=_ctr(v, k),
+                spent_cents=_spent(c.slot, v, k),
                 goal_views=c.goal_views,
                 goal_clicks=c.goal_clicks,
                 series=series(per),
@@ -149,6 +160,7 @@ def _analytics(db, camps: list[m.Campaign], days: int, with_artist: bool = False
             views=sum(c.views for c in cs),
             clicks=sum(c.clicks for c in cs),
             ctr=_ctr(sum(c.views for c in cs), sum(c.clicks for c in cs)),
+            spent_cents=sum(c.spent_cents for c in cs),
             campaigns=sorted(cs, key=lambda c: -c.views),
         )
         for name, cs in by_sponsor.items()
@@ -156,7 +168,7 @@ def _analytics(db, camps: list[m.Campaign], days: int, with_artist: bool = False
     sponsors.sort(key=lambda s: -s.views)
     tv = sum(s.views for s in sponsors)
     tk = sum(s.clicks for s in sponsors)
-    return AdsAnalytics(days=days, views=tv, clicks=tk, ctr=_ctr(tv, tk), series=series(total), sponsors=sponsors)
+    return AdsAnalytics(days=days, views=tv, clicks=tk, ctr=_ctr(tv, tk), spent_cents=sum(s.spent_cents for s in sponsors), series=series(total), sponsors=sponsors)
 
 
 @router.get("/artists/{slug}/ads-analytics", response_model=AdsAnalytics)

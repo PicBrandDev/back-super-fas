@@ -10,6 +10,7 @@ from sqlalchemy import select
 from .. import models as m
 from .. import uploads
 from ..ad_catalog import slot_elements
+from .ad_stats import AdsAnalytics, _analytics
 from ..schemas import CampaignOut, SponsorOut, campaign_out, sponsor_out
 from ..security import DB, SponsorUser, get_artist_or_404
 
@@ -41,6 +42,24 @@ def my_sponsor(user: SponsorUser, db: DB):
     sponsor = db.get(m.Sponsor, user.sponsor_id)
     assert sponsor is not None
     return sponsor_out(sponsor)
+
+
+@router.post("/me/logo", response_model=SponsorOut)
+async def set_my_logo(user: SponsorUser, db: DB, image: Annotated[UploadFile, File()]):
+    """O patrocinador troca a própria foto de perfil (logo): JPG, PNG ou WebP, até 5 MB."""
+    sponsor = db.get(m.Sponsor, user.sponsor_id)
+    assert sponsor is not None
+    sponsor.logo_path = await uploads.save_image(image)
+    db.commit()
+    db.refresh(sponsor)
+    return sponsor_out(sponsor)
+
+
+@router.get("/analytics", response_model=AdsAnalytics)
+def my_analytics(user: SponsorUser, db: DB, days: int = 30):
+    """Views, cliques, gasto e série diária dos anúncios da própria marca, com o cantor e a vitrine de cada um."""
+    camps = list(db.scalars(select(m.Campaign).where(m.Campaign.sponsor_id == user.sponsor_id, m.Campaign.status == "approved")))
+    return _analytics(db, camps, days, with_artist=True)
 
 
 @router.get("/campaigns", response_model=list[CampaignOut])

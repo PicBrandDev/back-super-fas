@@ -1481,3 +1481,18 @@ def test_troca_o_proprio_nome(client, master):
     assert r.status_code == 200 and r.json()["name"] == "Julia Master"
     assert client.get("/auth/me", headers=master).json()["name"] == "Julia Master"
     assert client.patch("/auth/me", json={"name": "Sem login"}).status_code == 401
+
+
+def test_patrocinador_foto_e_analytics(client, sponsor):
+    # a própria marca troca a foto de perfil
+    png = b"\x89PNG\r\n\x1a\n" + b"\x00" * 64
+    r = client.post("/sponsor/me/logo", headers=sponsor, files={"image": ("logo.png", png, "image/png")})
+    assert r.status_code == 200, r.text
+    assert r.json()["logo"]
+    assert client.get("/sponsor/me", headers=sponsor).json()["logo"] == r.json()["logo"]
+    # analytics da própria marca: totais, gasto e uma lista (possivelmente vazia) de patrocinadores
+    r = client.get("/sponsor/analytics?days=7", headers=sponsor)
+    assert r.status_code == 200, r.text
+    data = r.json()
+    assert data["days"] == 7 and len(data["series"]) == 7 and "spentCents" in data
+    assert all(len(s["campaigns"]) >= 0 for s in data["sponsors"])

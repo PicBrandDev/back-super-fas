@@ -127,7 +127,8 @@ def viewer_out(user: m.User, f: m.Fandom | None, artist: m.Artist | None = None)
 def list_artists(db: DB, user: Annotated[m.User | None, Depends(current_user_optional)]):
     q = select(m.Artist).options(selectinload(m.Artist.ad_slots), selectinload(m.Artist.clubs)).order_by(m.Artist.created_at)
     artists = db.scalars(q).all()
-    visible = [a for a in artists if a.status == "active" or (user and (user.role == m.ROLE_MASTER or can_manage(db, user, a)))]
+    # O patrocinador vê todos os cantores (os em construção aparecem como "em construção", para ele saber quem vem aí).
+    visible = [a for a in artists if a.status == "active" or (user and (user.role in (m.ROLE_MASTER, m.ROLE_SPONSOR) or can_manage(db, user, a)))]
     return artists_out(db, visible)
 
 
