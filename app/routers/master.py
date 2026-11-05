@@ -4,12 +4,15 @@
 
 import copy
 
-from fastapi import APIRouter, HTTPException, status
-from sqlalchemy import select
+from typing import Annotated
+
+from fastapi import APIRouter, File, HTTPException, UploadFile, status
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from .. import models as m
 from ..resale.guards import release_artist
+from ..uploads import save_image
 from ..defaults import BLANK_THEME, DEFAULT_AD_SLOTS, DEFAULT_MODULES, NEW_CLUB_COLORS
 from ..schemas import (
     AdSlotOut,
@@ -157,7 +160,12 @@ def update_ad_slot(slug: str, key: str, body: AdSlotPatch, user: CurrentUser, db
 
 @router.get("/admin/campaigns", response_model=list[CampaignOut])
 def list_campaigns(_: MasterUser, db: DB):
-    return [campaign_out(c) for c in db.scalars(select(m.Campaign).order_by(m.Campaign.created_at.desc()))]
+    camps = list(db.scalars(select(m.Campaign).order_by(m.Campaign.created_at.desc())))
+    totals = {
+        cid: (int(v or 0), int(k or 0))
+        for cid, v, k in db.execute(select(m.AdStat.campaign_id, func.sum(m.AdStat.views), func.sum(m.AdStat.clicks)).group_by(m.AdStat.campaign_id))
+    }
+    return [campaign_out(c, *totals.get(c.id, (0, 0))) for c in camps]
 
 
 def _decide(db: Session, user: m.User, campaign_id: str, decision: str) -> CampaignOut:
@@ -198,6 +206,27 @@ def env_campaigns(artist: ManagedArtist, db: DB):
 @router.get("/admin/sponsors", response_model=list[SponsorOut])
 def list_sponsors(_: MasterUser, db: DB):
     return [sponsor_out(s) for s in db.scalars(select(m.Sponsor).order_by(m.Sponsor.created_at.desc()))]
+
+
+@router.post("/admin/sponsors/{sponsor_id}/logo", response_model=SponsorOut)
+async def set_sponsor_logo(sponsor_id: str, _: MasterUser, db: DB, image: Annotated[UploadFile, File()]):
+    """Troca o logo (a foto de perfil) da marca: JPG, PNG ou WebP, até 5 MB."""
+    sponsor = db.get(m.Sponsor, sponsor_id)
+    if not sponsor:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Patrocinador não encontrado.")
+    sponsor.logo_path = await save_image(image)
+    db.commit()
+    return sponsor_out(sponsor)
+
+
+@router.delete("/admin/sponsors/{sponsor_id}/logo", response_model=SponsorOut)
+def remove_sponsor_logo(sponsor_id: str, _: MasterUser, db: DB):
+    sponsor = db.get(m.Sponsor, sponsor_id)
+    if not sponsor:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Patrocinador não encontrado.")
+    sponsor.logo_path = ""
+    db.commit()
+    return sponsor_out(sponsor)
 
 
 @router.post("/admin/sponsors/invite", response_model=SponsorInvited, status_code=201)

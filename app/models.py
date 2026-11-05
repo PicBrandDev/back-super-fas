@@ -591,7 +591,10 @@ class AdSlot(Base):
     name: Mapped[str] = mapped_column(String(120))
     where: Mapped[str] = mapped_column(String(200), default="")
     format: Mapped[str] = mapped_column(String(160), default="")
-    price_cents: Mapped[int | None] = mapped_column(Integer, nullable=True)  # por semana
+    price_cents: Mapped[int | None] = mapped_column(Integer, nullable=True)  # por semana (modelo antigo; hoje o preço é por view e por clique)
+    view_price_milli: Mapped[int | None] = mapped_column(Integer, nullable=True)  # preço de cada view, em milésimos de real (12 = R$ 0,012)
+    click_price_milli: Mapped[int | None] = mapped_column(Integer, nullable=True)  # preço de cada clique, em milésimos de real (800 = R$ 0,80)
+    elements: Mapped[list | None] = mapped_column(JSON, nullable=True)  # o que a vitrine aceita: title, text, image, video
     active: Mapped[bool] = mapped_column(Boolean, default=True)
     diagram_top: Mapped[int] = mapped_column(Integer, default=20)
     diagram_height: Mapped[int] = mapped_column(Integer, default=16)
@@ -608,6 +611,7 @@ class Sponsor(Base):
     brand: Mapped[str] = mapped_column(String(120), default="")
     email: Mapped[str] = mapped_column(String(255), unique=True)
     status: Mapped[str] = mapped_column(String(20), default="invited")  # active | invited
+    logo_path: Mapped[str] = mapped_column(String(255), default="")  # logo / foto de perfil da marca (/uploads/...)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
 
     users: Mapped[list[User]] = relationship(back_populates="sponsor")

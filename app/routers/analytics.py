@@ -12,6 +12,7 @@ from sqlalchemy import func, select
 
 from .. import models as m
 from ..schemas import Camel
+from .ad_stats import sponsor_avatar
 from ..security import DB, ManagedArtist, ManagedClub
 
 router = APIRouter(tags=["Analytics"])
@@ -628,8 +629,10 @@ class RentalOut(Camel):
     end: date | None = None
     days: int | None = None  # duração do aluguel em dias (None quando falta uma das datas)
     status: str  # live | scheduled | ended
-    price_cents_per_week: int | None = None  # preço da vitrine por semana
-    estimated_total_cents: int | None = None  # semanas (arredondadas para cima) x preço, quando há as duas informações
+    price_cents_per_week: int | None = None  # modelo antigo (por semana); hoje o preço é por view e por clique
+    view_price_milli: int | None = None
+    click_price_milli: int | None = None
+    estimated_total_cents: int | None = None  # o que a campanha já consumiu: views x preço da view + cliques x preço do clique
 
 
 @router.get("/artists/{slug}/rentals", response_model=list[RentalOut])
@@ -663,7 +666,7 @@ def rentals(artist: ManagedArtist, db: DB):
         out.append(
             RentalOut(
                 campaign_id=c.id,
-                sponsor_avatar=next((u.avatar_path for u in c.sponsor.users if u.avatar_path), None),
+                sponsor_avatar=sponsor_avatar(c.sponsor),
                 views=totals.get(c.id, (0, 0))[0],
                 clicks=totals.get(c.id, (0, 0))[1],
                 ctr=round(100 * totals.get(c.id, (0, 0))[1] / totals[c.id][0], 2) if totals.get(c.id, (0, 0))[0] else 0.0,
@@ -679,8 +682,11 @@ def rentals(artist: ManagedArtist, db: DB):
                 end=c.end,
                 days=days,
                 status=status,
-                price_cents_per_week=price,
-                estimated_total_cents=(-(-days // 7)) * price if days and price else None,
+                price_cents_per_week=None,
+                view_price_milli=c.slot.view_price_milli,
+                click_price_milli=c.slot.click_price_milli,
+                # quanto a campanha já consumiu: views e cliques até hoje pelo preço da vitrine (milésimos de real → centavos)
+                estimated_total_cents=round((totals.get(c.id, (0, 0))[0] * (c.slot.view_price_milli or 0) + totals.get(c.id, (0, 0))[1] * (c.slot.click_price_milli or 0)) / 10),
             )
         )
     def key(r: RentalOut) -> tuple[int, int]:

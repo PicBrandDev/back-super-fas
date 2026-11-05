@@ -29,6 +29,7 @@ log = logging.getLogger("superfas.migrations")
 
 # tabela -> [(coluna, tipo SQL)]
 NEW_COLUMNS = {
+    "sponsors": [("logo_path", "VARCHAR(255) DEFAULT ''")],
     "carpool_bookings": [("payment_method", "VARCHAR(12) DEFAULT ''")],
     "users": [
         ("avatar_path", "VARCHAR(255) DEFAULT ''"),
@@ -56,7 +57,7 @@ NEW_COLUMNS = {
     "spin_credits": [("club_id", "VARCHAR(20)"), ("prize_id", "VARCHAR(20)")],
     "rewards": [("prize_id", "VARCHAR(20)")],
     "prizes": [("stock", "INTEGER"), ("club_id", "VARCHAR(20)"), ("kind", "VARCHAR(12) DEFAULT ''"), ("percent", "INTEGER DEFAULT 0"), ("instructions", "VARCHAR(200) DEFAULT ''")],
-    "ad_slots": [("club_id", "VARCHAR(20)")],
+    "ad_slots": [("club_id", "VARCHAR(20)"), ("view_price_milli", "INTEGER"), ("click_price_milli", "INTEGER"), ("elements", "JSON")],
     "resale_orders": [("transfer_to_enc", "VARCHAR(600) DEFAULT ''")],
 }
 
@@ -163,6 +164,7 @@ def _packages_without_photo_option(db: Session) -> None:
 
 def _default_ad_slots(db: Session) -> None:
     """Cantores antigos ganham as vitrines padrão que faltam (no fim da lista), sem mexer nas que já existem."""
+    from .ad_catalog import DEFAULT_CLICK_MILLI, DEFAULT_VIEW_MILLI, slot_elements
     from .defaults import CLUB_AD_SLOTS, DEFAULT_AD_SLOTS
 
     for artist in db.scalars(select(m.Artist)):
@@ -179,6 +181,12 @@ def _default_ad_slots(db: Session) -> None:
                 )
             )
             log.warning("Vitrine criada: %s.%s", artist.slug, key)
+        # Preço por view e por clique e o que a vitrine aceita: o que ainda não tem ganha o padrão (depois é do admin).
+        for s in artist.ad_slots:
+            if s.elements is None:
+                s.elements = slot_elements(s.key)
+            if s.view_price_milli is None and s.click_price_milli is None:
+                s.view_price_milli, s.click_price_milli = DEFAULT_VIEW_MILLI, DEFAULT_CLICK_MILLI
         # Nome, lugar, formato e desenho das vitrines do catálogo acompanham o código (preço e liga/desliga são do admin).
         meta = {k: (n, w, f, t, h) for k, n, w, f, t, h in DEFAULT_AD_SLOTS}
         for s in env:

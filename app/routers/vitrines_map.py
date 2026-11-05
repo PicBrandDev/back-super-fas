@@ -10,6 +10,7 @@ from fastapi import APIRouter
 from sqlalchemy import select
 
 from .. import models as m
+from ..ad_catalog import slot_elements
 from ..schemas import Camel, campaign_status
 from ..security import DB, ManagedArtist, SponsorUser, get_artist_or_404
 
@@ -42,6 +43,9 @@ class VitrineCard(Camel):
     club_slug: str | None = None  # None = ambiente do cantor
     club_name: str | None = None
     price_cents_per_week: int | None = None
+    view_price_milli: int | None = None
+    click_price_milli: int | None = None
+    elements: list[str] = []
     active: bool = True
     diagram_top: int
     diagram_height: int
@@ -116,6 +120,9 @@ def _cards(db, artist: m.Artist, admin: bool, sponsor_id: str | None) -> list[Vi
                 club_slug=s.club.slug if s.club else None,
                 club_name=s.club.name if s.club else None,
                 price_cents_per_week=s.price_cents,
+                view_price_milli=s.view_price_milli,
+                click_price_milli=s.click_price_milli,
+                elements=list(s.elements) if s.elements is not None else slot_elements(s.key),
                 active=s.active,
                 diagram_top=s.diagram_top,
                 diagram_height=s.diagram_height,

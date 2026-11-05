@@ -9,6 +9,7 @@ from sqlalchemy import select
 
 from .. import models as m
 from .. import uploads
+from ..ad_catalog import slot_elements
 from ..schemas import CampaignOut, SponsorOut, campaign_out, sponsor_out
 from ..security import DB, SponsorUser, get_artist_or_404
 
@@ -95,6 +96,16 @@ async def create_campaign(
     d_start, d_end = _parse_date(start), _parse_date(end)
     if d_start and d_end and d_end < d_start:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "O fim precisa ser depois do início.")
+
+    allowed = ad_slot.elements or slot_elements(ad_slot.key)  # o que o admin deixou esta vitrine aceitar
+    has_art = bool(art and art.filename)
+    has_vid = bool(video and video.filename) or bool(video_url.strip())
+    if has_art and "image" not in allowed:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Esta vitrine não aceita imagem.")
+    if has_vid and "video" not in allowed and ad_slot.key not in VIDEO_SLOTS:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Esta vitrine não aceita vídeo.")
+    if "text" not in allowed:
+        text = ""
 
     art_path = ""
     if art and art.filename:

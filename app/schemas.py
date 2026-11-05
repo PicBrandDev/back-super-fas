@@ -12,6 +12,7 @@ from sqlalchemy import event, func, select
 from sqlalchemy.orm import Session, object_session
 
 from . import models as m
+from .ad_catalog import CATEGORIES, slot_category, slot_elements
 
 
 class Camel(BaseModel):
@@ -741,6 +742,11 @@ class SpinOut(Camel):
 
 
 class AdSlotOut(Camel):
+    view_price_milli: int | None = None  # preço de cada view, em milésimos de real (12 = R$ 0,012)
+    click_price_milli: int | None = None  # preço de cada clique, em milésimos de real (800 = R$ 0,80)
+    elements: list[str] = []  # o que aceita: title, text, image, video
+    category: str = ""
+    category_label: str = ""
     id: str  # a "key" da vitrine (home, mural…), única dentro do fã clube
     name: str
     where: str
@@ -753,8 +759,24 @@ class AdSlotOut(Camel):
     diagram: dict
 
 
+def milli_brl(n: int) -> str:
+    """R$ 0,012 (12) ou R$ 0,80 (800): três casas, sem o zero que sobra."""
+    txt = f"{n / 1000:.3f}".replace(".", ",")
+    return "R$ " + (txt[:-1] if txt.endswith("0") else txt)
+
+
+def price_text(view_milli: int | None, click_milli: int | None) -> str:
+    parts = []
+    if view_milli:
+        parts.append(f"{milli_brl(view_milli)} por view")
+    if click_milli:
+        parts.append(f"{milli_brl(click_milli)} por clique")
+    return " · ".join(parts) or "Sem preço"
+
+
 def ad_slot_out(db: Session, s: m.AdSlot) -> AdSlotOut:
-    price = f"{brl(s.price_cents)} / semana"
+    price = price_text(s.view_price_milli, s.click_price_milli)
+    cat = slot_category(s.key)
     occupant = slot_occupant(db, s)
     return AdSlotOut(
         id=s.key,
@@ -763,6 +785,11 @@ def ad_slot_out(db: Session, s: m.AdSlot) -> AdSlotOut:
         format=s.format,
         price_label=price,
         price_cents=s.price_cents,
+        view_price_milli=s.view_price_milli,
+        click_price_milli=s.click_price_milli,
+        elements=list(s.elements) if s.elements is not None else slot_elements(s.key),
+        category=cat,
+        category_label=CATEGORIES[cat][0],
         occupied=occupant is not None,
         occupied_by=occupant,
         active=s.active,
@@ -773,6 +800,9 @@ def ad_slot_out(db: Session, s: m.AdSlot) -> AdSlotOut:
 class AdSlotPatch(Camel):
     active: bool | None = None
     price_cents: int | None = Field(default=None, ge=0)
+    view_price_milli: int | None = Field(default=None, ge=0, le=1_000_000)
+    click_price_milli: int | None = Field(default=None, ge=0, le=10_000_000)
+    elements: list[Literal["title", "text", "image", "video"]] | None = Field(default=None, min_length=1)
     name: str | None = None
     where: str | None = None
     format: str | None = None
@@ -800,6 +830,8 @@ class CampaignOut(Camel):
     goal_views: int = 0
     goal_clicks: int = 0
     budget_cents: int = 0  # valor calculado para a campanha
+    views: int = 0  # visualizações até hoje
+    clicks: int = 0
     status: str  # live | approved | pending | rejected
 
 
@@ -812,7 +844,7 @@ def campaign_status(c: m.Campaign) -> str:
     return "approved"
 
 
-def campaign_out(c: m.Campaign) -> CampaignOut:
+def campaign_out(c: m.Campaign, views: int = 0, clicks: int = 0) -> CampaignOut:
     period = f"{br_date(c.start) or '[início]'} – {br_date(c.end) or '[fim]'}"
     return CampaignOut(
         id=c.id,
@@ -836,6 +868,8 @@ def campaign_out(c: m.Campaign) -> CampaignOut:
         goal_views=c.goal_views,
         goal_clicks=c.goal_clicks,
         budget_cents=c.budget_cents,
+        views=views,
+        clicks=clicks,
         status=campaign_status(c),
     )
 
@@ -846,10 +880,11 @@ class SponsorOut(Camel):
     email: str
     campaigns: int
     status: str
+    logo: str | None = None  # logo / foto de perfil da marca
 
 
 def sponsor_out(s: m.Sponsor) -> SponsorOut:
-    return SponsorOut(id=s.id, brand=s.brand or "—", email=s.email, campaigns=len(s.campaigns), status=s.status)
+    return SponsorOut(id=s.id, brand=s.brand or "—", email=s.email, campaigns=len(s.campaigns), status=s.status, logo=s.logo_path or None)
 
 
 class SponsorInviteIn(Camel):

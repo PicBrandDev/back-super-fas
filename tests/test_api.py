@@ -213,6 +213,12 @@ def test_campanha_do_patrocinador_ate_ir_ao_ar(client, master, sponsor, fan):
     assert (st["views"], st["clicks"], len(st["series"])) == (2, 1, 7) and st["ctr"] == 50.0
     assert st["sponsors"][0]["name"] == "Marca Teste" and st["sponsors"][0]["campaigns"][0]["id"] == camp["id"]
     assert client.get(f"{VC}/ads-analytics", headers=fan).status_code == 403
+    # visão geral da plataforma (só o master): todos os patrocinadores e anúncios, com o cantor de cada um
+    geral = client.get("/admin/ads-analytics?days=7", headers=master).json()
+    assert geral["views"] >= 2 and any(sp["name"] == "Marca Teste" for sp in geral["sponsors"])
+    anuncio = next(c for sp in geral["sponsors"] for c in sp["campaigns"] if c["id"] == camp["id"])
+    assert anuncio["artist"] == "Vintage Culture" and anuncio["artistSlug"] == "vintage-culture" and anuncio["views"] == 2
+    assert client.get("/admin/ads-analytics", headers=fan).status_code == 403
     slots = client.get(f"{VC}/ad-slots", headers=sponsor).json()
     assert next(s for s in slots if s["id"] == "home")["occupied"] is True
     assert client.get("/sponsor/campaigns", headers=sponsor).json()[0]["id"] == camp["id"]
@@ -1097,7 +1103,7 @@ def test_vitrines_alugadas(client, club_admin, sponsor, fan):
     assert [x["status"] for x in rows] == ["live", "scheduled", "ended"]
     live = rows[0]
     assert "diagramTop" in live and live["diagramHeight"] > 0
-    assert live["sponsor"] == "Marca Teste" and live["days"] == 14 and live["estimatedTotalCents"] == 100000 and live["fanClub"] is None
+    assert live["sponsor"] == "Marca Teste" and live["days"] == 14 and live["estimatedTotalCents"] == 0 and live["fanClub"] is None
     assert rows[1]["fanClub"] is not None
     assert client.get(f"{base}/rentals", headers=fan).status_code == 403
 

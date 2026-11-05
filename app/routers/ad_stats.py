@@ -8,7 +8,7 @@ from sqlalchemy import select, update
 
 from .. import models as m
 from ..schemas import Camel
-from ..security import DB, CurrentUser, ManagedArtist
+from ..security import DB, CurrentUser, ManagedArtist, MasterUser
 from .fan import FanArtist
 
 router = APIRouter(tags=["Anúncios"])
@@ -40,6 +40,13 @@ class Point(Camel):
 class CampaignStats(Camel):
     id: str
     title: str
+    artist: str | None = None  # cantor da vitrine (só na visão geral da plataforma)
+    artist_slug: str | None = None
+    text: str = ""
+    cta: str = ""
+    url: str = ""
+    art_url: str | None = None  # banner do anúncio (/uploads/... ou /ads/...)
+    video_url: str | None = None
     slot_name: str
     where: str
     fan_club: str | None = None
@@ -56,6 +63,7 @@ class CampaignStats(Camel):
 
 class SponsorStats(Camel):
     name: str
+    email: str = ""
     avatar: str | None = None  # foto de perfil do patrocinador (de quem entra pelo portal dele)
     views: int
     clicks: int
@@ -73,25 +81,20 @@ class AdsAnalytics(Camel):
 
 
 def sponsor_avatar(sp: m.Sponsor | None) -> str | None:
-    """Foto de perfil do patrocinador: a de quem entra pelo portal dele (a primeira que tiver foto)."""
-    return next((u.avatar_path for u in sp.users if u.avatar_path), None) if sp else None
+    """Foto de perfil do patrocinador: o logo da marca; sem logo, a foto de quem entra pelo portal dele (a primeira que tiver)."""
+    if not sp:
+        return None
+    return sp.logo_path or next((u.avatar_path for u in sp.users if u.avatar_path), None)
 
 
 def _ctr(views: int, clicks: int) -> float:
     return round(clicks * 100 / views, 2) if views else 0.0
 
 
-@router.get("/artists/{slug}/ads-analytics", response_model=AdsAnalytics)
-def ads_analytics(artist: ManagedArtist, db: DB, days: int = 30):
-    """Views e cliques de cada anúncio no período, por patrocinador (campanhas aprovadas de todas as vitrines do ambiente)."""
+def _analytics(db, camps: list[m.Campaign], days: int, with_artist: bool = False) -> AdsAnalytics:
     days = min(max(days, 1), 365)
     today = date.today()
     first = today - timedelta(days=days - 1)
-    camps = list(
-        db.scalars(
-            select(m.Campaign).join(m.AdSlot, m.Campaign.slot_id == m.AdSlot.id).where(m.AdSlot.artist_id == artist.id, m.Campaign.status == "approved")
-        )
-    )
     rows: dict[str, dict[date, tuple[int, int]]] = {}
     if camps:
         q = select(m.AdStat).where(m.AdStat.campaign_id.in_([c.id for c in camps]), m.AdStat.day >= first)
@@ -116,6 +119,13 @@ def ads_analytics(artist: ManagedArtist, db: DB, days: int = 30):
             CampaignStats(
                 id=c.id,
                 title=c.title,
+                artist=c.slot.artist.name if with_artist else None,
+                artist_slug=c.slot.artist.slug if with_artist else None,
+                text=c.text,
+                cta=c.cta,
+                url=c.url,
+                art_url=c.art_path or None,
+                video_url=c.video_url or None,
                 slot_name=c.slot.name,
                 where=c.slot.where,
                 fan_club=c.slot.club.name if c.slot.club else None,
@@ -134,6 +144,7 @@ def ads_analytics(artist: ManagedArtist, db: DB, days: int = 30):
     sponsors = [
         SponsorStats(
             name=name,
+            email=avatars[name].email,
             avatar=sponsor_avatar(avatars.get(name)),
             views=sum(c.views for c in cs),
             clicks=sum(c.clicks for c in cs),
@@ -146,3 +157,21 @@ def ads_analytics(artist: ManagedArtist, db: DB, days: int = 30):
     tv = sum(s.views for s in sponsors)
     tk = sum(s.clicks for s in sponsors)
     return AdsAnalytics(days=days, views=tv, clicks=tk, ctr=_ctr(tv, tk), series=series(total), sponsors=sponsors)
+
+
+@router.get("/artists/{slug}/ads-analytics", response_model=AdsAnalytics)
+def ads_analytics(artist: ManagedArtist, db: DB, days: int = 30):
+    """Views e cliques de cada anúncio no período, por patrocinador (campanhas aprovadas de todas as vitrines do ambiente)."""
+    camps = list(
+        db.scalars(
+            select(m.Campaign).join(m.AdSlot, m.Campaign.slot_id == m.AdSlot.id).where(m.AdSlot.artist_id == artist.id, m.Campaign.status == "approved")
+        )
+    )
+    return _analytics(db, camps, days)
+
+
+@router.get("/admin/ads-analytics", response_model=AdsAnalytics)
+def ads_analytics_all(_: MasterUser, db: DB, days: int = 30):
+    """Visão geral da plataforma: views e cliques de cada anúncio de cada patrocinador, em todos os ambientes."""
+    camps = list(db.scalars(select(m.Campaign).where(m.Campaign.status == "approved")))
+    return _analytics(db, camps, days, with_artist=True)
