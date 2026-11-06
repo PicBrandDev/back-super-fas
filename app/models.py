@@ -689,3 +689,17 @@ class Message(Base):
     body: Mapped[str] = mapped_column(String(1000))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
     read_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)  # quando o outro leu
+
+
+class TermsAcceptance(Base):
+    """Aceite do termo de confidencialidade que abre os ambientes de demonstração (CPF, ambiente, data e IP)."""
+
+    __tablename__ = "terms_acceptances"
+
+    id: Mapped[str] = mapped_column(String(20), primary_key=True, default=new_id)
+    artist_slug: Mapped[str] = mapped_column(String(80), index=True)
+    cpf: Mapped[str] = mapped_column(String(11), index=True)  # só dígitos
+    terms_version: Mapped[str] = mapped_column(String(20), default="")
+    ip: Mapped[str] = mapped_column(String(64), default="")
+    user_agent: Mapped[str] = mapped_column(String(300), default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now, index=True)
