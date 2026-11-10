@@ -19,10 +19,10 @@ POR_ASSUNTO = [
     ("\"O Numanice começou", "mural-numanice.jpg"),
     ("Manda o vídeo", "mural-video-fa.jpg"),
     ("Coleção de óculos", "oc-cl-4926.jpg"),
-    ("Datas novas na agenda", "mural-agenda-palco.jpg"),
-    ("Roleta da Lud", "mural-roleta-taxi.jpg"),
+    ("Datas novas na agenda", "mural-roleta-taxi.jpg"),
+    ("Roleta da Lud", "oc-cl-3825.jpg"),
 ]
-RODIZIO = ["mural-video-fa.jpg", "mural-agenda-palco.jpg", "mural-roleta-taxi.jpg", "mural-numanice.jpg", "mural-bi-festinha.jpg"]
+RODIZIO = ["mural-video-fa.jpg", "mural-roleta-taxi.jpg", "mural-numanice.jpg", "mural-bi-festinha.jpg"]  # a foto do palco é do post da Comunidade
 
 with SessionLocal() as db:
     art = db.scalar(select(m.Artist).where(m.Artist.slug == "ludmilla"))
