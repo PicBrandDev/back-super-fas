@@ -1,4 +1,4 @@
-"""Cria o anúncio em vídeo da Coca-Cola na vitrine "Vídeo antes do giro" (pickup_video) do Vintage Culture e do Departamento.
+"""Cria o anúncio em vídeo da Coca-Cola na vitrine "Vídeo antes do giro" (pickup_video) de todos os ambientes ativos (Vintage Culture, Departamento, Anitta, Ludmilla e os que vierem).
 
 O vídeo já está no bucket (`/uploads/coca-cola-antes-do-giro.mp4`). Este script cria o patrocinador Coca-Cola (se não existir)
 e uma campanha aprovada, valendo de hoje a 30 dias, em cada ambiente. Não duplica: se a Coca já tem campanha nessa vitrine, pula.
@@ -17,27 +17,25 @@ from app.db import SessionLocal
 BRAND = "Coca-Cola"
 EMAIL = "cocacola@patrocinio.example"
 VIDEO = "/uploads/coca-cola-antes-do-giro.mp4"
-AMBIENTES = ["vintage-culture", "departamento"]
 DIAS = 30
 
 TITULO = "Abra a felicidade no set"
-TEXTO = "Coca-Cola geladinha em cada show do Vintage Culture."
+TEXTO = "Coca-Cola geladinha em cada show de {artista}."
 BOTAO = "Quero uma Coca"
 LINK = "https://www.coca-cola.com/br/pt"
 
 with SessionLocal() as db:
     sp = db.scalar(select(m.Sponsor).where(m.Sponsor.email == EMAIL))
+    if not sp:  # o patrocinador pode existir com outro e-mail (ex.: o do portal); procura pela marca
+        sp = db.scalar(select(m.Sponsor).where(m.Sponsor.brand == BRAND).order_by(m.Sponsor.created_at))
     if not sp:
         sp = m.Sponsor(brand=BRAND, email=EMAIL, status="active")
         db.add(sp)
         db.flush()
         print(f"patrocinador {BRAND} criado")
     hoje = date.today()
-    for slug in AMBIENTES:
-        artist = db.scalar(select(m.Artist).where(m.Artist.slug == slug))
-        if not artist:
-            print(f"{slug}: ambiente não encontrado")
-            continue
+    for artist in db.scalars(select(m.Artist).where(m.Artist.status == "active").order_by(m.Artist.slug)):
+        slug = artist.slug
         slot = db.scalar(select(m.AdSlot).where(m.AdSlot.artist_id == artist.id, m.AdSlot.key == "pickup_video", m.AdSlot.club_id.is_(None)))
         if not slot:
             print(f"{slug}: a vitrine 'Vídeo antes do giro' não existe (suba a API nova para criar as vitrines)")
@@ -51,7 +49,7 @@ with SessionLocal() as db:
                 slot_id=slot.id,
                 brand=BRAND,
                 title=TITULO,
-                text=TEXTO,
+                text=TEXTO.format(artista=artist.name),
                 cta=BOTAO,
                 url=LINK,
                 video_url=VIDEO,
