@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 
 from . import models as m
 from .config import get_settings
-from .defaults import ADDON_LABELS
+from .defaults import addon_label
 
 FALLBACK = ("Transfer ida e volta", "Caravana Vintage", 9000)
 
@@ -44,7 +44,7 @@ def ensure_photo_tickets(db: Session, artist: m.Artist, user: m.User) -> None:
         for pkg in db.scalars(select(m.EventPackage).where(m.EventPackage.event_id == ev.id)):
             offer = next(iter(pkg.addons or []), None)
             if offer:
-                label, price = ADDON_LABELS.get(offer["key"], offer["key"]), int(offer.get("price_cents", price))
+                label, price = addon_label(offer["key"], artist), int(offer.get("price_cents", price))
                 agency, pkg_name, addons = pkg.agency.name, pkg.name, [offer["key"]]
                 break
         else:

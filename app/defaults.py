@@ -83,3 +83,13 @@ ADDON_LABELS = {
     "hotel": "Hotel com hospedagem",
     "transfer": "Transfer ida e volta",
 }
+
+# Como o fã chama o artista de cada ambiente ("Jantar com o Vintage", "Jantar com a Lud"). Ambiente fora da lista: o nome dele.
+ARTIST_THE = {"vintage-culture": "o Vintage", "departamento": "o Departamento", "anitta": "a Anitta", "veigh": "o Veigh", "ludmilla": "a Lud"}
+
+
+def addon_label(key: str, artist) -> str:
+    """Nome da experiência no ambiente: o jantar é com o artista do ambiente; as outras são iguais em todos."""
+    if key == "jantar" and artist is not None:
+        return f"Jantar com {ARTIST_THE.get(artist.slug) or artist.name}"
+    return ADDON_LABELS.get(key, key)

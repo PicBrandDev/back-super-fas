@@ -267,7 +267,7 @@ with SessionLocal() as db:
             ev = eventos[i % len(eventos)]
             ag = AGENCIAS[i % len(AGENCIAS)][0]
             chaves = rnd.sample(list(nomes), rnd.randint(1, 3))
-            rot = {"transfer": "Transfer ida e volta", "jantar": "Jantar com a Ludmilla", "camarim": "Meet & greet no camarim", "pre": "Pré-esquenta", "after": "After", "hotel": "Hotel com hospedagem"}
+            rot = {"transfer": "Transfer ida e volta", "jantar": "Jantar com a Lud", "camarim": "Meet & greet no camarim", "pre": "Pré-esquenta", "after": "After", "hotel": "Hotel com hospedagem"}
             db.add(
                 m.TicketPurchase(
                     artist_id=art.id, user_id=u.id, event_id=ev.id, package_name=f"Experiências · {ev.city}", agency_name=ag, label=" + ".join(rot[k] for k in chaves),

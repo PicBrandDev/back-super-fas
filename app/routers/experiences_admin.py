@@ -11,7 +11,7 @@ from fastapi import APIRouter, HTTPException, status
 from sqlalchemy import select
 
 from .. import models as m
-from ..defaults import ADDON_LABELS
+from ..defaults import ADDON_LABELS, addon_label
 from ..schemas import Camel
 from ..security import DB, ManagedArtist
 
@@ -73,7 +73,8 @@ def _keys(t: m.TicketPurchase) -> list[str]:
     """Experiências da compra: as gravadas ou, nas compras antigas, as reconhecidas pelo nome no rótulo."""
     if t.addons:
         return list(t.addons)
-    return [k for k, label in ADDON_LABELS.items() if label in (t.label or "")]
+    lbl = t.label or ""
+    return [k for k, label in ADDON_LABELS.items() if label in lbl or (k == "jantar" and "Jantar com" in lbl)]
 
 
 def _at(d: datetime) -> datetime:
@@ -99,7 +100,7 @@ def experiences_overview(event_id: str, artist: ManagedArtist, db: DB):
         stats.append(
             ExperienceStat(
                 key=k,
-                label=ADDON_LABELS.get(k, k),
+                label=addon_label(k, artist),
                 offered_in=[p.name for p in pk],
                 purchases=len(mine),
                 people=len({t.user_id for t in mine}),
@@ -145,7 +146,7 @@ def experience_buyers(event_id: str, key: str, artist: ManagedArtist, db: DB, q:
                 at=_at(t.created_at),
                 paid_cents=t.price_cents,
                 coupon=t.coupon_code,
-                experiences=[ADDON_LABELS.get(k, k) for k in _keys(t)] or [t.label],
+                experiences=[addon_label(k, artist) for k in _keys(t)] or [t.label],
             )
         )
-    return BuyerPage(total=total, page=page, pages=pages, label=ADDON_LABELS.get(key, key), items=out)
+    return BuyerPage(total=total, page=page, pages=pages, label=addon_label(key, artist), items=out)

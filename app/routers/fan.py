@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session, selectinload
 from .. import models as m
 from .. import coupons as coupon_lib
 from .. import rewards as rewards_lib
-from ..defaults import ADDON_LABELS
+from ..defaults import addon_label
 from ..schemas import (
     is_club_owner,
     AddonOut,
@@ -256,7 +256,7 @@ def list_packages(event_id: str, artist: FanArtist, db: DB):
                 transfer_details=p.transfer_details,
                 has_transfer=any(a["key"] == "transfer" for a in (p.addons or [])),
                 addons=[
-                    AddonOut(key=a["key"], label=ADDON_LABELS.get(a["key"], a["key"]), price_cents=a["price_cents"], sold_out=a.get("sold_out", False))
+                    AddonOut(key=a["key"], label=addon_label(a["key"], artist), price_cents=a["price_cents"], sold_out=a.get("sold_out", False))
                     for a in (p.addons or [])
                 ],
                 from_price_cents=min(prices) if prices else None,
@@ -449,10 +449,10 @@ def _price(db, artist: m.Artist, user: m.User, event: m.Event, body: PurchaseIn)
         if key not in offered:
             raise HTTPException(status.HTTP_400_BAD_REQUEST, "Essa experiência não faz parte do pacote.")
         if offered[key].get("sold_out"):
-            raise HTTPException(status.HTTP_400_BAD_REQUEST, f"{ADDON_LABELS.get(key, key)} está esgotada.")
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, f"{addon_label(key, artist)} está esgotada.")
     item = {
         "kind": "experience",
-        "label": " + ".join(ADDON_LABELS.get(k, k) for k in chosen)[:160],
+        "label": " + ".join(addon_label(k, artist) for k in chosen)[:160],
         "price_cents": sum(offered[k]["price_cents"] for k in chosen),
         "addons": chosen,
     }
