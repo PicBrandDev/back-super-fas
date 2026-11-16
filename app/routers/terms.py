@@ -23,6 +23,7 @@ def cpf_valido(cpf: str) -> bool:
 
 class TermsIn(Camel):
     artist_slug: str = Field(min_length=1, max_length=80)
+    name: str = Field(min_length=2, max_length=120)
     cpf: str = Field(max_length=20)
     version: str = Field(default="", max_length=20)
     ip: str = Field(default="", max_length=64)
@@ -34,5 +35,8 @@ def accept_terms(body: TermsIn, db: DB):
     cpf = "".join(ch for ch in body.cpf if ch.isdigit())
     if not cpf_valido(cpf):
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "CPF inválido. Confira os números.")
-    db.add(m.TermsAcceptance(artist_slug=body.artist_slug, cpf=cpf, terms_version=body.version, ip=body.ip, user_agent=body.user_agent))
+    name = " ".join(body.name.split())
+    if len(name) < 2:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "Informe seu nome completo.")
+    db.add(m.TermsAcceptance(artist_slug=body.artist_slug, name=name, cpf=cpf, terms_version=body.version, ip=body.ip, user_agent=body.user_agent))
     db.commit()

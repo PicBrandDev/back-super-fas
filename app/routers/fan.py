@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session, selectinload
 from .. import models as m
 from .. import coupons as coupon_lib
 from .. import rewards as rewards_lib
+from .. import spins as spins_lib
 from ..defaults import addon_label
 from ..schemas import (
     is_club_owner,
@@ -83,6 +84,9 @@ def get_fandom(db: Session, artist: m.Artist, user: m.User, create: bool = True)
     if not f and create:
         f = m.Fandom(artist_id=artist.id, user_id=user.id)
         db.add(f)
+        db.commit()
+        db.refresh(f)
+    if f and spins_lib.top_up(db, f):  # modo de teste (FIXED_SPINS): o fã sempre tem os giros fixos
         db.commit()
         db.refresh(f)
     return f

@@ -37,6 +37,9 @@ class Settings(BaseSettings):
     # Chaves da AWS. Se vazias, o boto3 procura sozinho (variáveis de ambiente, ~/.aws/credentials ou o papel da máquina).
     aws_access_key_id: str = ""
     aws_secret_access_key: str = ""
+    # Testes da roleta: com um número maior que 0 (ex.: 3), todo fã tem sempre pelo menos esse tanto de giros livres e, depois de
+    # cada giro, o sistema repõe. 0 = desligado (os giros funcionam normalmente). Deixe em 0 em produção.
+    fixed_spins: int = 0
     demo_photo_ticket: bool = False  # demonstração: todo fã ganha, sozinho, o ingresso com Photo Finder dos shows passados
     rekognition_threshold: float = 90.0  # semelhança mínima (0-100) para contar como a mesma pessoa
     # Fotos já indexadas fora do Super Fãs: uma coleção do Rekognition com as fotos num bucket do S3. Com as duas

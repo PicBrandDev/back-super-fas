@@ -22,7 +22,7 @@ def fmt(cpf: str) -> str:
 with SessionLocal() as db:
     rows = list(db.scalars(select(m.TermsAcceptance).order_by(m.TermsAcceptance.created_at.desc())))
     out = csv.writer(sys.stdout)
-    out.writerow(["data", "cpf", "ambiente", "versao_termo", "ip", "navegador"])
+    out.writerow(["data", "nome", "cpf", "ambiente", "versao_termo", "ip", "navegador"])
     for a in rows:
-        out.writerow([a.created_at.strftime("%Y-%m-%d %H:%M:%S"), fmt(a.cpf), a.artist_slug, a.terms_version, a.ip, a.user_agent])
+        out.writerow([a.created_at.strftime("%Y-%m-%d %H:%M:%S"), a.name, fmt(a.cpf), a.artist_slug, a.terms_version, a.ip, a.user_agent])
     print(f"{len(rows)} aceites ({len({a.cpf for a in rows})} CPFs diferentes)", file=sys.stderr)

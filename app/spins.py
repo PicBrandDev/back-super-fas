@@ -7,10 +7,12 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from . import models as m
+from .config import get_settings
 from .schemas import SpinCreditOut, br_date
 
 WELCOME = "Bônus de boas-vindas"
 RETRY = "Tente de novo: giro devolvido"
+FIXED = "Giro de teste (fixo)"
 
 
 def _credits(db: Session, f: m.Fandom) -> list[m.SpinCredit]:
@@ -18,9 +20,24 @@ def _credits(db: Session, f: m.Fandom) -> list[m.SpinCredit]:
     return list(db.scalars(q.order_by(m.SpinCredit.created_at)))
 
 
+def top_up(db: Session, f: m.Fandom) -> bool:
+    """Modo de teste (FIXED_SPINS > 0): repõe giros até o fã ter pelo menos esse tanto livre. Devolve True se criou algum."""
+    n = get_settings().fixed_spins
+    if n <= 0:
+        return False
+    free = sum(1 for c in ensure_credits(db, f) if c.used_at is None)
+    for _ in range(max(0, n - free)):
+        db.add(m.SpinCredit(artist_id=f.artist_id, user_id=f.user_id, reason=FIXED))
+    if free < n:
+        db.flush()
+    f.spins = max(free, n)
+    return free < n
+
+
 def sync(db: Session, f: m.Fandom) -> None:
     """`Fandom.spins` é sempre a quantidade de giros ainda não usados."""
     f.spins = sum(1 for c in _credits(db, f) if c.used_at is None)
+    top_up(db, f)
 
 
 def ensure_credits(db: Session, f: m.Fandom) -> list[m.SpinCredit]:

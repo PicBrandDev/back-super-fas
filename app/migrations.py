@@ -59,6 +59,7 @@ NEW_COLUMNS = {
     "prizes": [("stock", "INTEGER"), ("club_id", "VARCHAR(20)"), ("kind", "VARCHAR(12) DEFAULT ''"), ("percent", "INTEGER DEFAULT 0"), ("instructions", "VARCHAR(200) DEFAULT ''")],
     "ad_slots": [("club_id", "VARCHAR(20)"), ("view_price_milli", "INTEGER"), ("click_price_milli", "INTEGER"), ("elements", "JSON")],
     "resale_orders": [("transfer_to_enc", "VARCHAR(600) DEFAULT ''")],
+    "terms_acceptances": [("name", "VARCHAR(120) DEFAULT ''")],
 }
 
 

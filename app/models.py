@@ -698,6 +698,7 @@ class TermsAcceptance(Base):
 
     id: Mapped[str] = mapped_column(String(20), primary_key=True, default=new_id)
     artist_slug: Mapped[str] = mapped_column(String(80), index=True)
+    name: Mapped[str] = mapped_column(String(120), default="")  # nome de quem aceitou (vazio nos aceites antigos)
     cpf: Mapped[str] = mapped_column(String(11), index=True)  # só dígitos
     terms_version: Mapped[str] = mapped_column(String(20), default="")
     ip: Mapped[str] = mapped_column(String(64), default="")
