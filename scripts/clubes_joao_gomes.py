@@ -22,12 +22,12 @@ rnd = random.Random(2026)
 agora = datetime.now(timezone.utc)
 
 CLUBES = [
-    ("Forrozeiros RJ", "Rio de Janeiro", "Fã-clube do João no Rio: caravana pros shows e forró depois dos Arcos da Lapa.", "Léo Marques"),
+    ("RJ Forrozeiros", "Rio de Janeiro", "Fã-clube do João no Rio: caravana pros shows e forró depois dos Arcos da Lapa.", "Léo Marques"),
     ("SP Forrozeiros", "São Paulo", "Paulistas do piseiro: ônibus pros shows e encontro antes de cada data.", "Bia Lopes"),
-    ("Forrozeiros RS", "Porto Alegre", "Gaúchos no piseiro: o forró chegou no Sul e a galera se organiza pra ir junta.", "Tati Machado"),
+    ("RS Forrozeiros", "Porto Alegre", "Gaúchos no piseiro: o forró chegou no Sul e a galera se organiza pra ir junta.", "Tati Machado"),
 ]
 # Nome antigo -> nome atual: quem já tem o clube com o nome antigo só o renomeia (o endereço forrozeiros-sp não muda).
-ANTIGOS = {"SP Forrozeiros": "Forrozeiros SP"}
+ANTIGOS = {"PE Forrozeiros": "Forrozeiros PE", "BA Forrozeiros": "Forrozeiros BA", "SP Forrozeiros": "Forrozeiros SP", "RJ Forrozeiros": "Forrozeiros RJ", "RS Forrozeiros": "Forrozeiros RS"}
 
 with SessionLocal() as db:
     art = db.scalar(select(m.Artist).where(m.Artist.slug == SLUG))

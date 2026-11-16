@@ -1,7 +1,7 @@
 """Alimenta o ambiente do João Gomes com dados de exemplo para a apresentação.
 
 Mesmo formato do popular_ludmilla.py, com o conteúdo do modo exemplo do front (src/lib/mock-joao-gomes.ts, pacote joao-gomes do
-Fanzone Artist Kit): fã clubes (Oficial, Forrozeiros PE, BA e SP, com donos), fãs e membros, feed (posts oficiais e dos fãs, com
+Fanzone Artist Kit): fã clubes (Oficial, PE, BA e SP Forrozeiros, com donos), fãs e membros, feed (posts oficiais e dos fãs, com
 comentários), agenda da Turnê Dominguinho com ingresso, brindes e pacotes das agências, compras de experiências, a loja (canecas,
 bolsas, pins, camisetas, com pedidos e visitas), Drops Hits, benefícios dos membros, roleta (prêmios, giros e ganhadores), ranking
 de compartilhamentos e caronas por show. Os fãs são os que já existem no banco (entram também no João Gomes); os donos dos clubes
@@ -30,8 +30,8 @@ rnd = random.Random(2026)
 agora = datetime.now(timezone.utc)
 
 CLUBES = [
-    ("Forrozeiros PE", "Recife", "Fã-clube do João em Recife: caravana pros shows e forró antes da turnê.", "Malu Souza"),
-    ("Forrozeiros BA", "Salvador", "Salvador inteira na Arena Fonte Nova e onde mais o João for.", "Caio Ribeiro"),
+    ("PE Forrozeiros", "Recife", "Fã-clube do João em Recife: caravana pros shows e forró antes da turnê.", "Malu Souza"),
+    ("BA Forrozeiros", "Salvador", "Salvador inteira na Arena Fonte Nova e onde mais o João for.", "Caio Ribeiro"),
     ("SP Forrozeiros", "São Paulo", "Paulistas do piseiro: ônibus pros shows e encontro antes de cada data.", "Bia Lopes"),
 ]
 POSTS_OFICIAIS = [
@@ -48,14 +48,14 @@ POSTS_FAS = [
     "Alguém sabe o local do show de São Paulo em janeiro? Ainda não saiu.",
     "Devolva-Me no repeat desde o lançamento. Zé Vaqueiro e João juntos não tem como errar.",
     "Caneca Dominguinho chegou! Café de manhã nunca foi tão forrozeiro.",
-    "Forrozeiros PE já fechando a caravana pro Classic Hall. Bora, Recife!",
+    "PE Forrozeiros já fechando a caravana pro Classic Hall. Bora, Recife!",
     "Primeira vez vendo ele ao vivo. Quem diria que o forró ia me emocionar assim.",
     "Fiz o cartaz pra turnê. Será que ele lê?",
     "Vaquejada e piseiro: combinação perfeita. Tô pronto pro próximo show.",
     "Repostando porque isso aqui é a cara do Dominguinho.",
 ]
 # Nome antigo -> nome atual: quem já tem o clube com o nome antigo só o renomeia (o endereço forrozeiros-sp não muda).
-ANTIGOS = {"SP Forrozeiros": "Forrozeiros SP"}
+ANTIGOS = {"PE Forrozeiros": "Forrozeiros PE", "BA Forrozeiros": "Forrozeiros BA", "SP Forrozeiros": "Forrozeiros SP", "RJ Forrozeiros": "Forrozeiros RJ", "RS Forrozeiros": "Forrozeiros RS"}
 COMENTARIOS = ["Também vou!", "Que demais", "Bora!", "Mandou bem", "Quero ir junto", "Forró!", "Fechou", "Chama a família"]
 I = "https://www.ingresse.com/"
 # cidade, casa, endereço, data, horário, abertura dos portões, classificação, status, ingresso (nome, url), brindes (0 ou 4)
