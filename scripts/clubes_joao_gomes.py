@@ -1,6 +1,6 @@
 """Cria os fã clubes de RJ, SP e RS do João Gomes (com dono e alguns fãs), sem mexer no que já existe.
 
-O Forrozeiros SP já vem do popular_joao_gomes.py: aqui ele só é conferido. Cada clube novo ganha um dono (conta nova de admin do clube)
+O SP Forrozeiros já vem do popular_joao_gomes.py: aqui ele só é conferido. Cada clube novo ganha um dono (conta nova de admin do clube)
 e fãs que já existem no banco. Pode rodar de novo: clube que já existe (mesmo nome) é pulado.
 
 Servidor: cd ~/front-super-fas && sudo docker compose exec -T api python - < ../back-super-fas/scripts/clubes_joao_gomes.py
@@ -23,9 +23,11 @@ agora = datetime.now(timezone.utc)
 
 CLUBES = [
     ("Forrozeiros RJ", "Rio de Janeiro", "Fã-clube do João no Rio: caravana pros shows e forró depois dos Arcos da Lapa.", "Léo Marques"),
-    ("Forrozeiros SP", "São Paulo", "Paulistas do piseiro: ônibus pros shows e encontro antes de cada data.", "Bia Lopes"),
+    ("SP Forrozeiros", "São Paulo", "Paulistas do piseiro: ônibus pros shows e encontro antes de cada data.", "Bia Lopes"),
     ("Forrozeiros RS", "Porto Alegre", "Gaúchos no piseiro: o forró chegou no Sul e a galera se organiza pra ir junta.", "Tati Machado"),
 ]
+# Nome antigo -> nome atual: quem já tem o clube com o nome antigo só o renomeia (o endereço forrozeiros-sp não muda).
+ANTIGOS = {"SP Forrozeiros": "Forrozeiros SP"}
 
 with SessionLocal() as db:
     art = db.scalar(select(m.Artist).where(m.Artist.slug == SLUG))
@@ -34,8 +36,11 @@ with SessionLocal() as db:
     fas = list(db.scalars(select(m.User).where(m.User.role == m.ROLE_FAN).order_by(m.User.created_at)))[:40]
     senhas = []
     for nome, cidade, desc, dono in CLUBES:
-        c = db.scalar(select(m.FanClub).where(m.FanClub.artist_id == art.id, m.FanClub.name == nome))
+        c = db.scalar(select(m.FanClub).where(m.FanClub.artist_id == art.id, m.FanClub.name.in_([nome, ANTIGOS.get(nome, nome)])))
         if c:
+            if c.name != nome:
+                c.name = nome
+                print(f"renomeado: {nome}")
             print(f"já existe: {nome}")
             continue
         c = create_club(db, art, nome, desc, cidade)

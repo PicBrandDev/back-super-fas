@@ -32,7 +32,7 @@ agora = datetime.now(timezone.utc)
 CLUBES = [
     ("Forrozeiros PE", "Recife", "Fã-clube do João em Recife: caravana pros shows e forró antes da turnê.", "Malu Souza"),
     ("Forrozeiros BA", "Salvador", "Salvador inteira na Arena Fonte Nova e onde mais o João for.", "Caio Ribeiro"),
-    ("Forrozeiros SP", "São Paulo", "Paulistas do piseiro: ônibus pros shows e encontro antes de cada data.", "Bia Lopes"),
+    ("SP Forrozeiros", "São Paulo", "Paulistas do piseiro: ônibus pros shows e encontro antes de cada data.", "Bia Lopes"),
 ]
 POSTS_OFICIAIS = [
     "Meu Piseiro Brasileiro (Ao Vivo) tá em todas as plataformas: 22 faixas gravadas nos Arcos da Lapa, no Rio.",
@@ -54,6 +54,8 @@ POSTS_FAS = [
     "Vaquejada e piseiro: combinação perfeita. Tô pronto pro próximo show.",
     "Repostando porque isso aqui é a cara do Dominguinho.",
 ]
+# Nome antigo -> nome atual: quem já tem o clube com o nome antigo só o renomeia (o endereço forrozeiros-sp não muda).
+ANTIGOS = {"SP Forrozeiros": "Forrozeiros SP"}
 COMENTARIOS = ["Também vou!", "Que demais", "Bora!", "Mandou bem", "Quero ir junto", "Forró!", "Fechou", "Chama a família"]
 I = "https://www.ingresse.com/"
 # cidade, casa, endereço, data, horário, abertura dos portões, classificação, status, ingresso (nome, url), brindes (0 ou 4)
@@ -157,7 +159,9 @@ with SessionLocal() as db:
     senhas = []
     clubes = [oficial]
     for nome, cidade, desc, dono in CLUBES:
-        c = db.scalar(select(m.FanClub).where(m.FanClub.artist_id == art.id, m.FanClub.name == nome))
+        c = db.scalar(select(m.FanClub).where(m.FanClub.artist_id == art.id, m.FanClub.name.in_([nome, ANTIGOS.get(nome, nome)])))
+        if c and c.name != nome:
+            c.name = nome
         if not c:
             c = create_club(db, art, nome, desc, cidade)
             email = f"dono.{c.slug}@joaogomes.example"
